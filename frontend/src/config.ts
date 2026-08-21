@@ -1,0 +1,12 @@
+const numericEnv = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 1_000 && parsed <= 120_000 ? parsed : fallback
+}
+
+export const APP_CONFIG = {
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? '',
+  apiAccessToken: import.meta.env.VITE_API_ACCESS_TOKEN ?? '',
+  apiTimeoutMs: numericEnv(import.meta.env.VITE_API_TIMEOUT_MS, 20_000),
+} as const
+
+export const apiUrl = (path: string) => `${APP_CONFIG.apiBaseUrl.replace(/\/$/, '')}${path}`
