@@ -2,6 +2,15 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '../errors';
 import { AutoPolicy, EventSource, IncidentAuditEntry, Investigation, PaymentOpsEvent, PaymentOpsIncident } from './paymentOpsTypes';
 
+// Node 21 lacks native WebSocket (added in Node 22) — provide `ws` polyfill for Supabase Realtime
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const WS = require('ws');
+  if (typeof (globalThis as unknown as { WebSocket?: unknown }).WebSocket === 'undefined') {
+    (globalThis as unknown as { WebSocket: unknown }).WebSocket = WS;
+  }
+} catch {}
+
 type StoredSnapshot = { events: PaymentOpsEvent[]; incidents: PaymentOpsIncident[]; audits: IncidentAuditEntry[]; policies: AutoPolicy[] };
 
 function configuredClient(): SupabaseClient | undefined {

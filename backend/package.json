@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
+    "@types/ws": "^8.18.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "razorpay": "^2.9.8",
+    "ws": "^8.21.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
