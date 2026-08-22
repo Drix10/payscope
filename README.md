@@ -91,6 +91,10 @@ section first.
    and webhook secret in `backend/.env`; set `PAYSCOPE_MVP_PIPELINE=true`.
    Add `MESH_API_KEY` to run the schema-constrained AI investigation path.
    Mesh calls use `response_format: json_schema` and local Zod validation.
+   For hosted integration tests, seed one separate fixture organization and put
+   its UUID in `PAYSCOPE_TEST_ORGANIZATION_ID`. It is never used by the public
+   demo: audit-producing integration tests are append-only and deliberately
+   refuse to run against `PAYSCOPE_DEMO_ORGANIZATION_ID`.
 4. Configure Razorpay Test Mode to deliver to
    `https://<your-vps-host>/webhooks/razorpay`, using the same webhook secret.
    PayScope persists only `payment.failed`, `payment.captured`,
@@ -101,6 +105,18 @@ section first.
 
 The service-role key stays on the VPS. It must never appear in Vercel, frontend
 files, or a `VITE_*` variable.
+
+The RLS test already uses fixed fixture tenant IDs. If you need a dedicated
+general-purpose integration tenant instead, insert a second Test Mode
+organization with the same SQL pattern as the demo organization, then use its
+returned UUID only for `PAYSCOPE_TEST_ORGANIZATION_ID`.
+
+Audit evidence is append-only. If a fixture tenant's integrity status is ever
+`broken`, do not delete, rewrite, or reuse its evidence: create a fresh fixture
+tenant, investigate the defect, and retain the old chain for diagnosis. The
+current audit writer normalizes confidence to the stored `numeric(4,3)` format
+before hashing, preventing representation-only mismatches such as `0.9` versus
+`0.900`.
 
 ## Run and verify
 

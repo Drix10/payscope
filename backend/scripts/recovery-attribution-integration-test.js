@@ -4,13 +4,13 @@ require('dotenv/config');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { requireDatabaseClient } = require('../dist/db/client');
+const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_ATTRIBUTION_INTEGRATION !== 'true') {
   console.log('Skipped recovery-attribution integration test (set PAYSCOPE_RUN_ATTRIBUTION_INTEGRATION=true for Test Mode Supabase).');
   process.exit(0);
 }
-const organizationId = process.env.PAYSCOPE_DEMO_ORGANIZATION_ID;
-if (!organizationId) throw new Error('PAYSCOPE_DEMO_ORGANIZATION_ID is required for the attribution integration test.');
+const organizationId = requireIntegrationOrganization();
 const client = requireDatabaseClient();
 const incidentId = randomUUID(); const failedEventId = randomUUID(); const capturedEventId = randomUUID(); const proposalId = randomUUID();
 const approvedAt = new Date().toISOString();

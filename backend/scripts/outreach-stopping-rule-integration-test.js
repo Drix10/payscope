@@ -2,17 +2,20 @@
  * the database, rather than trusting a stale policy decision from the worker. */
 require('dotenv/config');
 const assert = require('node:assert/strict');
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { requireDatabaseClient } = require('../dist/db/client');
+const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_OUTREACH_INTEGRATION !== 'true') {
   console.log('Skipped outreach stopping-rule integration test (set PAYSCOPE_RUN_OUTREACH_INTEGRATION=true for Test Mode Supabase).');
   process.exit(0);
 }
-const organizationId = process.env.PAYSCOPE_DEMO_ORGANIZATION_ID;
-if (!organizationId) throw new Error('PAYSCOPE_DEMO_ORGANIZATION_ID is required for the outreach integration test.');
+const organizationId = requireIntegrationOrganization();
 const client = requireDatabaseClient();
-const eventId = randomUUID(); const incidentId = randomUUID(); const firstProposalId = randomUUID(); const secondProposalId = randomUUID(); const customerHash = 'd'.repeat(64); const now = new Date().toISOString();
+const eventId = randomUUID(); const incidentId = randomUUID(); const firstProposalId = randomUUID(); const secondProposalId = randomUUID();
+// A unique, deterministic-for-this-run hash keeps the 24-hour customer-level
+// stopping rule meaningful when this hosted test is repeated.
+const customerHash = createHash('sha256').update(`integration-outreach:${eventId}`).digest('hex'); const now = new Date().toISOString();
 let originalPolicy;
 
 (async () => {
@@ -33,8 +36,10 @@ let originalPolicy;
       client.rpc('payscope_approve_proposal', { p_organization_id: organizationId, p_proposal_id: firstProposalId, p_actor_id: 'integration-test', p_actor_session_hash: 'e'.repeat(64), p_delivery_result: delivery }),
       client.rpc('payscope_approve_proposal', { p_organization_id: organizationId, p_proposal_id: secondProposalId, p_actor_id: 'integration-test', p_actor_session_hash: 'e'.repeat(64), p_delivery_result: delivery }),
     ]);
-    assert.equal([first, second].filter(result => !result.error).length, 1, 'the advisory lock must admit exactly one concurrent outreach approval');
-    assert.equal([first, second].filter(result => result.error).length, 1, 'one-per-24h stopping rule must reject the competing approval');
+    const approvals = [first, second];
+    const approvalErrors = approvals.map(result => result.error?.message ?? null);
+    assert.equal(approvals.filter(result => !result.error).length, 1, `the advisory lock must admit exactly one concurrent outreach approval; errors: ${JSON.stringify(approvalErrors)}`);
+    assert.equal(approvals.filter(result => result.error).length, 1, `one-per-24h stopping rule must reject the competing approval; errors: ${JSON.stringify(approvalErrors)}`);
     const contacts = await client.from('payscope_contact_attempts').select('id').eq('organization_id', organizationId).eq('incident_id', incidentId);
     if (contacts.error) throw new Error(contacts.error.message);
     assert.equal(contacts.data.length, 1);

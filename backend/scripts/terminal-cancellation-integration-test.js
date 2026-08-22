@@ -4,13 +4,13 @@ require('dotenv/config');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { requireDatabaseClient } = require('../dist/db/client');
+const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_TERMINAL_INTEGRATION !== 'true') {
   console.log('Skipped terminal-cancellation integration test (set PAYSCOPE_RUN_TERMINAL_INTEGRATION=true for Test Mode Supabase).');
   process.exit(0);
 }
-const organizationId = process.env.PAYSCOPE_DEMO_ORGANIZATION_ID;
-if (!organizationId) throw new Error('PAYSCOPE_DEMO_ORGANIZATION_ID is required for the terminal-cancellation integration test.');
+const organizationId = requireIntegrationOrganization();
 const client = requireDatabaseClient();
 const eventId = randomUUID(); const incidentId = randomUUID(); const proposalId = randomUUID(); const now = new Date().toISOString();
 
@@ -27,6 +27,10 @@ const eventId = randomUUID(); const incidentId = randomUUID(); const proposalId 
     const { data: proposal, error: readError } = await client.from('payscope_action_proposals').select('status').eq('id', proposalId).single();
     if (readError) throw new Error(readError.message);
     assert.equal(proposal.status, 'cancelled_by_recovery');
+    const audit = await client.from('payscope_audit_entries').select('event_type').eq('organization_id', organizationId).eq('incident_id', incidentId);
+    if (audit.error) throw new Error(audit.error.message);
+    assert.ok(audit.data.some(entry => entry.event_type === 'correlation_transition'), 'terminal persistence must record its correlation transition');
+    assert.ok(audit.data.some(entry => entry.event_type === 'proposal_cancelled'), 'terminal persistence must record proposal cancellation');
     console.log('Hosted terminal correlation atomically cancelled the pending proposal.');
   } finally {
     await client.from('payscope_action_proposals').delete().eq('id', proposalId);

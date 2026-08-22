@@ -399,12 +399,21 @@ under-10-second buildathon target where provider latency permits.
   pass. Dashboard aggregates preserve safe-integer precision, `not_run`
   evaluation payloads cannot contain partial scores, and unavailable values are
   displayed instead of silently converted to zero.
-- [ ] Add audit events for receipt, enrichment outcome, correlation transition,
+- [x] Add audit events for receipt, enrichment outcome, correlation transition,
   investigation lifecycle, policy decision, proposal creation/approval,
-  simulated delivery, cancellation, escalation, and human resolution.
-- [ ] Test 50 sequential audit entries, hash-chain verification, rejected update
+  simulated delivery, cancellation, escalation, and human resolution. Migration
+  `202608230004` appends these only inside the canonical durable RPCs; a future
+  `HUMAN_RESOLVED` transition is recorded without introducing a second public
+  resolution action.
+- [x] Canonicalize `confidence` to the persisted `numeric(4,3)` representation
+  before audit hashing and insertion. Migration `202608230005` prevents a
+  value such as `0.9` from hashing differently from its stored `0.900` form;
+  the live demo chain was verified intact before and after this correction.
+- [x] Test 50 sequential audit entries, hash-chain verification, rejected update
   and delete, duplicate sequence rejection, compensating audit entry, approval
   attribution, simulated delivery, and tenant isolation for every API route.
+  The dedicated fixture-tenant integration passes and preserves its immutable
+  evidence instead of attempting an invalid cleanup.
 
 **Gate:** a seeded operator can inspect only their organization, approve a
 proposal, see simulated delivery, and verify an intact audit chain.
@@ -446,10 +455,16 @@ proposal, see simulated delivery, and verify an intact audit chain.
   environment variables, endpoints, fixtures, and tests after their canonical
   replacements are green. Source/import/dependency scans find no runnable
   legacy path or incompatible second source of truth.
-- [ ] Run the complete backend suite from a clean install, then run an
-  integration sequence against Supabase: signed event → queue worker →
-  enrichment → correlation → investigation → policy → proposal → approval →
-  simulated delivery → audit-chain verification.
+- [x] Run the complete backend suite from a clean install and the explicitly
+  enabled hosted component integrations on a dedicated fixture tenant. This
+  verifies signed durable intake, queue claims/retries/integrity, enrichment
+  degradation, correlation, investigation/policy persistence, proposal safety,
+  simulated delivery, recovery attribution, and audit-chain verification.
+- [ ] Run one deployed, observable end-to-end worker demonstration after the
+  VPS has been redeployed: signed event → queued worker → enrichment →
+  correlation → investigation → policy → proposal → operator approval →
+  simulated delivery → audit-chain verification. This is intentionally not
+  substituted by unit/component integrations or a fabricated dashboard row.
 
 **Final MVP gate:** a live Test Mode event reaches the React dashboard through
 the durable pipeline; the offline fixture suite reports defensible metrics and
@@ -464,3 +479,16 @@ no legacy path that can create a conflicting incident, action, or audit record.
 - [x] Added and passed local fixture/attribution tests plus the hosted causal
   attribution integration. The temporary integration rows are removed after
   the assertion; no report or merchant-recovery claim was fabricated.
+- [x] Hosted-test hardening: integration scripts now refuse the demo tenant
+  and require `PAYSCOPE_TEST_ORGANIZATION_ID`. Existing audit-linked fixture
+  evidence cannot be deleted without violating the append-only rule, so it is
+  retained as valid test evidence rather than silently mutating the chain.
+- [x] Clean-install recheck: `npm ci --ignore-scripts`, production TypeScript
+  build, and production dependency audit pass. All local regression scripts
+  passed; the explicitly enabled hosted Test Mode suite then passed on a fresh,
+  non-demo fixture tenant (RLS, durable intake, queue lease/integrity,
+  terminal cancellation, outreach locking, risk tools, attribution, 50-entry
+  append-only proof, lifecycle coverage). Its final 65-entry audit chain is
+  intact. The former fixture tenant remains intentionally broken evidence of
+  the pre-`202608230005` confidence-format defect and is never used by the
+  demo or current integration suite.

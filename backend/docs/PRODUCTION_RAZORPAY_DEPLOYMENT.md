@@ -17,7 +17,9 @@ Supabase, so Node 20/21 VPS images are supported as well as Node 22+.
    operator types it for the one approval action and it is never persisted in
    the browser. Set a separate 32+ character `PAYSCOPE_FIXTURE_SIGNING_SECRET`
    only when recording signed fixture evaluation reports; it never belongs in
-   Vercel.
+   Vercel. Set `PAYSCOPE_TEST_ORGANIZATION_ID` only to a separate fixture
+   tenant for hosted integration tests; never point it to the public demo
+   organization, because approval/cancellation evidence is append-only.
 3. Install and start:
 
    ```bash

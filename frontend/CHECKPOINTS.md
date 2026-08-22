@@ -235,9 +235,10 @@ development/held-out evaluation report exists.
 
 ## Phase 5 — UX, accessibility, and demo readiness
 
-- [ ] Verify desktop, tablet, and 390px mobile workspace layouts; no horizontal
-  overflow, clipped audit entries, inaccessible dialogs, or data-only color
-  indicators.
+- [x] Verify deployed desktop, tablet, and 390px mobile workspace layouts; no
+  horizontal overflow, clipped audit entries, inaccessible dialogs, or
+  data-only color indicators. The 2026-08-23 browser pass found no horizontal
+  overflow at 390px or 768px and no console warning/error.
 - [x] Add keyboard focus, semantic headings, labelled controls, asynchronous
   live regions, readable contrast classes, and reduced-motion-safe behaviour.
   The current source also fixes React Strict Mode's cleanup/remount flag and
@@ -251,12 +252,19 @@ development/held-out evaluation report exists.
   revenue claim.
 - [x] Verify `npm run build` has no warnings and record the current production
   bundle output (2026-08-23: 35.24 kB app / 134.67 kB React before gzip). Run a
-  manual browser-console/network audit against the deployed Test Mode demo.
+  manual browser-console/network audit against the deployed Test Mode demo. A
+  fresh `npm ci --ignore-scripts` verification also passed after stopping the
+  local Vite server that had held a native Rollup binary lock; the exact
+  lockfile install, production build, audit, and diff check are clean.
 - [x] Complete a first deployed empty-state smoke check at
   `https://payscope-ai.vercel.app`: the workspace loaded the `agentic_mvp`
   health state and empty tenant-scoped incident list with no browser-console
   warnings or errors. `https://payscope.vercel.app` is a separate legacy
   payroll-login deployment and is not the PayScope operator URL.
+- [x] Rechecked the current deployed workspace at desktop and 390px mobile:
+  no console warnings/errors or horizontal overflow; health, incident detail,
+  intact audit state, explicit exceptions, and the bounded read-only dashboard
+  query all render with the current Test Mode data.
 - [x] Update README and deployment copy for the exception list, Test Mode
   attribution rule, and evaluation-report procedure. Screenshots and final
   pitch flow remain pending until manually curated held-out evidence exists.

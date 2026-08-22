@@ -3,13 +3,13 @@ require('dotenv/config');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { requireDatabaseClient } = require('../dist/db/client');
+const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_QUEUE_INTEGRATION !== 'true') {
   console.log('Skipped queue lease integration test (set PAYSCOPE_RUN_QUEUE_INTEGRATION=true for Test Mode Supabase).');
   process.exit(0);
 }
-const organizationId = process.env.PAYSCOPE_DEMO_ORGANIZATION_ID;
-if (!organizationId) throw new Error('PAYSCOPE_DEMO_ORGANIZATION_ID is required for the queue lease integration test.');
+const organizationId = requireIntegrationOrganization();
 const client = requireDatabaseClient();
 const jobId = randomUUID(); const eventId = randomUUID(); const now = new Date().toISOString();
 

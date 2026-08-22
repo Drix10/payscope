@@ -4,14 +4,14 @@ require('dotenv/config');
 const assert = require('node:assert/strict');
 const { createHash, randomUUID } = require('node:crypto');
 const { requireDatabaseClient } = require('../dist/db/client');
+const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_PHASE3_INTEGRATION !== 'true') {
   console.log('Skipped Phase 3 risk-tool integration test (set PAYSCOPE_RUN_PHASE3_INTEGRATION=true for Test Mode Supabase).');
   process.exit(0);
 }
 
-const organizationId = process.env.PAYSCOPE_DEMO_ORGANIZATION_ID;
-if (!organizationId) throw new Error('PAYSCOPE_DEMO_ORGANIZATION_ID is required for the Phase 3 integration test.');
+const organizationId = requireIntegrationOrganization();
 const client = requireDatabaseClient();
 const eventId = randomUUID();
 const incidentId = randomUUID();
