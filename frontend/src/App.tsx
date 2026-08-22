@@ -339,22 +339,21 @@ export default function App() {
     return (
       <main className="min-h-screen overflow-x-hidden bg-[#040406] text-white">
         <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_85%_0%,rgba(0,255,135,.08),transparent_30%),radial-gradient(circle_at_10%_20%,rgba(56,189,248,.08),transparent_28%)]" />
-        <Navbar viewMode={viewMode} onViewModeChange={setViewMode} environment={dashboard?.environment ?? connection?.environment ?? 'test'} />
-        <header className="relative border-b border-white/[.08] bg-[#040406]/85 pt-20 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-[1480px] flex-wrap items-center justify-between gap-3 px-5 py-4 lg:px-8">
-            <div>
-              <p className="text-sm font-bold tracking-tight">Operations workspace</p>
-              <p className="text-[10px] text-neutral-500">A clear place to understand, review, and control payment operations.</p>
+        <Navbar viewMode={viewMode} onViewModeChange={setViewMode} environment={dashboard?.environment ?? connection?.environment ?? 'test'} variant="inline" />
+        <header className="relative border-b border-white/[.06] bg-white/[0.02] backdrop-blur">
+          <div className="mx-auto flex max-w-[1480px] items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-8">
+            <div className="flex items-center gap-3">
+              <p className="text-[11px] font-bold uppercase tracking-[.14em] text-neutral-400">Workspace</p>
+              <span className="hidden h-3 w-px bg-white/10 sm:block" />
+              <p className="hidden text-xs font-semibold text-white sm:block">Review, verify, and control — nothing touches money automatically.</p>
+              <p className="text-xs font-semibold text-white sm:hidden">Command center</p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide ${dashboard?.environment === 'live' ? 'border-rose-400/30 bg-rose-400/10 text-rose-100' : 'border-amber-300/30 bg-amber-300/10 text-amber-100'}`}>{dashboard?.environment === 'live' ? 'Live mode' : 'Test mode'}</span>
-              <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-lg border border-white/10 p-2 text-neutral-300 transition-colors hover:bg-white/[.08] disabled:opacity-50" aria-label="Refresh dashboard">
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
+            <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[.04] px-3 py-1.5 text-[11px] font-semibold text-neutral-200 transition hover:bg-white/[.08] disabled:opacity-50" aria-label="Refresh dashboard">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
           </div>
         </header>
-        <div className="bg-obsidian-grid relative mx-auto grid max-w-[1480px] gap-5 px-4 py-5 sm:px-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:px-8 lg:py-7">
+        <div className="relative mx-auto grid max-w-[1480px] gap-5 px-4 py-5 sm:px-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:px-8 lg:py-6">
           <DashboardSidebar activeSection={workspaceSection} onChange={setWorkspaceSection} dashboard={dashboard} connection={connection} />
           <div className="min-w-0">
             {errorMessage && (
