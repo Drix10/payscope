@@ -15,7 +15,10 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 const razorpayEnvironment = process.env.RAZORPAY_ENVIRONMENT?.trim() || 'test';
 if (!['test', 'live'].includes(razorpayEnvironment)) throw new Error('RAZORPAY_ENVIRONMENT must be either test or live');
 const configuredOrigins = process.env.CORS_ORIGINS ?? (isDevelopment ? 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173' : '');
-const allowedOrigins = new Set(configuredOrigins.split(',').map(origin => origin.trim()).filter(Boolean));
+const deploymentOrigins = [process.env.FRONTEND_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL]
+  .filter((origin): origin is string => Boolean(origin))
+  .map(origin => origin.startsWith('http') ? origin : `https://${origin}`);
+const allowedOrigins = new Set([...configuredOrigins.split(','), ...deploymentOrigins].map(origin => origin.trim()).filter(Boolean));
 const apiAccessToken = process.env.API_ACCESS_TOKEN?.trim() || '';
 const apiAuthRequired = process.env.REQUIRE_API_AUTH === 'true' || !isDevelopment;
 const rateBuckets = new Map<string, number[]>();
@@ -36,8 +39,8 @@ const cleanupRateBuckets = setInterval(() => { const cutoff = Date.now() - 60_00
 cleanupRateBuckets.unref();
 
 app.disable('x-powered-by');
-app.use((_req, res, next) => { res.setHeader('X-Request-Id', randomUUID()); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=(), payment=()'); res.setHeader('Cross-Origin-Opener-Policy', 'same-origin'); res.setHeader('Cross-Origin-Resource-Policy', 'same-site'); res.setHeader('Cache-Control', 'no-store'); next(); });
-app.use(cors({ origin: (origin, callback) => callback(null, origin ? allowedOrigins.has(origin) : true), allowedHeaders: ['Content-Type', 'Authorization'], methods: ['GET', 'POST', 'OPTIONS'], maxAge: 600 }));
+app.use((_req, res, next) => { res.setHeader('X-Request-Id', randomUUID()); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=(), payment=()'); res.setHeader('Cross-Origin-Opener-Policy', 'same-origin'); res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'); res.setHeader('Cache-Control', 'no-store'); next(); });
+app.use(cors({ origin: (origin, callback) => callback(null, origin ? allowedOrigins.has(origin) : true), allowedHeaders: ['Content-Type', 'Authorization'], methods: ['GET', 'POST', 'DELETE', 'OPTIONS'], maxAge: 600 }));
 app.use('/webhooks/razorpay', (req, res, next) => { if (req.method !== 'POST') return next(); if (!allowRequest(req, webhookRateBuckets, 600)) { res.setHeader('Retry-After', '60'); return res.status(429).json({ received: false, error: { code: 'RATE_LIMITED', message: 'Too many webhook requests' } }); } if (activeWebhookRequests >= MAX_CONCURRENT_WEBHOOKS) { res.setHeader('Retry-After', '5'); return res.status(429).json({ received: false, error: { code: 'WEBHOOK_BUSY', message: 'Webhook capacity reached' } }); } activeWebhookRequests += 1; let released = false; const release = () => { if (!released) { released = true; activeWebhookRequests -= 1; } }; res.once('finish', release); res.once('close', release); next(); });
 app.post('/webhooks/razorpay', express.raw({ type: 'application/json', limit: '256kb' }), async (req, res, next) => {
   try {

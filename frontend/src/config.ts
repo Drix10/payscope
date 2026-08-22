@@ -4,7 +4,7 @@ const numericEnv = (value: string | undefined, fallback: number) => {
 }
 
 export const APP_CONFIG = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? '',
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? 'https://temp.coslynx.com' : ''),
   apiAccessToken: import.meta.env.VITE_API_ACCESS_TOKEN ?? '',
   apiTimeoutMs: numericEnv(import.meta.env.VITE_API_TIMEOUT_MS, 20_000),
 } as const

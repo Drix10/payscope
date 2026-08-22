@@ -163,7 +163,7 @@ export function SpatialScroll() {
           ref={scrollContainerRef}
           tabIndex={0}
           role="region"
-          aria-label="Intent Canvas product showcase. Use the arrow keys to change sections."
+           aria-label="PayScope product overview. Use the arrow keys to change sections."
           onKeyDown={(event) => {
             if (event.key !== 'ArrowDown' && event.key !== 'ArrowRight' && event.key !== 'PageDown' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft' && event.key !== 'PageUp') return
             event.preventDefault()
@@ -187,7 +187,7 @@ export function SpatialScroll() {
     <div
       tabIndex={0}
       role="region"
-      aria-label="Intent Canvas product showcase. Use the arrow keys to change sections."
+       aria-label="PayScope product overview. Use the arrow keys to change sections."
       onKeyDown={(event) => {
         if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'PageDown') {
           event.preventDefault()
