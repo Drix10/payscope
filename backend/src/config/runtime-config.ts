@@ -7,6 +7,8 @@ export type RuntimeConfig = {
   supabaseServiceRoleKey?: string;
   webhookSecret?: string;
   organizationId?: string;
+  demoApprovalToken?: string;
+  demoOperatorId: string;
   workerId: string;
   enrichmentTimeoutMs: number;
   modelTimeoutMs: number;
@@ -26,6 +28,12 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
   return parsed;
 }
 
+function boundedText(value: string | undefined, fallback: string, name: string): string {
+  const parsed = optional(value) ?? fallback;
+  if (parsed.length > 160) throw new Error(`${name} must be at most 160 characters`);
+  return parsed;
+}
+
 /** Parses only MVP configuration. It never accepts Razorpay Live Mode. */
 export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const declaredEnvironment = optional(env.NODE_ENV) ?? 'development';
@@ -40,6 +48,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     supabaseServiceRoleKey: optional(env.SUPABASE_SERVICE_ROLE_KEY),
     webhookSecret: optional(env.RAZORPAY_WEBHOOK_SECRET),
     organizationId: optional(env.PAYSCOPE_DEMO_ORGANIZATION_ID),
+    demoApprovalToken: optional(env.PAYSCOPE_DEMO_APPROVAL_TOKEN),
+    demoOperatorId: boundedText(env.PAYSCOPE_DEMO_OPERATOR_ID, 'demo-operator', 'PAYSCOPE_DEMO_OPERATOR_ID'),
     workerId: optional(env.PAYSCOPE_WORKER_ID) ?? `worker-${process.pid}`,
     enrichmentTimeoutMs: positiveInteger(env.PAYSCOPE_ENRICHMENT_TIMEOUT_MS, ENRICHMENT_TIMEOUT_MS, 'PAYSCOPE_ENRICHMENT_TIMEOUT_MS'),
     modelTimeoutMs: positiveInteger(env.PAYSCOPE_MODEL_TIMEOUT_MS, MODEL_TIMEOUT_MS, 'PAYSCOPE_MODEL_TIMEOUT_MS'),

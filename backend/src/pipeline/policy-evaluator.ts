@@ -1,7 +1,7 @@
 import { ActionType, Incident, RecoveryPlan, RiskAnalysis } from '../domain/contracts';
 import { STOPPING_RULES } from '../config/stopping-rules';
 
-export type MerchantPolicy = { id: string; enabled: boolean; minimumConfidence: number; rootCauses: RiskAnalysis['failureRootCause'][]; allowedActions: ActionType[] };
+export type MerchantPolicy = { id: string; enabled: boolean; minimumConfidence: number; rootCauses: RiskAnalysis['failureRootCause'][]; allowedActions: ActionType[]; merchantOptedIn: boolean };
 export type OrgDailyStats = { autoResolveFraction: number; humanReviewFraction: number };
 export type CustomerContactStats = { incidentAttempts: number; attemptsLast24Hours: number; attemptsLast7Days: number; merchantOptedIn: boolean };
 export type PolicyDecision = { outcome: 'auto_with_proposals' | 'auto_no_action' | 'escalate'; permittedActions: RecoveryPlan['proposedActions']; escalationReason: string | null; matchedPolicyId: string | null };

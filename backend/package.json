@@ -20,6 +20,8 @@
     "test:investigation-runner": "npm run build && node scripts/investigation-runner-test.js",
     "test:agentic-webhook": "npm run build && node scripts/agentic-webhook-intake-test.js",
     "test:mvp-api": "npm run build && node scripts/mvp-api-test.js",
+    "test:communications": "npm run build && node scripts/communications-test.js",
+    "test:evaluation": "npm run build && node scripts/evaluation-metrics-test.js",
     "test:database-client": "npm run build && node scripts/database-client-test.js"
   },
   "dependencies": {

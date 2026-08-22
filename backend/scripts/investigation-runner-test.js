@@ -9,15 +9,17 @@ const model = new EchoModelAdapter(request => request.systemPrompt.includes('Sup
   ? { hypothesis: 'Gateway health', primaryFailureCategory: 'infrastructure', subAgents: [], estimatedAutoResolvable: false, requiresHumanReview: true, confidence: 0.8, reasoning: 'No durable policy is configured.' }
   : request.systemPrompt.includes('Risk Analyst')
     ? { failureRootCause: 'gateway_degraded', evidenceStrength: 'moderate', confidence: 0.8, falsePositiveCostEstimatePaise: 0, missingEvidence: ['Network rate unavailable'], chargebackEvidenceReady: false, evidenceItems: ['No raw data used'], recommendedActionCategory: 'flag_for_review' }
-    : { proposedActions: [], noActionReason: 'No merchant recovery opt-in.', recoveryProbability: 0, confidence: 0.8 });
+    : { proposedActions: [{ actionType: 'flag_for_review', rationale: 'Operator review is warranted.', estimatedRecoveryPaise: null, requiresOperatorApproval: true }], recoveryProbability: 0, confidence: 0.8 });
 const calls = [];
 const repository = {
   incidentDetail: async () => ({ incident, events: [], proposals: [] }),
+  policyContext: async () => ({ policy: { id: '00000000-0000-4000-8000-000000000004', enabled: true, minimumConfidence: 0.8, rootCauses: ['gateway_degraded'], allowedActions: ['flag_for_review'], merchantOptedIn: false }, stats: { autoResolveFraction: 0, humanReviewFraction: 0.2 }, contact: { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false } }),
   persistInvestigation: async (...args) => calls.push(['persist', args]),
   recordInvestigationUnavailable: async (...args) => calls.push(['failed', args]),
 };
 (async () => {
   await runDurableInvestigation(repository, model, { jobId: '00000000-0000-4000-8000-000000000003', organizationId: org, type: 'investigate_incident', attemptNumber: 1, createdAt: '2026-08-22T00:00:00.000Z', incidentId });
   assert.equal(calls.length, 1); assert.equal(calls[0][0], 'persist');
+  assert.equal(calls[0][1][6].length, 1); assert.equal(calls[0][1][6][0].actionType, 'flag_for_review');
   console.log('Agentic MVP durable investigation runner checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

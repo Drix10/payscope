@@ -13,6 +13,7 @@ import { PipelineJobProcessor } from './pipeline/job-processor';
 import { runDurableInvestigation } from './pipeline/investigation-runner';
 import { HeuristicEnrichmentAdapter, RazorpayHttpEnrichmentClient } from './providers/enrichment/heuristic-adapter';
 import { MeshModelAdapter } from './providers/model/mesh-adapter';
+import { LoggingCommunicationsAdapter } from './providers/communications/logging-adapter';
 import { QueueWorker } from './queue/queue-worker';
 
 const app = express();
@@ -53,7 +54,7 @@ app.post('/webhooks/razorpay', express.raw({ type: 'application/json', limit: '2
 app.use('/api', (req, res, next) => { if (!allow(req, apiBuckets, 90)) return res.status(429).json(failure('RATE_LIMITED', 'Too many API requests.')); next(); });
 app.use('/api', express.json({ limit: '64kb', strict: true }));
 app.get('/health', (_req, res) => res.status(200).json({ status: pipeline ? 'ok' : 'degraded', service: 'payscope', pipeline: pipeline ? 'agentic_mvp' : 'disabled', worker: pipeline ? 'configured' : 'disabled', testModeOnly: true }));
-if (pipeline) app.use('/api/mvp', createMvpRouter(pipeline.repository, pipeline.config.organizationId!));
+if (pipeline) app.use('/api/mvp', createMvpRouter(pipeline.repository, pipeline.config.organizationId!, { approvalToken: pipeline.config.demoApprovalToken, approvalActorId: pipeline.config.demoOperatorId, communications: new LoggingCommunicationsAdapter() }));
 else app.use('/api/mvp', (_req, res) => res.status(503).json(failure('PIPELINE_NOT_ENABLED', 'The durable PayScope MVP pipeline is not enabled.')));
 app.use('/api', (_req, res) => res.status(404).json(failure('NOT_FOUND', 'API route not found.')));
 app.use((_req, res) => res.status(404).json(failure('NOT_FOUND', 'Route not found.')));

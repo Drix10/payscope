@@ -261,9 +261,10 @@ then produces the correct correlated incident, risk tier, and state transition.
 - [x] Add the pure deterministic Policy Evaluator in the required gate order,
   with an offline fraud hard-stop, infrastructure proposal test, and proof that
   a contact-limited outreach proposal is stopped before merchant-policy lookup.
-- [ ] Persist every completed/failed investigation and proposals transactionally
-  with an audit entry. Failed schema or provider output escalates the incident;
-  it never turns into an action.
+- [x] Persist every completed/failed investigation and policy-permitted
+  proposals transactionally with audit entries. `payscope_persist_investigation_with_proposals`
+  creates only schema-validated drafts; failed schema or provider output
+  escalates the incident and never produces an action.
 - [x] Persist validated completed investigations through a tenant-scoped RPC
   with plan/risk/recovery/policy JSON, telemetry, escalation state, and an
   audit entry. The offline runner test covers the successful contract path;
@@ -296,14 +297,19 @@ under-10-second buildathon target where provider latency permits.
   incident/audit identifier must be a UUID and incident-list limits are bounded
   to 1–100. Invalid input returns `400 INVALID_REQUEST`, while an absent valid
   identifier returns `404`; the API regression test covers both paths.
-- [ ] Redeploy the validated request-boundary fix to the VPS, then repeat the
-  public `GET /api/mvp/incidents/not-a-uuid` smoke check and confirm `400`.
-  Reduce the VPS `CORS_ORIGINS` value to the one current operator origin
+- [x] Redeploy the validated request-boundary fix to the VPS and repeat the
+  public `GET /api/mvp/incidents/not-a-uuid` smoke check: the live API returns
+  `400 INVALID_REQUEST`; health, the active frontend read path, and CORS
+  preflight are also green.
+- [ ] Reduce the VPS `CORS_ORIGINS` value to the one current operator origin
   (`https://payscope-ai.vercel.app`); do not retain a stale Vercel project or
-  localhost origins in production.
-- [ ] Add `CommunicationsProvider` and `LoggingCommunicationsAdapter` only.
-  `proposeAction` stores a proposal; approval records actor/time and produces a
-  simulated delivery result. No live channel adapter is registered.
+  localhost origins in production. The live server still currently permits
+  `https://payscope.vercel.app`, so this setting either was not saved or its
+  process has not restarted with the new environment.
+- [x] Add `CommunicationsProvider` and `LoggingCommunicationsAdapter` only.
+  The adapter has no transport or credential path and returns `simulated`.
+  The tenant-scoped approval RPC records the actor/session hash, approval,
+  simulated delivery, and two audit entries; no live channel adapter exists.
 - [ ] Add proposal cancellation when a later success resolves an incident or a
   dispute opens; retain the cancellation as an audit event.
 - [ ] Add API routes for tenant-scoped incident lists/detail, proposals and
@@ -329,8 +335,10 @@ proposal, see simulated delivery, and verify an intact audit chain.
 - [ ] Build 300 development fixtures and 200 held-out fixtures before tuning
   prompts/thresholds. Store the held-out set separately and do not inspect it
   while changing logic.
-- [ ] Implement precision, recall, F1, and false-positive-cost calculations;
-  handle zero denominators as `not_available`, never zero or infinity.
+- [x] Implement the pure fixture evaluation metric core for precision, recall,
+  F1, confusion-matrix counts, median-based false-positive cost, and safe
+  integer amounts. Zero denominators return `not_available`, never zero or
+  infinity; the execution/report and 300/200 fixture sets remain pending.
 - [ ] Implement recovery attribution. A recovery counts only with a proposal,
   operator approval, captured payment within 24 hours, and proposal ID bound to
   a payment-link reference or explicit incident correlation.

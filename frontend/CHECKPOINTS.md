@@ -156,13 +156,14 @@ fixture results are understandable from the UI without reading server logs.
 
 ## Phase 3 — proposal approval and tamper-evident audit
 
-- [ ] Build proposal cards with type, content, source incident, proposal time,
-  rationale, simulation label, status, and permitted action boundary.
-- [ ] Provide a deliberate confirmation action for operator approval, with
-  pending/error/success state and stale-incident protection. Approval is the
-  only MVP action endpoint the UI calls.
-- [ ] After approval, show `simulated delivery` from the
-  `LoggingCommunicationsAdapter`; never display it as WhatsApp/SMS/email/voice
+- [x] Build proposal cards with type, rationale/content, source incident,
+  status, and explicit simulation label. The UI has no live-channel wording.
+- [x] Provide a deliberate token-gated confirmation action for operator
+  approval, with pending/error/success state and stale-incident protection on
+  the server. The token is kept only in React memory and cleared after use;
+  approval is the only MVP action endpoint the UI calls.
+- [x] After approval, show the `LoggingCommunicationsAdapter` simulated result;
+  it is explicitly labelled as no customer message sent, never as channel
   delivery.
 - [ ] Disable/cancel a pending proposal when API state reports recovery or an
   open dispute. Explain the cancellation in the UI.

@@ -1,11 +1,27 @@
 import { randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { z } from 'zod';
 import { ActionProposal, ActionProposalSchema, AuditEntry, AuditEntrySchema, Incident, IncidentSchema, InvestigationPlan, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, QueueJobSchema, RecoveryPlan, RiskAnalysis, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
 import { CorrelationEvent, IncidentCandidate } from '../pipeline/correlation-engine';
+import { CustomerContactStats, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
+import { SimulatedDeliveryResult } from '../providers/communications/interface';
 
 type DemoOrganization = { id: string; customerHashSecret: string };
 type IngestResult = { eventId: string; duplicate: boolean };
 export type StoredEvent = CorrelationEvent & { organizationId: string };
+export type ProposalDraft = { id: string; actionType: ActionProposal['actionType']; content: Record<string, unknown>; rationale: string };
+export type PolicyContext = { policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats };
+
+const PolicyContextSchema = z.object({
+  policy: z.object({
+    id: z.string().uuid(), enabled: z.boolean(), minimumConfidence: z.number().min(0).max(1),
+    rootCauses: z.array(z.enum(['gateway_degraded', 'issuer_block', 'fraud_confirmed', 'fraud_suspected', 'customer_error', 'subscription_lapse', 'unknown'])).min(1).max(7),
+    allowedActions: z.array(z.enum(['retry_link_whatsapp', 'retry_link_sms', 'hinglish_voice_script', 'merchant_email_notification', 'merchant_webhook_notification', 'flag_for_review', 'prepare_chargeback_evidence', 'auto_resolve_infrastructure'])).min(1).max(8),
+    merchantOptedIn: z.boolean(),
+  }).strict(),
+  stats: z.object({ autoResolveFraction: z.number().min(0).max(1), humanReviewFraction: z.number().min(0).max(1) }).strict(),
+  contact: z.object({ incidentAttempts: z.number().int().nonnegative(), attemptsLast24Hours: z.number().int().nonnegative(), attemptsLast7Days: z.number().int().nonnegative(), merchantOptedIn: z.boolean() }).strict(),
+}).strict();
 
 function databaseError(operation: string, message: string): Error {
   return new Error(`PayScope durable database ${operation} failed: ${message}`);
@@ -113,6 +129,24 @@ export class MvpRepository {
       p_job_payload: payload,
     });
     if (error) throw databaseError('correlation persistence', error.message);
+    if (incident?.status === 'DISPUTE_OPENED' || incident?.status === 'RESOLVED') {
+      const { error: cancellationError } = await this.client.rpc('payscope_cancel_pending_proposals', {
+        p_organization_id: event.organizationId,
+        p_incident_id: incident.id,
+        p_reason: incident.status === 'DISPUTE_OPENED' ? 'dispute' : 'recovery',
+      });
+      if (cancellationError) throw databaseError('proposal cancellation', cancellationError.message);
+    }
+  }
+
+  async policyContext(organizationId: string, incidentId: string, customerHash: string | undefined): Promise<PolicyContext> {
+    const { data, error } = await this.client.rpc('payscope_policy_context', {
+      p_organization_id: organizationId,
+      p_incident_id: incidentId,
+      p_customer_hash: customerHash ?? null,
+    });
+    if (error) throw databaseError('policy context', error.message);
+    return PolicyContextSchema.parse(data);
   }
 
   async listIncidents(organizationId: string, limit = 100): Promise<Incident[]> {
@@ -166,19 +200,45 @@ export class MvpRepository {
     if (error) throw databaseError('investigation failure record', error.message);
   }
 
-  async persistInvestigation(organizationId: string, incidentId: string, plan: InvestigationPlan, risk: RiskAnalysis, recovery: RecoveryPlan, policy: PolicyDecisionContract, modelId: string, tokensUsed: number, latencyMs: number): Promise<void> {
-    const { error } = await this.client.rpc('payscope_persist_investigation', {
+  async persistInvestigation(organizationId: string, incidentId: string, plan: InvestigationPlan, risk: RiskAnalysis, recovery: RecoveryPlan, policy: PolicyDecisionContract, proposals: ProposalDraft[], modelId: string, tokensUsed: number, latencyMs: number): Promise<void> {
+    const { error } = await this.client.rpc('payscope_persist_investigation_with_proposals', {
       p_organization_id: organizationId,
       p_incident_id: incidentId,
       p_plan: plan,
       p_risk_analysis: risk,
       p_recovery_plan: recovery,
       p_policy_decision: policy,
+      p_proposals: proposals.map(proposal => ({ id: proposal.id, action_type: proposal.actionType, content: proposal.content, rationale: proposal.rationale })),
       p_model_id: modelId,
       p_tokens_used: tokensUsed,
       p_latency_ms: latencyMs,
     });
     if (error) throw databaseError('investigation persistence', error.message);
+  }
+
+  async approveProposal(organizationId: string, proposalId: string, actorId: string, actorSessionHash: string, deliveryResult: SimulatedDeliveryResult): Promise<ActionProposal> {
+    const { data, error } = await this.client.rpc('payscope_approve_proposal', {
+      p_organization_id: organizationId,
+      p_proposal_id: proposalId,
+      p_actor_id: actorId,
+      p_actor_session_hash: actorSessionHash,
+      p_delivery_result: deliveryResult,
+    });
+    if (error) throw databaseError('proposal approval', error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return proposalFromRow(record(row));
+  }
+
+  async proposalById(organizationId: string, proposalId: string): Promise<ActionProposal> {
+    const { data, error } = await this.client
+      .from('payscope_action_proposals')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('id', proposalId)
+      .maybeSingle();
+    if (error) throw databaseError('proposal lookup', error.message);
+    if (!data) throw new Error('PayScope proposal was not found');
+    return proposalFromRow(data as Record<string, unknown>);
   }
 }
 

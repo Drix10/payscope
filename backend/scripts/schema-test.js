@@ -25,4 +25,6 @@ for (const required of [
 ]) assert.match(migration, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
 assert.doesNotMatch(migration, /raw_payload\s+jsonb/i);
 assert.match(migration, /extensions\.digest\(/i);
+const proposalMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608220002_proposals_and_simulated_delivery.sql'), 'utf8');
+for (const required of ['payscope_merchant_policies', 'payscope_policy_context', 'payscope_persist_investigation_with_proposals', 'payscope_approve_proposal', 'payscope_cancel_pending_proposals']) assert.match(proposalMigration, new RegExp(required, 'i'));
 console.log('Agentic MVP schema contract checks passed.');

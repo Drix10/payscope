@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { MvpRepository } from '../db/mvp-repository';
 import { PolicyDecisionSchema, QueueJob } from '../domain/contracts';
 import { ModelProvider } from '../providers/model/interface';
@@ -17,7 +18,8 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
   try {
     const latest = detail.events.at(-1);
     const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
-    const supervisor = await runInvestigationSupervisor(provider, { incident: detail.incident, enrichment, merchantPolicyCount: 0, autoResolveBudgetRemaining: 0 }, job.organizationId);
+    const policyContext = await repository.policyContext(job.organizationId, job.incidentId, latest?.event.customerHash);
+    const supervisor = await runInvestigationSupervisor(provider, { incident: detail.incident, enrichment, merchantPolicyCount: 1, autoResolveBudgetRemaining: Math.max(0, 1 - policyContext.stats.autoResolveFraction) }, job.organizationId);
     const risk = await runRiskAnalyst(provider, {
       getIncidentTimeline: async () => detail.events.map(event => event.event),
       // Aggregate rate tooling is not implemented yet. Explicit unknowns are
@@ -26,11 +28,21 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       getNetworkFailureRate: async () => null,
       getCustomerIncidentCount: async () => null,
     }, { incident: detail.incident, enrichment, customerHash: latest?.event.customerHash, gateway: latest?.event.paymentMethod ?? 'unknown' }, job.organizationId);
-    const recovery = await runRecoveryPlanner(provider, { incident: detail.incident, riskAnalysis: risk.analysis, merchantOptedInToRecovery: false }, job.organizationId);
-    output = { plan: supervisor, risk, recovery, policy: PolicyDecisionSchema.parse(evaluatePolicy(detail.incident, risk.analysis, recovery.plan, [], { autoResolveFraction: 0, humanReviewFraction: 0.1 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false })) };
+    const recovery = await runRecoveryPlanner(provider, { incident: detail.incident, riskAnalysis: risk.analysis, merchantOptedInToRecovery: policyContext.policy.merchantOptedIn }, job.organizationId);
+    output = { plan: supervisor, risk, recovery, policy: PolicyDecisionSchema.parse(evaluatePolicy(detail.incident, risk.analysis, recovery.plan, [policyContext.policy], policyContext.stats, policyContext.contact)) };
   } catch (error) {
     await repository.recordInvestigationUnavailable(job.organizationId, job.incidentId, job.triggerEventId, `Agent investigation unavailable: ${error instanceof Error ? error.message : 'unknown error'}`);
     return;
   }
-  await repository.persistInvestigation(job.organizationId, job.incidentId, output.plan.plan, output.risk.analysis, output.recovery.plan, output.policy, [output.plan.modelId, output.risk.modelId, output.recovery.modelId].join(','), output.plan.tokensUsed + output.risk.tokensUsed + output.recovery.tokensUsed, Date.now() - started);
+  const proposals = output.policy.permittedActions.map(action => ({
+    id: randomUUID(),
+    actionType: action.actionType,
+    rationale: action.rationale,
+    content: {
+      rationale: action.rationale,
+      estimatedRecoveryPaise: action.estimatedRecoveryPaise,
+      ...(action.scriptContent ? { scriptContent: action.scriptContent } : {}),
+    },
+  }));
+  await repository.persistInvestigation(job.organizationId, job.incidentId, output.plan.plan, output.risk.analysis, output.recovery.plan, output.policy, proposals, [output.plan.modelId, output.risk.modelId, output.recovery.modelId].join(','), output.plan.tokensUsed + output.risk.tokensUsed + output.recovery.tokensUsed, Date.now() - started);
 }
