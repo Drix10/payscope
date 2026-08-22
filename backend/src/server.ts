@@ -41,20 +41,20 @@ cleanupBuckets.unref();
 
 app.disable('x-powered-by');
 app.use((_req, res, next) => { res.setHeader('X-Request-Id', randomUUID()); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('Cache-Control', 'no-store'); next(); });
-app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)), allowedHeaders: ['Content-Type'], methods: ['GET', 'POST', 'OPTIONS'], maxAge: 600 }));
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)), allowedHeaders: ['Content-Type', 'X-PayScope-Demo-Approval-Token'], methods: ['GET', 'POST', 'OPTIONS'], maxAge: 600 }));
 app.use('/webhooks/razorpay', (req, res, next) => { if (req.method !== 'POST') return next(); if (!allow(req, webhookBuckets, 600)) return res.status(429).json(failure('RATE_LIMITED', 'Too many webhook requests.')); next(); });
 app.post('/webhooks/razorpay', express.raw({ type: 'application/json', limit: '256kb' }), async (req, res, next) => {
   try {
     if (!pipeline) throw new AppError('PIPELINE_NOT_ENABLED', 503, 'The durable PayScope MVP pipeline is not enabled.');
     if (!Buffer.isBuffer(req.body)) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'Razorpay webhook body must be raw JSON.');
     const result = await pipeline.intake.receive(req.body, req.header('x-razorpay-signature'), req.header('x-razorpay-event-id'));
-    res.status(200).json({ received: true, duplicate: result.duplicate, eventId: result.eventId, pipeline: 'agentic_mvp' });
+    res.status(200).json({ received: true, duplicate: result.duplicate, ignored: result.ignored, eventId: result.eventId, pipeline: 'agentic_mvp' });
   } catch (error) { next(error); }
 });
 app.use('/api', (req, res, next) => { if (!allow(req, apiBuckets, 90)) return res.status(429).json(failure('RATE_LIMITED', 'Too many API requests.')); next(); });
 app.use('/api', express.json({ limit: '64kb', strict: true }));
 app.get('/health', (_req, res) => res.status(200).json({ status: pipeline ? 'ok' : 'degraded', service: 'payscope', pipeline: pipeline ? 'agentic_mvp' : 'disabled', worker: pipeline ? 'configured' : 'disabled', testModeOnly: true }));
-if (pipeline) app.use('/api/mvp', createMvpRouter(pipeline.repository, pipeline.config.organizationId!, { approvalToken: pipeline.config.demoApprovalToken, approvalActorId: pipeline.config.demoOperatorId, communications: new LoggingCommunicationsAdapter() }));
+if (pipeline) app.use('/api/mvp', createMvpRouter(pipeline.repository, pipeline.config.organizationId!, { approvalToken: pipeline.config.demoApprovalToken, approvalActorId: pipeline.config.demoOperatorId, communications: new LoggingCommunicationsAdapter(), enrichmentAdapter: 'razorpay_fields_heuristic' }));
 else app.use('/api/mvp', (_req, res) => res.status(503).json(failure('PIPELINE_NOT_ENABLED', 'The durable PayScope MVP pipeline is not enabled.')));
 app.use('/api', (_req, res) => res.status(404).json(failure('NOT_FOUND', 'API route not found.')));
 app.use((_req, res) => res.status(404).json(failure('NOT_FOUND', 'Route not found.')));
@@ -80,7 +80,17 @@ async function start(): Promise<void> {
     worker.start();
   }
   const server = app.listen(port, () => console.log(`PayScope API listening on ${port}`)); server.requestTimeout = 30_000; server.headersTimeout = 15_000; server.keepAliveTimeout = 5_000;
-  const shutdown = () => { clearInterval(cleanupBuckets); Promise.resolve(worker?.stopAndDrain()).catch(() => {}).finally(() => server.close(() => process.exit())); };
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    clearInterval(cleanupBuckets);
+    // Provider/model calls are bounded, but a final deadline prevents a stuck
+    // socket from leaving a VPS process alive forever during replacement.
+    const forceExit = setTimeout(() => process.exit(1), 20_000);
+    forceExit.unref();
+    Promise.resolve(worker?.stopAndDrain()).catch(() => {}).finally(() => server.close(() => { clearTimeout(forceExit); process.exit(0); }));
+  };
   process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
 }
 if (require.main === module) void start().catch(error => { console.error('PayScope could not start', error); process.exitCode = 1; });

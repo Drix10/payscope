@@ -3,29 +3,53 @@ import { createHash, timingSafeEqual } from 'crypto';
 import { ZodError } from 'zod';
 import { MvpRepository } from '../db/mvp-repository';
 import { CommunicationsProvider } from '../providers/communications/interface';
+import { IncidentStatus } from '../domain/contracts';
 
 export type MvpRouterOptions = {
   approvalToken?: string;
   approvalActorId: string;
   communications: CommunicationsProvider;
+  enrichmentAdapter: 'razorpay_fields_heuristic';
 };
 
-/** Read-only tenant-scoped API used by the replacement operator workspace. */
+/** Tenant-scoped presentation API with one token-gated simulated approval action. */
 export function createMvpRouter(repository: MvpRepository, organizationId: string, options?: MvpRouterOptions): Router {
   const router = Router();
 
-  router.get('/health', (_req, res) => res.status(200).json({ success: true, data: { organizationId, pipeline: 'agentic_mvp', testMode: true, communications: 'proposal_only' } }));
+  router.get('/health', async (_req, res, next) => {
+    try {
+      await repository.healthCheck(organizationId);
+      res.status(200).json({ success: true, data: { organizationId, pipeline: 'agentic_mvp', testMode: true, communications: 'proposal_only', database: 'ready', queueWorker: 'configured', webhook: 'signed_test_mode_only', enrichmentAdapter: options?.enrichmentAdapter ?? 'razorpay_fields_heuristic' } });
+    } catch (error) { next(error); }
+  });
   router.get('/incidents', async (req, res, next) => {
     try {
       const limit = parseLimit(req.query.limit, res);
       if (limit === undefined) return;
-      res.status(200).json({ success: true, data: await repository.listIncidents(organizationId, limit) });
+      const status = parseStatus(req.query.status, res);
+      if (status === undefined && req.query.status !== undefined) return;
+      res.status(200).json({ success: true, data: await repository.listIncidents(organizationId, limit, status) });
     } catch (error) { next(error); }
   });
   router.get('/incidents/:incidentId', async (req, res, next) => {
     try {
       if (!isUuid(req.params.incidentId)) return invalidRequest(res, 'incidentId must be a UUID.');
-      res.status(200).json({ success: true, data: await repository.incidentDetail(organizationId, req.params.incidentId) });
+      const detail = await repository.incidentDetail(organizationId, req.params.incidentId);
+      // The operator surface receives only presentation-safe fields. Internal
+      // payment/order IDs, customer hashes, and provider context remain VPS-only.
+      res.status(200).json({ success: true, data: { ...detail, events: detail.events.map(event => ({
+        id: event.id,
+        organizationId: event.organizationId,
+        event: {
+          eventType: event.event.eventType,
+          occurredAt: event.event.occurredAt,
+          receivedAt: event.event.receivedAt,
+          amountPaise: event.event.amountPaise,
+          paymentMethod: event.event.paymentMethod,
+        },
+        enrichment: event.enrichment,
+        enrichmentSource: event.enrichmentSource,
+      })) } });
     } catch (error) { next(error); }
   });
   router.get('/audit', async (req, res, next) => {
@@ -60,6 +84,12 @@ function parseLimit(value: unknown, res: { status(code: number): { json(value: u
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 100) return invalidRequest(res, 'limit must be an integer between 1 and 100.');
   return parsed;
+}
+
+function parseStatus(value: unknown, res: { status(code: number): { json(value: unknown): void } }): IncidentStatus | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED'].includes(value)) return invalidRequest(res, 'status must be a valid incident lifecycle state.');
+  return value as IncidentStatus;
 }
 
 function isUuid(value: string): boolean {

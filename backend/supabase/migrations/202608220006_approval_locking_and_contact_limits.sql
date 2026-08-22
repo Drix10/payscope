@@ -1,0 +1,101 @@
+-- Proposal approval and correlation both lock an incident before its proposals.
+-- This avoids the inverse lock order that could deadlock an approval racing a
+-- recovery/dispute transition. Outreach is rechecked under an advisory lock.
+create or replace function public.payscope_policy_context(
+  p_organization_id uuid,
+  p_incident_id uuid,
+  p_customer_hash text
+) returns jsonb
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  policy_row public.payscope_merchant_policies;
+  daily_incidents integer := 0;
+  daily_auto_resolved integer := 0;
+  daily_human_review integer := 0;
+  incident_attempts integer := 0;
+  attempts_24h integer := 0;
+  attempts_7d integer := 0;
+begin
+  select * into policy_row from public.payscope_merchant_policies where organization_id = p_organization_id;
+  if not found then raise exception 'PayScope merchant policy was not found'; end if;
+  perform 1 from public.payscope_incidents where id = p_incident_id and organization_id = p_organization_id;
+  if not found then raise exception 'PayScope incident was not found for policy context'; end if;
+  select count(*) into daily_incidents from public.payscope_incidents where organization_id = p_organization_id and opened_at >= date_trunc('day', now());
+  select count(*) into daily_auto_resolved from public.payscope_audit_entries where organization_id = p_organization_id and created_at >= date_trunc('day', now()) and decision in ('auto_with_proposals', 'auto_no_action');
+  select count(*) into daily_human_review from public.payscope_incidents where organization_id = p_organization_id and opened_at >= date_trunc('day', now()) and status in ('ESCALATED', 'HUMAN_RESOLVED');
+  if p_customer_hash is not null then
+    select count(*) into incident_attempts from public.payscope_contact_attempts where organization_id = p_organization_id and incident_id = p_incident_id;
+    select count(*) into attempts_24h from public.payscope_contact_attempts where organization_id = p_organization_id and customer_hash = p_customer_hash and attempted_at >= now() - interval '24 hours';
+    select count(*) into attempts_7d from public.payscope_contact_attempts where organization_id = p_organization_id and customer_hash = p_customer_hash and attempted_at >= now() - interval '7 days';
+  end if;
+  return jsonb_build_object(
+    'policy', jsonb_build_object('id', policy_row.id, 'enabled', policy_row.enabled, 'minimumConfidence', policy_row.minimum_confidence, 'rootCauses', policy_row.root_causes, 'allowedActions', policy_row.allowed_actions, 'merchantOptedIn', policy_row.merchant_opted_in_to_recovery),
+    'stats', jsonb_build_object('autoResolveFraction', case when daily_incidents = 0 then 0 else least(1, daily_auto_resolved::numeric / daily_incidents) end, 'humanReviewFraction', case when daily_incidents = 0 then 0 else least(1, daily_human_review::numeric / daily_incidents) end),
+    'contact', jsonb_build_object('incidentAttempts', incident_attempts, 'attemptsLast24Hours', attempts_24h, 'attemptsLast7Days', attempts_7d, 'merchantOptedIn', policy_row.merchant_opted_in_to_recovery, 'customerReferenceAvailable', p_customer_hash is not null)
+  );
+end;
+$$;
+revoke all on function public.payscope_policy_context(uuid, uuid, text) from public;
+grant execute on function public.payscope_policy_context(uuid, uuid, text) to service_role;
+
+create or replace function public.payscope_approve_proposal(
+  p_organization_id uuid,
+  p_proposal_id uuid,
+  p_actor_id text,
+  p_actor_session_hash text,
+  p_delivery_result jsonb
+) returns public.payscope_action_proposals
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  proposal public.payscope_action_proposals;
+  proposal_incident_id uuid;
+  incident public.payscope_incidents;
+  v_customer_hash text;
+  incident_attempts integer;
+  attempts_24h integer;
+  attempts_7d integer;
+  merchant_opted_in boolean;
+begin
+  -- Read just the parent key without a row lock, then acquire the incident
+  -- lock before the proposal lock to match correlation's ordering.
+  select incident_id into proposal_incident_id from public.payscope_action_proposals
+  where id = p_proposal_id and organization_id = p_organization_id;
+  if not found then raise exception 'PayScope proposal was not found'; end if;
+  select * into incident from public.payscope_incidents
+  where id = proposal_incident_id and organization_id = p_organization_id for update;
+  if not found then raise exception 'PayScope proposal incident was not found'; end if;
+  select * into proposal from public.payscope_action_proposals
+  where id = p_proposal_id and organization_id = p_organization_id for update;
+  if not found then raise exception 'PayScope proposal was not found'; end if;
+  if proposal.status <> 'pending' then raise exception 'PayScope proposal is no longer pending'; end if;
+  if incident.status in ('DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED') then raise exception 'PayScope proposal cannot be approved for a terminal incident'; end if;
+  if coalesce(p_delivery_result->>'status', '') <> 'simulated' then raise exception 'PayScope MVP permits simulated delivery only'; end if;
+
+  if proposal.action_type in ('retry_link_whatsapp', 'retry_link_sms', 'hinglish_voice_script') then
+    select e.normalized->>'customerHash' into v_customer_hash
+    from public.payscope_events e
+    where e.organization_id = p_organization_id
+      and e.id = any(incident.correlated_event_ids)
+      and e.normalized ? 'customerHash'
+    order by (e.normalized->>'occurredAt')::timestamptz desc, e.id desc
+    limit 1;
+    if v_customer_hash is null or v_customer_hash !~ '^[a-f0-9]{64}$' then raise exception 'PayScope outreach proposal has no customer reference'; end if;
+    perform pg_advisory_xact_lock(hashtextextended(p_organization_id::text || ':' || v_customer_hash, 0));
+    select merchant_opted_in_to_recovery into merchant_opted_in from public.payscope_merchant_policies where organization_id = p_organization_id;
+    select count(*) into incident_attempts from public.payscope_contact_attempts where organization_id = p_organization_id and incident_id = proposal_incident_id;
+    select count(*) into attempts_24h from public.payscope_contact_attempts attempts where attempts.organization_id = p_organization_id and attempts.customer_hash = v_customer_hash and attempts.attempted_at >= now() - interval '24 hours';
+    select count(*) into attempts_7d from public.payscope_contact_attempts attempts where attempts.organization_id = p_organization_id and attempts.customer_hash = v_customer_hash and attempts.attempted_at >= now() - interval '7 days';
+    if not coalesce(merchant_opted_in, false) or incident_attempts >= 2 or attempts_24h >= 1 or attempts_7d >= 3 then raise exception 'PayScope contact stopping rule prevents simulated outreach approval'; end if;
+    insert into public.payscope_contact_attempts (organization_id, customer_hash, incident_id) values (p_organization_id, v_customer_hash, proposal_incident_id);
+  end if;
+
+  update public.payscope_action_proposals
+  set status = 'simulated', approved_at = now(), delivery_result = p_delivery_result
+  where id = proposal.id returning * into proposal;
+  perform public.payscope_append_audit_entry(p_organization_id, proposal.incident_id, 'proposal_approved', 'human', left(p_actor_id, 160), p_actor_session_hash, 'approved_for_simulation', 'Operator approved a proposal for simulated-only delivery.', null, jsonb_build_object('proposal_id', proposal.id, 'action_type', proposal.action_type));
+  perform public.payscope_append_audit_entry(p_organization_id, proposal.incident_id, 'simulated_delivery_recorded', 'system', 'logging-communications-adapter', null, 'delivered_simulated', 'No customer message was sent. Delivery is an MVP simulation.', null, jsonb_build_object('proposal_id', proposal.id, 'action_type', proposal.action_type));
+  return proposal;
+end;
+$$;
+revoke all on function public.payscope_approve_proposal(uuid, uuid, text, text, jsonb) from public;
+grant execute on function public.payscope_approve_proposal(uuid, uuid, text, text, jsonb) to service_role;

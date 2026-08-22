@@ -110,6 +110,24 @@ export const PolicyDecisionSchema = z.object({
   permittedActions: z.array(RecoveryPlanSchema.shape.proposedActions.element).max(8),
   escalationReason: z.string().min(1).max(120).nullable(),
   matchedPolicyId: z.string().uuid().nullable(),
+  gates: z.array(z.object({ name: z.enum(['fraud', 'dispute', 'auto_resolve_ceiling', 'human_review_floor', 'critical_tier', 'contact_limits', 'merchant_policy']), result: z.enum(['passed', 'blocked', 'restricted', 'skipped']), rationale: z.string().min(1).max(160) }).strict()).length(7).default([]),
+}).strict();
+
+export const InvestigationStatusSchema = z.enum(['PENDING', 'RUNNING', 'COMPLETE', 'FAILED']);
+export const InvestigationSchema = z.object({
+  id: uuid,
+  organizationId: uuid,
+  incidentId: uuid,
+  status: InvestigationStatusSchema,
+  plan: InvestigationPlanSchema.nullable(),
+  riskAnalysis: RiskAnalysisSchema.nullable(),
+  recoveryPlan: RecoveryPlanSchema.nullable(),
+  policyDecision: PolicyDecisionSchema.nullable(),
+  modelId: z.string().min(1).max(160).nullable(),
+  tokensUsed: z.number().int().nonnegative().nullable(),
+  latencyMs: z.number().int().nonnegative().nullable(),
+  startedAt: isoDateTime,
+  completedAt: isoDateTime.nullable(),
 }).strict();
 
 export const ActionProposalSchema = z.object({
@@ -166,6 +184,7 @@ export type InvestigationPlan = z.infer<typeof InvestigationPlanSchema>;
 export type RiskAnalysis = z.infer<typeof RiskAnalysisSchema>;
 export type RecoveryPlan = z.infer<typeof RecoveryPlanSchema>;
 export type PolicyDecisionContract = z.infer<typeof PolicyDecisionSchema>;
+export type Investigation = z.infer<typeof InvestigationSchema>;
 export type ActionProposal = z.infer<typeof ActionProposalSchema>;
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;
 export type QueueJob = z.infer<typeof QueueJobSchema>;

@@ -28,6 +28,15 @@ function timestamp(value: unknown): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+/** Parses only the event name needed to decide whether this endpoint owns it. */
+export function razorpayWebhookEventType(rawBody: Buffer): string {
+  let parsed: unknown;
+  try { parsed = JSON.parse(rawBody.toString('utf8')); } catch { throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'Razorpay webhook body must be valid JSON'); }
+  const eventType = text(object(parsed).event, 120);
+  if (!eventType) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'Razorpay webhook event type is required');
+  return eventType;
+}
+
 function hashCustomer(customerReference: string | undefined, customerHashSecret: string): string | undefined {
   if (!customerReference) return undefined;
   // An HMAC makes the per-organization secret an actual keyed boundary rather
@@ -57,8 +66,7 @@ export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: strin
   const payment = object(object(payload.payment).entity);
   const order = object(object(payload.order).entity);
   const subscription = object(object(payload.subscription).entity);
-  const eventType = text(envelope.event, 120);
-  if (!eventType) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'Razorpay webhook event type is required');
+  const eventType = razorpayWebhookEventType(rawBody);
   const occurredAt = timestamp(payment.created_at) ?? timestamp(order.created_at) ?? timestamp(subscription.created_at) ?? timestamp(envelope.created_at);
   if (!occurredAt) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'Razorpay webhook event timestamp is required');
   const customerReference = text(payment.customer_id) ?? text(order.customer_id) ?? text(subscription.customer_id);
@@ -80,9 +88,9 @@ export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: strin
     orderId: text(payment.order_id) ?? text(order.id),
     subscriptionId: text(payment.subscription_id) ?? text(subscription.id),
     customerHash: hashCustomer(customerReference, customerHashSecret),
-    currency: currency(payment.currency),
-    amountPaise: number(payment.amount),
-    paymentStatus: text(payment.status, 80),
+    currency: currency(payment.currency) ?? currency(order.currency),
+    amountPaise: number(payment.amount) ?? number(order.amount),
+    paymentStatus: text(payment.status, 80) ?? text(order.status, 80),
     paymentMethod: text(payment.method, 80),
     providerData,
   });

@@ -20,5 +20,14 @@ const processor = new PipelineJobProcessor(repository, enrichment, async job => 
   assert.deepEqual(calls[1], ['correlated', 'OPEN', true]);
   await processor.process({ jobId: '00000000-0000-4000-8000-000000000022', organizationId: org, type: 'investigate_incident', attemptNumber: 1, createdAt: '2026-08-22T00:00:00.000Z', incidentId: id, triggerEventId: id });
   assert.deepEqual(calls[2], ['investigate', id]);
+  const unavailableCalls = [];
+  const unavailableProcessor = new PipelineJobProcessor({
+    eventById: async () => event,
+    completeEnrichmentAndEnqueueCorrelation: async (_event, result) => unavailableCalls.push(result),
+    correlationCandidates: async () => [],
+    persistCorrelation: async () => {},
+  }, { enrich: async () => { throw new Error('provider timeout'); }, isAvailable: async () => false }, async () => {});
+  await unavailableProcessor.process({ jobId: '00000000-0000-4000-8000-000000000023', organizationId: org, type: 'enrich_event', attemptNumber: 1, createdAt: '2026-08-22T00:00:00.000Z', eventId: id });
+  assert.deepEqual(unavailableCalls, [null], 'timeout/malformed enrichment must continue as unavailable, never fabricate a score');
   console.log('Agentic MVP job processor checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

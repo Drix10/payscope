@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const { correlateEvent } = require('../dist/pipeline/correlation-engine');
+const { canCorrelateWithTerminalIncident } = require('../dist/pipeline/webhook-event-policy');
 
 const org = '00000000-0000-4000-8000-000000000001';
 const fail = { id: '00000000-0000-4000-8000-000000000011', event: { eventId: 'evt_fail', eventType: 'payment.failed', occurredAt: '2026-08-22T00:00:00.000Z', receivedAt: '2026-08-22T00:00:01.000Z', orderId: 'order_a', amountPaise: 1000, currency: 'INR', providerData: {} }, enrichment: { gatewayHealthScore: 1, crossBorderFlag: false } };
@@ -17,6 +18,12 @@ const dispute = { id: '00000000-0000-4000-8000-000000000014', event: { ...fail.e
 const disputed = correlateEvent(dispute, [{ incident: initial.incident, events: [fail] }], org);
 assert.equal(disputed.incident.status, 'DISPUTE_OPENED');
 assert.equal(disputed.incident.riskTier, 'CRITICAL');
+const underReview = { id: '00000000-0000-4000-8000-000000000016', event: { ...fail.event, eventId: 'evt_under_review', eventType: 'payment.dispute.under_review' }, enrichment: null };
+const underReviewResult = correlateEvent(underReview, [{ incident: initial.incident, events: [fail] }], org);
+assert.equal(underReviewResult.incident.status, 'DISPUTE_OPENED');
+assert.equal(underReviewResult.incident.riskTier, 'CRITICAL');
+assert.equal(canCorrelateWithTerminalIncident('payment.dispute.under_review'), true, 'durable candidate lookup must include terminal incidents for every dispute-opening event');
+assert.equal(canCorrelateWithTerminalIncident('payment.dispute.action_required'), true, 'durable candidate lookup must include terminal incidents for action-required disputes');
 const early = { id: '00000000-0000-4000-8000-000000000015', event: { ...partial.event, eventId: 'evt_early', occurredAt: '2026-08-21T23:59:00.000Z', amountPaise: 1000 }, enrichment: null };
 const ignored = correlateEvent(early, [{ incident: initial.incident, events: [fail] }], org);
 assert.equal(ignored.incident.status, 'OPEN');

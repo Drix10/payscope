@@ -7,15 +7,16 @@ const organizationId = '00000000-0000-4000-8000-000000000001';
 const incidentId = '00000000-0000-4000-8000-000000000002';
 const calls = [];
 const repository = {
-  async listIncidents(org, limit) { calls.push(['list', org, limit]); return []; },
-  async incidentDetail(org, id) { calls.push(['detail', org, id]); if (id !== incidentId) throw new Error('Incident was not found'); return { incident: { id }, events: [], proposals: [] }; },
+  async healthCheck(org) { calls.push(['health', org]); },
+  async listIncidents(org, limit, status) { calls.push(['list', org, limit, status]); return []; },
+  async incidentDetail(org, id) { calls.push(['detail', org, id]); if (id !== incidentId) throw new Error('Incident was not found'); return { incident: { id }, events: [{ id: 'evt-private', organizationId: org, event: { eventType: 'payment.failed', occurredAt: '2026-08-22T00:00:00.000Z', receivedAt: '2026-08-22T00:00:00.000Z', amountPaise: 100, paymentMethod: 'upi', paymentId: 'pay_internal', customerHash: 'a'.repeat(64), providerData: { rrn: 'internal-reference' } }, enrichment: null, enrichmentSource: 'unavailable' }], proposals: [], investigation: null }; },
   async auditEntries(org, id) { calls.push(['audit', org, id]); return []; },
   async proposalById(org, id) { calls.push(['proposal', org, id]); return { id, organizationId: org, incidentId, actionType: 'flag_for_review', content: {}, status: 'pending', proposedAt: '2026-08-22T00:00:00.000Z', approvedAt: null, approvedBy: null, deliveryResult: null }; },
   async approveProposal(org, id, actor, hash, delivery) { calls.push(['approve', org, id, actor, hash, delivery]); return { id, organizationId: org, incidentId, actionType: 'flag_for_review', content: {}, status: 'simulated', proposedAt: '2026-08-22T00:00:00.000Z', approvedAt: '2026-08-22T00:01:00.000Z', approvedBy: null, deliveryResult: delivery }; },
 };
 const app = express();
 app.use(express.json());
-app.use('/api/mvp', createMvpRouter(repository, organizationId, { approvalToken: 'test-approval-token', approvalActorId: 'demo-operator', communications: { async executeApprovedAction() { return { status: 'simulated', note: 'No delivery sent.', simulatedAt: '2026-08-22T00:01:00.000Z' }; } } }));
+app.use('/api/mvp', createMvpRouter(repository, organizationId, { approvalToken: 'test-approval-token', approvalActorId: 'demo-operator', enrichmentAdapter: 'razorpay_fields_heuristic', communications: { async executeApprovedAction() { return { status: 'simulated', note: 'No delivery sent.', simulatedAt: '2026-08-22T00:01:00.000Z' }; } } }));
 
 function request(port, path, options = {}) {
   return new Promise((resolve, reject) => {
@@ -31,14 +32,22 @@ function request(port, path, options = {}) {
   await new Promise(resolve => server.once('listening', resolve));
   const port = server.address().port;
   try {
+    const health = await request(port, '/api/mvp/health');
+    assert.equal(health.status, 200); assert.equal(health.body.data.database, 'ready'); assert.deepEqual(calls.shift(), ['health', organizationId]);
     const list = await request(port, '/api/mvp/incidents?limit=2');
-    assert.equal(list.status, 200); assert.deepEqual(calls.shift(), ['list', organizationId, 2]);
+    assert.equal(list.status, 200); assert.deepEqual(calls.shift(), ['list', organizationId, 2, undefined]);
+    const filtered = await request(port, '/api/mvp/incidents?status=OPEN');
+    assert.equal(filtered.status, 200); assert.deepEqual(calls.shift(), ['list', organizationId, 100, 'OPEN']);
     for (const path of ['/api/mvp/incidents?limit=0', '/api/mvp/incidents?limit=101', '/api/mvp/incidents?limit=abc', '/api/mvp/incidents/not-a-uuid', '/api/mvp/audit?incidentId=not-a-uuid']) {
       const result = await request(port, path);
       assert.equal(result.status, 400, path); assert.equal(result.body.error.code, 'INVALID_REQUEST', path);
     }
     const missing = await request(port, '/api/mvp/incidents/00000000-0000-4000-8000-000000000003');
     assert.equal(missing.status, 404); assert.equal(missing.body.error.code, 'INCIDENT_NOT_FOUND');
+    const detail = await request(port, `/api/mvp/incidents/${incidentId}`);
+    assert.equal(detail.status, 200); assert.equal(detail.body.data.events[0].event.paymentId, undefined);
+    assert.equal(JSON.stringify(detail.body.data).includes('internal-reference'), false);
+    assert.equal(JSON.stringify(detail.body.data).includes('customerHash'), false);
     const approvalUnauthorized = await request(port, `/api/mvp/proposals/${incidentId}/approve`, { method: 'POST' });
     assert.equal(approvalUnauthorized.status, 401);
     const approval = await request(port, `/api/mvp/proposals/${incidentId}/approve`, { method: 'POST', headers: { 'x-payscope-demo-approval-token': 'test-approval-token' } });

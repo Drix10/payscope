@@ -31,11 +31,17 @@ Razorpay Test Mode webhook
 
 ## Deliberate MVP limits
 
-The dashboard is read-only today. Proposal creation/approval, simulated
-communications, browser session transport, live Supabase/RLS verification, and
-fixture metrics remain tracked in [backend/CHECKPOINTS.md](./backend/CHECKPOINTS.md)
-and [frontend/CHECKPOINTS.md](./frontend/CHECKPOINTS.md). The repository does
-not pretend these are shipped.
+The dashboard exposes read-only incident data plus one token-gated,
+simulated-only proposal approval. It does not have a user-management product,
+browser session transport, live communications, payment execution, or a claim
+of real recovered merchant revenue. Fixture metrics and remaining work are
+tracked in [backend/CHECKPOINTS.md](./backend/CHECKPOINTS.md) and
+[frontend/CHECKPOINTS.md](./frontend/CHECKPOINTS.md).
+
+The incident read API is deliberately public for this one-merchant demo; CORS
+only restricts which browser origins can read it and is not authentication.
+Responses are reduced to presentation-safe Test Mode data and never include
+customer hashes, provider payment/order IDs, or raw Razorpay payloads.
 
 ## Local setup
 
@@ -67,10 +73,10 @@ section first.
    npx supabase db push
    ```
 
-   If you prefer the dashboard for this one migration, execute
-   [the canonical migration](./backend/supabase/migrations/20260822_agentic_mvp_foundation.sql)
-   in the SQL Editor. Do not mix dashboard-only changes with later CLI pushes
-   without reconciling the migration history.
+   The CLI is the canonical migration path. If a dashboard-only recovery is
+   unavoidable, execute every SQL file in
+   [`backend/supabase/migrations`](./backend/supabase/migrations) in filename
+   order, then reconcile the migration history before any later CLI push.
 2. Create one organization, then copy its ID into
    `PAYSCOPE_DEMO_ORGANIZATION_ID` and its Test Mode key ID into `razorpay_key_id`.
    Generate the customer hash secret locally; it must be at least 32 characters.
@@ -87,6 +93,10 @@ section first.
    Mesh calls use `response_format: json_schema` and local Zod validation.
 4. Configure Razorpay Test Mode to deliver to
    `https://<your-vps-host>/webhooks/razorpay`, using the same webhook secret.
+   PayScope persists only `payment.failed`, `payment.captured`, `order.paid`,
+   and dispute-opening events (`created`, `under_review`, `action_required`).
+   Other correctly signed Razorpay events are acknowledged with `200` and
+   discarded: they create no event, queue job, audit entry, or incident.
 
 The service-role key stays on the VPS. It must never appear in Vercel, frontend
 files, or a `VITE_*` variable.

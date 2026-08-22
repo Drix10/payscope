@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { RECOVERY_WINDOW_MS } from '../config/stopping-rules';
 import { Incident, IncidentStatus, NormalizedEvent, RiskTier, VulcanEnrichment } from '../domain/contracts';
+import { isPayScopeDisputeOpeningEvent } from './webhook-event-policy';
 
 export type CorrelationEvent = {
   id: string;
@@ -23,7 +24,7 @@ export function correlateEvent(
   // A late capture must still be attached to a terminal incident for a complete
   // timeline, and a dispute may transition any state. Other risk events never
   // reopen terminal incidents.
-  const canMatchTerminal = incoming.event.eventType === 'payment.dispute.created' || recoveryEvent(incoming.event.eventType);
+  const canMatchTerminal = isPayScopeDisputeOpeningEvent(incoming.event.eventType) || recoveryEvent(incoming.event.eventType);
   const matched = candidates.find(candidate => (canMatchTerminal || !TERMINAL.has(candidate.incident.status)) && related(incoming.event, candidate.events.map(row => row.event)));
   const shouldOpen = riskEvent(incoming.event.eventType);
   if (!matched && !shouldOpen) return undefined;
@@ -32,7 +33,7 @@ export function correlateEvent(
   const previous = matched.incident;
   const ids = previous.correlatedEventIds.includes(incoming.id) ? previous.correlatedEventIds : [...previous.correlatedEventIds, incoming.id].slice(-100);
   const base: Incident = { ...previous, correlatedEventIds: ids, updatedAt: incoming.event.receivedAt };
-  if (incoming.event.eventType === 'payment.dispute.created') {
+  if (isPayScopeDisputeOpeningEvent(incoming.event.eventType)) {
     return { incident: { ...base, riskTier: 'CRITICAL', status: 'DISPUTE_OPENED' }, created: false, stateChanged: previous.status !== 'DISPUTE_OPENED', reason: 'dispute_opened' };
   }
   if (recoveryEvent(incoming.event.eventType)) return applyRecovery(base, incoming);
@@ -63,7 +64,7 @@ function openIncident(incoming: CorrelationEvent, organizationId: string, id: st
     id,
     organizationId,
     riskTier: riskTierFor(incoming),
-    status: incoming.event.eventType === 'payment.dispute.created' ? 'DISPUTE_OPENED' : 'OPEN',
+    status: isPayScopeDisputeOpeningEvent(incoming.event.eventType) ? 'DISPUTE_OPENED' : 'OPEN',
     totalFailedAmountPaise: amount,
     recoveredAmountPaise: 0,
     remainingAmountPaise: amount,
@@ -110,7 +111,7 @@ function related(event: NormalizedEvent, priorEvents: NormalizedEvent[]): boolea
 }
 
 function riskEvent(eventType: string): boolean {
-  return ['payment.failed', 'payment.authorized', 'refund.failed', 'payment.dispute.created', 'subscription.pending', 'subscription.halted', 'subscription.cancelled'].includes(eventType);
+  return eventType === 'payment.failed' || isPayScopeDisputeOpeningEvent(eventType);
 }
 
 function recoveryEvent(eventType: string): boolean {
@@ -118,7 +119,7 @@ function recoveryEvent(eventType: string): boolean {
 }
 
 function riskTierFor(incoming: CorrelationEvent): RiskTier {
-  if (incoming.event.eventType === 'payment.dispute.created') return 'CRITICAL';
+  if (isPayScopeDisputeOpeningEvent(incoming.event.eventType)) return 'CRITICAL';
   if (incoming.enrichment?.failureAttribution === 'fraud_block' || incoming.enrichment?.crossBorderFlag) return 'HIGH';
   if (incoming.enrichment?.gatewayHealthScore !== undefined && incoming.enrichment.gatewayHealthScore < 0.3) return 'MONITOR';
   return 'MEDIUM';

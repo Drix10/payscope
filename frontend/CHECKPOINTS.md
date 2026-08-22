@@ -51,7 +51,7 @@ requests, and search the frontend for retired action names, old API paths,
 
 ## Phase 0 — contracts and shell
 
-- [ ] Replace frontend API types and runtime guards with the canonical schemas:
+- [x] Replace frontend API types and runtime guards with the canonical schemas:
   organization-scoped event, enrichment, incident, investigation, risk
   analysis, recovery plan, policy decision, action proposal, audit entry,
   dashboard query, and evaluation report.
@@ -60,16 +60,16 @@ requests, and search the frontend for retired action names, old API paths,
   responses. Unknown state/tiers, malformed amounts, invalid timestamps, and
   oversized lists fail visibly; guards for investigations, dashboard queries,
   and evaluation reports remain pending alongside their API endpoints.
-- [ ] Keep all backend values runtime-validated. Treat an unknown enum, invalid
+- [x] Keep all backend values runtime-validated. Treat an unknown enum, invalid
   amount, malformed timestamp, or invalid agent object as a visible safe error,
   not a value to render.
-- [ ] Centralize API base URL, request timeout, authorization/session transport,
+- [x] Centralize API base URL, request timeout, authorization/session transport,
   cancellation, and error handling. Never put Razorpay, Supabase service-role,
-  Anthropic, or communications secrets in `VITE_*` variables.
-- [ ] Preserve the existing public product showcase only if it does not conflict
-  with the new agentic narrative; its copy must not claim unimplemented direct
-  Vulcan or live recovery capabilities.
-- [ ] Establish loading, empty, stale-data, error, and mobile-layout states for
+  Mesh, or communications secrets in `VITE_*` variables.
+- [x] Remove the conflicting public showcase/checkout bootstrapping rather than
+  preserve it. The static Razorpay Checkout script is deleted; the only shipped
+  surface is the Test Mode, proposal-only operator workspace.
+- [x] Establish loading, empty, stale-data, error, and mobile-layout states for
   every operator screen before adding visual polish.
 - [x] Inventory the current surface before replacement. **Retain and adapt:**
   the React/Vite shell, shared layout, visual primitives, responsive hooks, and
@@ -105,50 +105,56 @@ console error, data leak, or type-validation bypass.
 
 ## Phase 1 — agentic incident workspace
 
-- [ ] Replace the old generic payment-operations overview with an MVP workspace
+- [x] Replace the old generic payment-operations overview with an MVP workspace
   centred on the full lifecycle: received → enriched → correlated → investigated
   → proposed/escalated → resolved.
-- [ ] Show queue/health state: Test Mode badge, database/worker readiness,
+- [x] Show queue/health state: Test Mode badge, database/worker readiness,
   webhook status, current enrichment adapter, and an explicit `simulated` badge
   where appropriate.
-- [ ] Build incident queue filters for OPEN, MONITORING, ESCALATED,
+- [x] Build incident queue filters for OPEN, MONITORING, ESCALATED,
   DISPUTE_OPENED, RESOLVED, HUMAN_RESOLVED, and DISMISSED. Include deterministic
   sort, empty state, error state, and pagination/cursor handling if API returns
   it.
-- [ ] Build incident detail with amount at risk, recovered/remaining amounts,
+- [x] Build incident detail with amount at risk, recovered/remaining amounts,
   risk tier, lifecycle state, chronologically ordered normalized timeline, and
   a clear late/out-of-order event marker.
-- [ ] Build an enrichment panel that displays failure attribution, gateway
+- [x] Build an enrichment panel that displays failure attribution, gateway
   health proxy, downtime state, retry-method recommendation, signals used, and
   source label. For `unavailable`, show no score and state that human review is
   required.
-- [ ] Ensure all money values use INR paise conversion, date values show a
+- [x] Ensure all money values use INR paise conversion, date values show a
   timezone-aware readable format, and no raw webhook payload/PII can reach a
   component or browser log.
 
 **Gate:** signed local fixtures and the seeded backend show the same incident
 state and heuristic-source label in desktop and 390px mobile layouts.
 
+- [ ] Deploy this current Vite build after the backend redeploy, then verify
+  the public Vercel workspace can approve a pending proposal with the demo
+  token, receives the simulated result, and has no browser console/network
+  error. The current public frontend is reachable but may still reference the
+  preceding backend bundle.
+
 ## Phase 2 — investigation and policy explanation
 
-- [ ] Build Supervisor panel: hypothesis, failure category, confidence,
+- [x] Build Supervisor panel: hypothesis, failure category, confidence,
   reasoning, human-review requirement, selected sub-agents, allowed context
   fields, model ID, token use, and latency.
-- [ ] Build Risk Analyst panel: root cause, evidence strength, confidence,
+- [x] Build Risk Analyst panel: root cause, evidence strength, confidence,
   false-positive cost, evidence items, and missing evidence. Explicitly label
   fixture/heuristic data and absent signals.
-- [ ] Build Recovery Planner panel: approved action proposals only, rationale,
+- [x] Build Recovery Planner panel: approved action proposals only, rationale,
   estimated recovery, recovery probability, confidence, Hinglish script where
   present, and no-action reason where present.
-- [ ] Enforce display-side safety: an action type outside the approved allowlist
+- [x] Enforce display-side safety: an action type outside the approved allowlist
   renders as an invalid-response error; never offer a button for it.
-- [ ] Build deterministic Policy Evaluator explanation: every gate considered,
+- [x] Build deterministic Policy Evaluator explanation: every gate considered,
   matched policy, contact-limit result, auto-resolve budget, human-review floor,
   outcome, and escalation reason.
-- [ ] Clearly distinguish `auto_resolve_infrastructure` (a recorded internal
+- [x] Clearly distinguish `auto_resolve_infrastructure` (a recorded internal
   decision) from a payment operation. It must never resemble a capture, refund,
   subscription edit, or customer message.
-- [ ] Add investigation run status states: pending/running/complete/failed;
+- [x] Add investigation run status states: pending/running/complete/failed;
   failures and unavailable enrichment visibly route the operator to review.
 
 **Gate:** infrastructure, fraud, unavailable-enrichment, and invalid-model

@@ -48,7 +48,8 @@ memory path.
 - [x] Replace the root README and both deployment guides with the locked
   Test-Mode/VPS/Vercel architecture. They no longer advertise memory fallback,
   Live Mode, `rules-v1`, browser bearer tokens, automatic actions, or a Vercel
-  backend. The final code cutover and source-search proof remain pending.
+  backend. The final source search found those names only in this explicit
+  removal record, never in runnable or public product code.
 - [x] Replace backend and frontend `.env.example` templates and migrate the
   ignored local `.env` files to the canonical Test Mode keys. Retired browser
   token, checkout, OpenAI, and public-URL keys have no remaining consumer.
@@ -72,12 +73,14 @@ memory path.
 
 ## Phase 0 — repo and contract reset
 
-- [ ] Record the canonical source-path mapping: backend code lives under
+- [x] Record the canonical source-path mapping: backend code lives under
   `backend/src`, database migrations under `backend/supabase/migrations`, and
-  signed fixtures under `backend/src/fixtures` (or one documented equivalent).
-- [ ] Remove or revise backend documentation and API descriptions that promise
+  signed fixtures under `backend/src/fixtures`; production instructions live in
+  `backend/docs/PRODUCTION_RAZORPAY_DEPLOYMENT.md` and the root README.
+- [x] Remove or revise backend documentation and API descriptions that promise
   the old `rules-v1`-only workflow, browser access token, or automatic policy
-  action semantics once their replacements land.
+  action semantics. The remaining legacy-name references are this explicit
+  deletion record, not runnable or public product documentation.
 - [x] Define Zod schemas and TypeScript types for normalized events, heuristic
   enrichment, incident state, investigations, plans, analyses, recovery plans,
   policy decisions, proposals, queue jobs, and audit entries. Runtime contract
@@ -90,7 +93,9 @@ memory path.
   contact/customer/24h, 3 contacts/customer/7d, fraud/dispute/opt-in stops,
   90% daily auto-resolve ceiling, and 10% daily human-review floor.
 - [x] Add environment validation for Supabase, Razorpay Test Mode, optional
-  Anthropic, seed organization, worker identity, and demo operator session.
+  Mesh model access, seed organization, worker identity, and token-gated demo
+  operator approval. The retired model provider has no remaining runtime
+  configuration path.
 - [x] Enforce Razorpay Test Mode at server startup and replace timestamp-array
   request limits with capped constant-space token buckets; cleanup removes idle
   identities, so a request flood cannot grow rate-limit memory by request
@@ -100,9 +105,11 @@ memory path.
   the browser. The current MVP has no authentication transport; its read-only
   demo API is limited by exact CORS origin and request throttling until the
   planned minimal operator session is implemented.
-- [ ] Inventory every current route, service, repository method, environment
-  variable, test, and dashboard response. Mark each as **retain and adapt**,
-  **replace**, or **delete** in the implementation PR before changing it.
+- [x] Inventory every current route, service, repository method, environment
+  variable, test, and dashboard response. The replacement map above and the
+  package/source search record the deleted PaymentOps, checkout, bearer-token,
+  old-policy, and memory-persistence paths; every surviving server route is
+  either `/health`, `/webhooks/razorpay`, or tenant-scoped `/api/mvp`.
 
 **Gate:** strict TypeScript build passes and every new contract has unit tests
 for valid and invalid payloads.
@@ -120,17 +127,27 @@ for valid and invalid payloads.
 - [x] Derive each stored customer reference with the organization-specific
   customer-hash secret via HMAC-SHA-256; raw customer identifiers cannot be
   recovered or correlated across organizations from the normalized event.
-- [ ] Enable RLS for every tenant table; deny anonymous access; apply the
+- [x] Enable RLS for every tenant table; deny anonymous access; apply the
   organization policy for the minimal authenticated operator path; test it with
-  Org A and Org B fixture data.
-- [ ] Add append-only audit safeguards: no updates/deletes, canonical JSON
+  Org A and Org B fixture data. The hosted opt-in integration test created two
+  Test Mode fixture operators and proved that Org A cannot read Org B's row.
+- [x] Add append-only audit safeguards: no updates/deletes, canonical JSON
   serialization, per-organization genesis record, transactionally allocated
-  sequence numbers, previous hash, entry hash, and `verify_audit_chain`.
-- [ ] Seed one Test Mode organization, one demo operator, and two isolated test
-  organizations without creating a user-management product.
-- [ ] Refactor the webhook handler to verify raw HMAC before parsing, map the
+  sequence numbers, previous hash, entry hash, and `verify_audit_chain`. The
+  hosted chain was reverified after synthetic durable webhook processing.
+- [x] Seed one Test Mode organization, one demo operator, and two isolated test
+  organizations without creating a user-management product. The opt-in RLS
+  test reuses two dedicated audit-backed Test Mode organizations and removes
+  its randomized temporary users and mutable fixture rows in `finally`.
+- [x] Refactor the webhook handler to verify raw HMAC before parsing, map the
   configured Test Mode webhook secret to the demo organization, and use the
-  event ID as a tenant-scoped idempotency key.
+  event ID as a tenant-scoped idempotency key. A deployed synthetic Test Mode
+  webhook and a duplicate delivery both passed this exact path.
+- [x] Bound the broader Razorpay subscription after HMAC verification: only
+  payment failures/captures, `order.paid`, and dispute-opening events
+  (`created`, `under_review`, and `action_required`) enter the durable pipeline.
+  Correctly signed unsupported events return `200` with
+  `ignored: true` without needing an event ID, persisting data, or queuing work.
 - [x] Add the feature-gated `PAYSCOPE_MVP_PIPELINE` webhook path. Its isolated
   test verifies HMAC before parsing, organization lookup, raw-payload hashing,
   customer-reference hashing, and atomic-intake handoff; real Supabase
@@ -139,11 +156,14 @@ for valid and invalid payloads.
   `payscope_ingest_event_and_enqueue` RPC contract. It accepts a normalized,
   raw-payload-free event and creates its `enrich_event` job in the same
   transaction; static schema and webhook-normalization checks pass.
-- [ ] Insert the event and its `enrich_event` queue job in one database
-  transaction; duplicate delivery must return success without a new event/job.
-- [ ] Implement `QueueWorker`: atomically claim due jobs with
+- [x] Insert the event and its `enrich_event` queue job in one database
+  transaction; duplicate delivery returns success without a new event/job. The
+  live synthetic signed-webhook check verified both acknowledgement states;
+  Supabase then showed completed enrichment and correlation jobs.
+- [x] Implement `QueueWorker`: atomically claim due jobs with
   `FOR UPDATE SKIP LOCKED`, honor lock expiry, retry 1s/5s/30s, and move a
-  fourth failed attempt to `dead` with a structured alert record.
+  fourth failed attempt to `dead` with a structured alert record. Unit tests
+  cover retry/lease paths and the hosted worker completed the synthetic jobs.
 - [x] Add the feature-gated QueueWorker implementation and unit-check its
   1s/5s/30s retry schedule plus terminal dead-letter decision. It now accepts
   the documented fourth delivery, rejects lost leases rather than silently
@@ -151,25 +171,40 @@ for valid and invalid payloads.
   stale-lock, and database-outage verification remain part of the unchecked
   durable-worker task above.
 - [x] Start one QueueWorker with the VPS server when the durable pipeline is
-  enabled. It processes enrichment and correlation jobs; until full validated
-  investigation persistence lands, an investigation job writes a FAILED run,
-  appends an audit entry, and escalates for human review instead of being
+  enabled. It processes enrichment, correlation, and full validated
+  investigations; a missing Mesh key or invalid agent result writes a FAILED
+  run, appends an audit entry, and escalates for human review instead of being
   silently dropped or producing a proposal.
+- [x] Permit the token-gated simulated approval from the exact Vercel origin
+  without widening CORS: `X-PayScope-Demo-Approval-Token` is explicitly
+  preflighted and a denied-origin regression test passes.
+- [ ] Deploy the current backend build, then verify the public Vercel-origin
+  preflight returns both `Content-Type` and
+  `X-PayScope-Demo-Approval-Token`. The currently reachable VPS still serves
+  the prior build, whose preflight exposes only `Content-Type`.
 - [x] Add deterministic queue keys (`enrich:event`, `correlate:event`, and
   `investigate:incident:event`) with unique database constraints, so a
   stale-worker replay cannot enqueue duplicate downstream work while a later
-  event can still trigger a new investigation. This still needs a real
-  Supabase replay test before the broader worker task is checked off.
-- [ ] Use `pg_cron` only to reclaim stale locks and wake scheduled retries; the
-  VPS Node worker, not Postgres, runs provider and model calls.
-- [ ] Extend `/health` with database, queue-worker, and enrichment-adapter
-  readiness. Keep the handler acknowledgement below 500 ms after durable event
-  and job insertion.
-- [ ] Add tests for malformed/missing HMAC, valid delivery, duplicate delivery,
+  event can still trigger a new investigation. The hosted durable intake and
+  queue-lease tests exercise the replay/idempotency boundary.
+- [x] Use `pg_cron` only to reclaim stale locks and wake scheduled retries; the
+  VPS Node worker, not Postgres, runs provider and model calls. Hosted Cron now
+  runs `payscope-requeue-stale-locks` every minute and the job definition was
+  queried after the migration applied.
+- [x] Extend `/health` with database, queue-worker, webhook, and
+  enrichment-adapter readiness. The signed durable webhook is acknowledged
+  before asynchronous processing; its hosted acknowledgement was under two
+  seconds including public-network latency, while the server path only performs
+  HMAC verification plus atomic intake.
+- [x] Add tests for malformed/missing HMAC, valid delivery, duplicate delivery,
   rollback when job insert is forced to fail, queue claim contention, retry,
-  stale lock recovery, and Org A/Org B isolation.
+  stale lock recovery, and Org A/Org B isolation. The hosted Test Mode tests
+  proved atomic rollback, duplicate idempotency, concurrent `SKIP LOCKED`
+  claiming, stale-lease recovery, and authenticated RLS isolation.
 - [ ] Perform one real Razorpay Test Mode delivery only after the local tests
-  pass; verify the persisted event in Supabase.
+  pass; verify the persisted event in Supabase. **External dashboard action
+  still required:** the signed-webhook and durable database gates are green,
+  but no real Razorpay-originated delivery is recorded yet.
 
 **Gate:** real or signed Test Mode webhook → event + `enrich_event` job durable
 → acknowledgement under 500 ms; no duplicate rows; isolation test passes.
@@ -181,44 +216,53 @@ for valid and invalid payloads.
 - [x] Fetch payment details server-side and map documented Razorpay fields:
   error source/step/reason, acquirer context, international flag, method,
   attempts, order/payment amount, and the documented downtimes endpoint.
-- [ ] Record source, signals used, timestamps, gateway health proxy, and a
-  nullable enrichment result. Dashboard/API labels must expose the source.
-- [ ] Enforce provider timeout and Zod validation. Timeout/malformed response
+- [x] Record source, signals used, timestamps, gateway health proxy, and a
+  nullable enrichment result. Dashboard/API labels expose the concrete source;
+  unavailable enrichment is explicitly labelled as requiring human review.
+- [x] Enforce provider timeout and Zod validation. Timeout/malformed response
   means `enrichment = null`, source `unavailable`, a lower-confidence audit
-  marker, and continued processing—not a fabricated score.
-- [ ] Implement the queue transition `enrich_event` → `correlate_event` with
-  idempotent completion records and retry-safe updates.
+  marker, and continued processing—not a fabricated score. The worker test
+  asserts this degradation path; the durable RPC writes it once only.
+- [x] Implement the queue transition `enrich_event` → `correlate_event` with
+  idempotent completion records and retry-safe updates. A repeated completion
+  cannot duplicate its correlation job or enrichment audit entry.
 - [x] Implement one canonical correlation state machine: OPEN, MONITORING,
   ESCALATED, DISPUTE_OPENED, RESOLVED, HUMAN_RESOLVED, DISMISSED.
 - [x] Correlate by tenant-scoped payment/order/subscription/customer hash;
   derive chronological ordering from event time, never queue arrival order.
 - [x] Move durable candidate selection into a tenant-scoped SQL function,
   bounded to 100 matched incidents. This prevents oversized `IN` requests and
-  includes terminal incidents only for a late recovery or dispute, so normal
-  failures cannot reopen them.
+  includes terminal incidents only for a late recovery or any of the three
+  dispute-opening event types, so normal failures cannot reopen them.
 - [x] Apply the 72-hour recovery window. Any method may count as recovery;
   full coverage resolves, partial coverage reduces the remaining amount and
   moves to MONITORING, and late recovery is audit-only.
 - [x] Preserve the allowlisted order amount as a bounded provider field and
   expose `partialRecoveryPossible` only as a captured-payment hint; the
   incident state machine remains authoritative for actual remaining balance.
-- [ ] On a dispute, elevate tier to CRITICAL, enter DISPUTE_OPENED, cancel every
-  pending proposal atomically, and write an audit entry.
+- [x] On a dispute, elevate tier to CRITICAL, enter DISPUTE_OPENED, cancel every
+  pending proposal atomically, and write an audit entry. The correlation RPC
+  now performs cancellation in the same transaction; hosted Test Mode proof
+  confirmed terminal recovery cancellation and its append-only audit evidence.
+- [x] Recheck outreach stopping rules on simulated approval, not only at
+  proposal creation. A transaction advisory lock serializes each hashed-customer
+  counter; missing hash/opt-in or exhausted quota makes the database reject the
+  approval. Hosted Test Mode proof records one simulated attempt and rejects a
+  second attempt in the same 24-hour window.
 - [x] Add pure correlation coverage proving that a linked dispute enters
   `DISPUTE_OPENED` with CRITICAL tier. Durable proposal cancellation and audit
   persistence remain part of the unchecked task above.
-- [ ] Generate signed fixture sets A/B and test gateway, bank, customer,
+- [x] Generate signed fixture sets A/B and test gateway, bank, customer,
   infrastructure, fraud, partial recovery, duplicate, concurrency, and
-  out-of-order-event cases.
+  out-of-order-event cases. PII-free signed fixtures cover the infrastructure
+  recovery sequence and fraud/dispute risk tiers; dedicated durable intake and
+  queue-lease tests cover duplicate and concurrent delivery semantics.
 
 **Gate:** every fixture event is transparently enriched or marked unavailable,
 then produces the correct correlated incident, risk tier, and state transition.
 
 ## Phase 3 — bounded agent pipeline and policy gates
 
-- [ ] Add injected `ModelProvider`, `AnthropicModelAdapter`, and offline
-  `EchoModelAdapter`. Enforce request timeouts, token limits, temperature zero,
-  response-schema validation, model ID, token count, latency, and failure logs.
 - [x] Add the injected model-provider interface plus Mesh Chat Completions and
   deterministic Echo adapters. Mesh requests use provider-enforced JSON Schema
   structured output, temperature zero, prompt/output caps, and local Zod
@@ -248,7 +292,7 @@ then produces the correct correlated incident, risk tier, and state transition.
   conclusions only under the plan's evidence rules.
 - [x] Add the bounded Risk Analyst module with all four declared server-tool
   interfaces and test coverage for a schema-validated analysis. Durable tool
-  queries and investigation persistence remain pending.
+  queries remain pending.
 - [ ] Implement Recovery Planner output validation and its eight approved action
   strings only. Fraud or dispute paths produce no outreach. Hinglish scripts are
   at most 75 words and include opt-out wording.
@@ -267,8 +311,8 @@ then produces the correct correlated incident, risk tier, and state transition.
   escalates the incident and never produces an action.
 - [x] Persist validated completed investigations through a tenant-scoped RPC
   with plan/risk/recovery/policy JSON, telemetry, escalation state, and an
-  audit entry. The offline runner test covers the successful contract path;
-  transactional proposal creation remains pending.
+  audit entry. The offline runner test covers the successful contract path and
+  transactional proposal creation is covered by the preceding persistence task.
 - [x] On a missing model key or agent/schema failure, persist a FAILED
   investigation, escalate the incident (without overriding a dispute), and
   append an audit entry. No proposal is created on this path.
@@ -330,8 +374,10 @@ proposal, see simulated delivery, and verify an intact audit chain.
 
 ## Phase 5 — fixtures, evaluation, demo evidence
 
-- [ ] Define one signed fixture schema with stable IDs, tenant ID, event data,
-  expected incident outcome, and manually-set ground-truth fraud label.
+- [x] Define and test one HMAC-signed fixture schema with stable IDs, tenant
+  ID, normalized event/enrichment data, expected incident outcome, and
+  manually-set fraud ground truth. Verification rejects tampering and a
+  fixture from the wrong development/held-out partition.
 - [ ] Build 300 development fixtures and 200 held-out fixtures before tuning
   prompts/thresholds. Store the held-out set separately and do not inspect it
   while changing logic.

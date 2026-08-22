@@ -1,14 +1,15 @@
 import { randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ActionProposal, ActionProposalSchema, AuditEntry, AuditEntrySchema, Incident, IncidentSchema, InvestigationPlan, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, QueueJobSchema, RecoveryPlan, RiskAnalysis, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
+import { ActionProposal, ActionProposalSchema, AuditEntry, AuditEntrySchema, EnrichmentSource, EnrichmentSourceSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, QueueJobSchema, RecoveryPlan, RiskAnalysis, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
 import { CorrelationEvent, IncidentCandidate } from '../pipeline/correlation-engine';
 import { CustomerContactStats, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
 import { SimulatedDeliveryResult } from '../providers/communications/interface';
+import { canCorrelateWithTerminalIncident } from '../pipeline/webhook-event-policy';
 
 type DemoOrganization = { id: string; customerHashSecret: string };
 type IngestResult = { eventId: string; duplicate: boolean };
-export type StoredEvent = CorrelationEvent & { organizationId: string };
+export type StoredEvent = CorrelationEvent & { organizationId: string; enrichmentSource: EnrichmentSource | null };
 export type ProposalDraft = { id: string; actionType: ActionProposal['actionType']; content: Record<string, unknown>; rationale: string };
 export type PolicyContext = { policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats };
 
@@ -20,7 +21,7 @@ const PolicyContextSchema = z.object({
     merchantOptedIn: z.boolean(),
   }).strict(),
   stats: z.object({ autoResolveFraction: z.number().min(0).max(1), humanReviewFraction: z.number().min(0).max(1) }).strict(),
-  contact: z.object({ incidentAttempts: z.number().int().nonnegative(), attemptsLast24Hours: z.number().int().nonnegative(), attemptsLast7Days: z.number().int().nonnegative(), merchantOptedIn: z.boolean() }).strict(),
+  contact: z.object({ incidentAttempts: z.number().int().nonnegative(), attemptsLast24Hours: z.number().int().nonnegative(), attemptsLast7Days: z.number().int().nonnegative(), merchantOptedIn: z.boolean(), customerReferenceAvailable: z.boolean() }).strict(),
 }).strict();
 
 function databaseError(operation: string, message: string): Error {
@@ -93,7 +94,7 @@ export class MvpRepository {
   }
 
   async correlationCandidates(organizationId: string, incoming: StoredEvent): Promise<IncidentCandidate[]> {
-    const includeTerminal = ['payment.dispute.created', 'payment.captured', 'order.paid'].includes(incoming.event.eventType);
+    const includeTerminal = canCorrelateWithTerminalIncident(incoming.event.eventType);
     const { data, error } = await this.client.rpc('payscope_correlation_candidates', {
       p_organization_id: organizationId,
       p_payment_id: incoming.event.paymentId ?? null,
@@ -129,14 +130,17 @@ export class MvpRepository {
       p_job_payload: payload,
     });
     if (error) throw databaseError('correlation persistence', error.message);
-    if (incident?.status === 'DISPUTE_OPENED' || incident?.status === 'RESOLVED') {
-      const { error: cancellationError } = await this.client.rpc('payscope_cancel_pending_proposals', {
-        p_organization_id: event.organizationId,
-        p_incident_id: incident.id,
-        p_reason: incident.status === 'DISPUTE_OPENED' ? 'dispute' : 'recovery',
-      });
-      if (cancellationError) throw databaseError('proposal cancellation', cancellationError.message);
-    }
+  }
+
+  /** A real query, used to keep the operator health response honest. */
+  async healthCheck(organizationId: string): Promise<void> {
+    const { data, error } = await this.client
+      .from('payscope_organizations')
+      .select('id')
+      .eq('id', organizationId)
+      .maybeSingle();
+    if (error) throw databaseError('health check', error.message);
+    if (!data) throw new Error('Configured PayScope organization is not available to the durable database');
   }
 
   async policyContext(organizationId: string, incidentId: string, customerHash: string | undefined): Promise<PolicyContext> {
@@ -149,18 +153,20 @@ export class MvpRepository {
     return PolicyContextSchema.parse(data);
   }
 
-  async listIncidents(organizationId: string, limit = 100): Promise<Incident[]> {
-    const { data, error } = await this.client
+  async listIncidents(organizationId: string, limit = 100, status?: Incident['status']): Promise<Incident[]> {
+    let query = this.client
       .from('payscope_incidents')
       .select('*')
       .eq('organization_id', organizationId)
       .order('updated_at', { ascending: false })
       .limit(Math.min(Math.max(limit, 1), 100));
+    if (status) query = query.eq('status', status);
+    const { data, error } = await query;
     if (error) throw databaseError('incident list', error.message);
     return (data ?? []).map(row => incidentFromRow(row as Record<string, unknown>));
   }
 
-  async incidentDetail(organizationId: string, incidentId: string): Promise<{ incident: Incident; events: StoredEvent[]; proposals: ActionProposal[] }> {
+  async incidentDetail(organizationId: string, incidentId: string): Promise<{ incident: Incident; events: StoredEvent[]; proposals: ActionProposal[]; investigation: Investigation | null }> {
     const { data, error } = await this.client
       .from('payscope_incidents')
       .select('*')
@@ -170,16 +176,18 @@ export class MvpRepository {
     if (error) throw databaseError('incident detail', error.message);
     if (!data) throw new Error('PayScope incident was not found');
     const incident = incidentFromRow(data as Record<string, unknown>);
-    const [eventsResult, proposalsResult] = await Promise.all([
+    const [eventsResult, proposalsResult, investigationResult] = await Promise.all([
       incident.correlatedEventIds.length
         ? this.client.from('payscope_events').select('id, organization_id, normalized, enrichment, enrichment_source').eq('organization_id', organizationId).in('id', incident.correlatedEventIds)
         : Promise.resolve({ data: [], error: null }),
       this.client.from('payscope_action_proposals').select('*').eq('organization_id', organizationId).eq('incident_id', incidentId).order('proposed_at', { ascending: false }),
+      this.client.from('payscope_investigations').select('*').eq('organization_id', organizationId).eq('incident_id', incidentId).order('started_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (eventsResult.error) throw databaseError('incident events', eventsResult.error.message);
     if (proposalsResult.error) throw databaseError('incident proposals', proposalsResult.error.message);
+    if (investigationResult.error) throw databaseError('incident investigation', investigationResult.error.message);
     const events = (eventsResult.data ?? []).map(row => eventFromRow(row as Record<string, unknown>)).sort((left, right) => left.event.occurredAt.localeCompare(right.event.occurredAt));
-    return { incident, events, proposals: (proposalsResult.data ?? []).map(row => proposalFromRow(row as Record<string, unknown>)) };
+    return { incident, events, proposals: (proposalsResult.data ?? []).map(row => proposalFromRow(row as Record<string, unknown>)), investigation: investigationResult.data ? investigationFromRow(investigationResult.data as Record<string, unknown>) : null };
   }
 
   async auditEntries(organizationId: string, incidentId?: string): Promise<AuditEntry[]> {
@@ -245,7 +253,7 @@ export class MvpRepository {
 function eventFromRow(row: Record<string, unknown>): StoredEvent {
   if (typeof row.id !== 'string' || typeof row.organization_id !== 'string') throw new Error('PayScope event row is invalid');
   const enrichment = row.enrichment === null || row.enrichment === undefined ? null : VulcanEnrichmentSchema.parse(row.enrichment);
-  return { id: row.id, organizationId: row.organization_id, event: NormalizedEventSchema.parse(row.normalized), enrichment };
+  return { id: row.id, organizationId: row.organization_id, event: NormalizedEventSchema.parse(row.normalized), enrichment, enrichmentSource: row.enrichment_source === null || row.enrichment_source === undefined ? null : EnrichmentSourceSchema.parse(row.enrichment_source) };
 }
 
 function incidentFromRow(row: Record<string, unknown>): Incident {
@@ -310,6 +318,24 @@ function auditFromRow(row: Record<string, unknown>): AuditEntry {
     prevEntryHash: row.prev_entry_hash,
     entryHash: row.entry_hash,
     createdAt: row.created_at,
+  });
+}
+
+function investigationFromRow(row: Record<string, unknown>): Investigation {
+  return InvestigationSchema.parse({
+    id: row.id,
+    organizationId: row.organization_id,
+    incidentId: row.incident_id,
+    status: row.status,
+    plan: row.plan ?? null,
+    riskAnalysis: row.risk_analysis ?? null,
+    recoveryPlan: row.recovery_plan ?? null,
+    policyDecision: row.policy_decision ?? null,
+    modelId: row.model_id ?? null,
+    tokensUsed: row.tokens_used === null || row.tokens_used === undefined ? null : numeric(row.tokens_used),
+    latencyMs: row.latency_ms === null || row.latency_ms === undefined ? null : numeric(row.latency_ms),
+    startedAt: row.started_at,
+    completedAt: row.completed_at ?? null,
   });
 }
 

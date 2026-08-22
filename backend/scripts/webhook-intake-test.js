@@ -27,4 +27,8 @@ const noisyBody = Buffer.from(JSON.stringify({ event: 'payment.failed', created_
 const noisy = normalizeRazorpayWebhook(noisyBody, 'evt_noisy', 'x'.repeat(32), '2026-08-22T00:00:00.000Z');
 assert.deepEqual(noisy.providerData.acquirer_data, { rrn: 'safe' });
 assert.equal(JSON.stringify(noisy).includes('must-not-store'), false);
+const orderPaidBody = Buffer.from(JSON.stringify({ event: 'order.paid', created_at: 1787356800, payload: { order: { entity: { id: 'order_paid', amount: 7654, currency: 'INR', status: 'paid', created_at: 1787356800 } } } }));
+const orderPaid = normalizeRazorpayWebhook(orderPaidBody, 'evt_order_paid', 'x'.repeat(32), '2026-08-22T00:00:00.000Z');
+assert.equal(orderPaid.amountPaise, 7654, 'order.paid must retain the order amount when no payment entity is present');
+assert.equal(orderPaid.currency, 'INR');
 console.log('Agentic MVP webhook intake checks passed.');
