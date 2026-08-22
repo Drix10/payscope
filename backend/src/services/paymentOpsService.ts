@@ -89,6 +89,8 @@ export class PaymentOpsService {
     ];
   }
 
+  static drainQueue(): Promise<void> { return mutationQueue.catch(() => {}) }
+
   static shutdown(): void {
     for (const timer of scheduledInvestigationTimers.values()) clearTimeout(timer);
     scheduledInvestigationTimers.clear();
@@ -114,16 +116,16 @@ export class PaymentOpsService {
     const requireHumanForEscalate = typeof input.requireHumanForEscalate === 'boolean' ? input.requireHumanForEscalate : existing?.requireHumanForEscalate ?? true;
     if (action === 'dismiss' && (maxAmountPaise === null || maxAmountPaise > 100_000 || severities.includes('critical') || severities.includes('high') || severities.length === 0)) throw new AppError('INVALID_POLICY', 422, 'Auto-dismiss is only allowed for low/medium severities with a capped amount (≤ ₹1000)');
     const policy: AutoPolicy = { policyId, name, enabled, incidentTypes, severities, minConfidence, maxAmountPaise, action, requireHumanForEscalate, createdAt: existing?.createdAt ?? now, updatedAt: now };
+    await repository.persistPolicy(policy);
     policies.set(policyId, policy);
-    await repository.persistPolicy(policy).catch(() => {});
     return policy;
   }
 
   static async deletePolicy(policyId: string): Promise<void> {
     await this.initialize();
     if (!policies.has(policyId)) throw new AppError('POLICY_NOT_FOUND', 404, 'Policy not found');
+    await repository.deletePolicy(policyId);
     policies.delete(policyId);
-    await repository.deletePolicy(policyId).catch(() => {});
   }
 
   private static findMatchingPolicy(incident: PaymentOpsIncident, investigation: Investigation): AutoPolicy | undefined {
@@ -373,7 +375,8 @@ export class PaymentOpsService {
     const response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini', instructions: 'You are a payment-operations investigator. Use only the provided facts. Never invent an event, monetary value, customer fact, or performed action. Recommend only a human-approved next step. Return JSON matching the schema.', input: JSON.stringify(input), text: { format: { type: 'json_schema', name: 'payment_ops_investigation', strict: true, schema } } }), signal: AbortSignal.timeout(15_000) });
     if (!response.ok) throw new AppError('AI_INVESTIGATION_FAILED', 502, 'The AI investigation provider could not complete the run');
     const payload = record(await response.json());
-    const output = text(payload.output_text);
+    const rawOutput = typeof payload.output_text === 'string' ? payload.output_text.slice(0, 64_000) : '';
+    const output = rawOutput;
     let parsed: UnknownRecord;
     try { parsed = record(JSON.parse(output)); } catch { throw new AppError('AI_INVESTIGATION_FAILED', 502, 'The AI investigation provider returned invalid structured output'); }
     const evidenceEventIds = Array.isArray(parsed.evidenceEventIds) ? parsed.evidenceEventIds.filter((value): value is string => typeof value === 'string' && facts.events.some(event => event.eventId === value)).slice(0, 30) : [];

@@ -1,110 +1,105 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CreditCard, Loader2 } from 'lucide-react'
 import { paymentOpsApi, paymentOpsPath, getApiErrorMessage } from '../../api'
 
 declare global {
   interface Window {
-    Razorpay: new (options: Record<string, unknown>) => { open: () => void; on: (event: string, handler: (response: Record<string, unknown>) => void) => void }
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void; on: (event: string, handler: (response: Record<string, unknown>) => void) => void }
   }
 }
 
+type CheckoutState = 'idle' | 'creating' | 'verifying' | 'success' | 'failed'
+const isText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+
 export function CheckoutButton({ onSuccess }: { onSuccess?: () => void }) {
-  const [loading, setLoading] = useState(false)
+  const [state, setState] = useState<CheckoutState>('idle')
   const [message, setMessage] = useState<string | null>(null)
+  const mounted = useRef(true)
+  const busy = useRef(false)
+  const verifyBusy = useRef(false)
+  const pollTimer = useRef<number | null>(null)
+  const orderController = useRef<AbortController | null>(null)
+  const verifyController = useRef<AbortController | null>(null)
+
+  useEffect(() => () => {
+    mounted.current = false
+    orderController.current?.abort()
+    verifyController.current?.abort()
+    if (pollTimer.current !== null) window.clearTimeout(pollTimer.current)
+  }, [])
+
+  const update = (nextState: CheckoutState, nextMessage: string | null) => {
+    if (!mounted.current) return
+    setState(nextState)
+    setMessage(nextMessage)
+  }
+
+  const finish = (nextState: CheckoutState, nextMessage: string | null) => {
+    busy.current = false
+    verifyBusy.current = false
+    orderController.current = null
+    verifyController.current = null
+    update(nextState, nextMessage)
+  }
 
   const handlePay = async () => {
-    if (typeof window.Razorpay === 'undefined') {
-      setMessage('Razorpay checkout.js not loaded. Check your connection and refresh.')
-      return
-    }
-    setLoading(true)
-    setMessage(null)
+    if (busy.current) return
+    if (!window.Razorpay) { update('failed', 'Razorpay Checkout is not loaded. Refresh the page and try again.'); return }
+    const keyId = (import.meta.env.VITE_RAZORPAY_KEY_ID as string | undefined)?.trim() || ''
+    if (!/^rzp_test_[A-Za-z0-9]+$/.test(keyId)) { update('failed', 'A valid Razorpay Test Mode key is not configured.'); return }
+
+    busy.current = true
+    update('creating', null)
+    const controller = new AbortController()
+    orderController.current = controller
     try {
-      const orderRes = await paymentOpsApi.post(paymentOpsPath('/api/create-order'), {
-        amount: 50000,
-        currency: 'INR',
-        receipt: `payscope_test_${Date.now()}`,
-      })
-      if (!orderRes.data?.success) throw new Error('Order creation failed')
-      const data = orderRes.data.data as { order_id?: string; amount?: number; currency?: string }
-      if (!data.order_id || !data.amount || !data.currency) throw new Error('Invalid order response from server')
-      const { order_id, amount, currency } = data
+      const orderRes = await paymentOpsApi.post(paymentOpsPath('/api/create-order'), { amount: 50000, currency: 'INR', receipt: `payscope_test_${(globalThis.crypto?.randomUUID?.() ?? String(Date.now()))}` }, { signal: controller.signal })
+      const data = orderRes.data?.data as Record<string, unknown> | undefined
+      if (orderRes.data?.success !== true || !data || !isText(data.order_id) || !Number.isSafeInteger(data.amount) || Number(data.amount) < 100 || data.currency !== 'INR') throw new Error('The server returned an invalid Razorpay order.')
+      const { order_id: orderId, amount, currency } = data
+      update('creating', 'Opening secure Razorpay checkout…')
 
-      const keyId = (import.meta.env.VITE_RAZORPAY_KEY_ID as string | undefined)?.trim() || ''
-      if (!keyId) throw new Error('VITE_RAZORPAY_KEY_ID is not set in frontend env')
-
-      let verifyLoading = false
-      const options = {
+      const settle = (nextState: CheckoutState, nextMessage: string | null) => finish(nextState, nextMessage)
+      const options: Record<string, unknown> = {
         key: keyId,
         amount,
         currency,
         name: 'PayScope Test Payment',
         description: 'Test the Razorpay → PayScope webhook flow',
-        order_id,
+        order_id: orderId,
         handler: async (response: Record<string, unknown>) => {
-          if (verifyLoading) return
-          verifyLoading = true
-          setMessage('Verifying payment…')
+          if (verifyBusy.current) return
+          if (!isText(response.razorpay_payment_id) || !isText(response.razorpay_order_id) || !isText(response.razorpay_signature)) { settle('failed', 'Razorpay returned an incomplete payment response.'); return }
+          verifyBusy.current = true
+          update('verifying', 'Verifying payment…')
+          const verify = new AbortController()
+          verifyController.current = verify
           try {
-            const verifyRes = await paymentOpsApi.post(paymentOpsPath('/api/verify-payment'), {
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-            })
-            if (verifyRes.data?.success) {
-              setMessage('Payment verified ✓ — incident will appear below when webhook delivers (check Razorpay dashboard if using ngrok).')
-              onSuccess?.()
-              // Poll for new incident after webhook (Razorpay webhooks are async)
-              setTimeout(() => onSuccess?.(), 2000)
-            } else {
-              setMessage('Payment succeeded but verification failed.')
-            }
-          } catch (err) {
-            setMessage(getApiErrorMessage(err, 'Verification failed.'))
-          } finally {
-            verifyLoading = false
+            const verifyRes = await paymentOpsApi.post(paymentOpsPath('/api/verify-payment'), { razorpay_payment_id: response.razorpay_payment_id, razorpay_order_id: response.razorpay_order_id, razorpay_signature: response.razorpay_signature }, { signal: verify.signal })
+            if (verifyRes.data?.success !== true) throw new Error('Payment verification failed.')
+            settle('success', 'Payment verified. The incident will appear after Razorpay delivers the webhook.')
+            onSuccess?.()
+            pollTimer.current = window.setTimeout(() => { pollTimer.current = null; if (mounted.current) onSuccess?.() }, 2_000)
+          } catch (error) {
+            if (!verify.signal.aborted) settle('failed', getApiErrorMessage(error, 'Payment verification failed.'))
           }
         },
-        modal: {
-          ondismiss: () => setMessage('Payment cancelled by user.'),
-        },
+        modal: { ondismiss: () => { if (busy.current && !verifyBusy.current) settle('failed', 'Payment cancelled by user.') } },
         theme: { color: '#00ff87' },
       }
-
-      const rzp = new window.Razorpay(options)
-      rzp.on('payment.failed', (resp: Record<string, unknown>) => {
-        const err = (resp.error as Record<string, unknown> | undefined)?.description as string | undefined
-        setMessage(err ? `Payment failed: ${err}` : 'Payment failed — incident will show as payment.failed if webhook delivered.')
-        onSuccess?.()
-      })
-      rzp.open()
-    } catch (err) {
-      setMessage(getApiErrorMessage(err, 'Unable to start checkout. Check backend Razorpay keys and VITE_RAZORPAY_KEY_ID.'))
-    } finally {
-      setLoading(false)
+      const razorpay = new window.Razorpay(options)
+      razorpay.on('payment.failed', (response: Record<string, unknown>) => { const error = response.error as Record<string, unknown> | undefined; settle('failed', isText(error?.description) ? `Payment failed: ${error.description}` : 'Payment failed. The incident will appear if Razorpay delivers the webhook.') })
+      razorpay.open()
+    } catch (error) {
+      if (!controller.signal.aborted) finish('failed', getApiErrorMessage(error, 'Unable to start checkout. Check the backend Razorpay configuration.'))
     }
   }
 
-  return (
-    <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-bold text-white">Test the webhook flow</p>
-          <p className="mt-1 text-[10px] leading-relaxed text-neutral-400">Creates a real Razorpay order (₹500) → pay in the modal → PayScope ingests the webhook as an incident.</p>
-        </div>
-        <span className="hidden rounded-full border border-[#00ff87]/20 bg-[#00ff87]/10 px-2 py-1 text-[9px] font-bold text-[#00ff87] sm:inline">Standard Checkout</span>
-      </div>
-      <button
-        type="button"
-        onClick={() => void handlePay()}
-        disabled={loading}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ff87] px-4 py-2.5 text-xs font-bold text-black hover:bg-[#00ff87]/90 disabled:opacity-50"
-      >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-        {loading ? 'Creating order…' : 'Pay ₹500 — Test Checkout'}
-      </button>
-      {message && <p className="mt-2 text-center text-[10px] leading-relaxed text-neutral-300">{message}</p>}
-      <p className="mt-2 text-center text-[9px] text-neutral-500">Uses <code className="rounded bg-white/10 px-1">rzp_test_TSXueffluCURvO</code> — Razorpay test cards only.</p>
-    </div>
-  )
+  const busyState = state === 'creating' || state === 'verifying'
+  return <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
+    <div className="flex items-center justify-between"><div><p className="text-xs font-bold text-white">Test the webhook flow</p><p className="mt-1 text-[10px] leading-relaxed text-neutral-400">Creates a Razorpay Test Mode order, then waits for the verified webhook signal.</p></div><span className="hidden rounded-full border border-[#00ff87]/20 bg-[#00ff87]/10 px-2 py-1 text-[9px] font-bold text-[#00ff87] sm:inline">Test Mode</span></div>
+    <button type="button" onClick={() => void handlePay()} disabled={busyState} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ff87] px-4 py-2.5 text-xs font-bold text-black transition-colors hover:bg-[#00ff87]/90 disabled:cursor-not-allowed disabled:opacity-50"><span>{busyState ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}</span>{state === 'creating' ? 'Opening checkout…' : state === 'verifying' ? 'Verifying payment…' : 'Pay ₹500 — Test Checkout'}</button>
+    {message && <p role="status" aria-live="polite" className={`mt-2 text-center text-[10px] leading-relaxed ${state === 'failed' ? 'text-rose-200' : state === 'success' ? 'text-[#b8ffd9]' : 'text-neutral-300'}`}>{message}</p>}
+    <p className="mt-2 text-center text-[9px] text-neutral-500">Uses Razorpay Test Mode keys and test cards only.</p>
+  </div>
 }

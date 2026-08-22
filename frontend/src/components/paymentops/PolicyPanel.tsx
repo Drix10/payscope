@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Bot, Plus, Shield, Trash2 } from 'lucide-react'
 import { AutoPolicy, ActionType } from '../../types/paymentOps'
 
@@ -13,9 +14,12 @@ export function PolicyPanel({ policies, onToggle, onDelete, onCreate, busy }: {
   onCreate: (draft: Partial<AutoPolicy> & { name: string; action: ActionType }) => void
   busy: boolean
 }) {
+  const [formError, setFormError] = useState<string | null>(null)
   const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const fd = new FormData(e.currentTarget)
+    setFormError(null)
+    const form = e.currentTarget
+    const fd = new FormData(form)
     const name = String(fd.get('name') || '').trim()
     const action = String(fd.get('action') || 'monitor') as ActionType
     let minConfidence = Number(fd.get('minConfidence') || 0.8)
@@ -25,13 +29,21 @@ export function PolicyPanel({ policies, onToggle, onDelete, onCreate, busy }: {
     let maxAmountPaise: number | null = null
     if (maxAmountRaw) {
       const rupees = Number(maxAmountRaw)
-      maxAmountPaise = Number.isFinite(rupees) && rupees >= 0 ? Math.round(rupees * 100) : null
+      if (!Number.isFinite(rupees) || rupees < 0 || rupees > 1_000_000) { setFormError('Max amount must be a number between 0 and 10,00,000.'); return }
+      const paise = Math.round(rupees * 100)
+      if (!Number.isSafeInteger(paise) || paise < 0) { setFormError('Max amount is too large.'); return }
+      maxAmountPaise = paise
     }
     const incidentTypes = (fd.getAll('incidentTypes') as string[]) as AutoPolicy['incidentTypes']
     const severities = (fd.getAll('severities') as string[]) as AutoPolicy['severities']
-    if (!name || !action) return
+    if (!name) { setFormError('Policy name is required.'); return }
+    if (!action) { setFormError('Action is required.'); return }
+    if (action === 'dismiss' && (maxAmountPaise === null || maxAmountPaise > 100_000 || severities.includes('critical') || severities.includes('high') || severities.length === 0)) {
+      setFormError('Auto-dismiss is only allowed for low/medium severities with a cap ≤ ₹1000.')
+      return
+    }
     onCreate({ name, action, minConfidence, maxAmountPaise, incidentTypes, severities, enabled: true })
-    e.currentTarget.reset()
+    form.reset()
   }
 
   return <section className="rounded-2xl border border-white/[.09] bg-[#090a0f]/80 p-4">
@@ -68,11 +80,12 @@ export function PolicyPanel({ policies, onToggle, onDelete, onCreate, busy }: {
         <label className="text-[10px] text-neutral-400">Action<select name="action" defaultValue="monitor" className="mt-1 w-full rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white"><option value="monitor">monitor</option><option value="prepare_follow_up">prepare_follow_up</option><option value="review_payment_method">review_payment_method</option><option value="escalate">escalate</option><option value="dismiss">dismiss (capped ≤₹1000, low/med only)</option></select></label>
         <label className="text-[10px] text-neutral-400">Min confidence<input name="minConfidence" type="number" min={0} max={1} step={0.05} defaultValue={0.8} className="mt-1 w-full rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white" /></label>
       </div>
-      <label className="mt-2 block text-[10px] text-neutral-400">Max amount (₹, empty = no cap)<input name="maxAmount" type="number" min={0} placeholder="e.g. 1000" className="mt-1 w-full rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white" /></label>
+      <label className="mt-2 block text-[10px] text-neutral-400">Max amount (₹, empty = no cap)<input name="maxAmount" type="number" min={0} max={1000000} placeholder="e.g. 1000" className="mt-1 w-full rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] text-white" /></label>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <fieldset className="rounded-lg border border-white/10 p-2"><legend className="px-1 text-[9px] font-bold uppercase tracking-wide text-neutral-400">Incident types (empty=all)</legend>{['payment_failure','refund_failure','payment_dispute','subscription_risk'].map(t=> <label key={t} className="mt-1 flex items-center gap-1.5 text-[10px] text-neutral-300"><input type="checkbox" name="incidentTypes" value={t} defaultChecked={t==='payment_failure'} className="h-3 w-3" />{t}</label>)}</fieldset>
         <fieldset className="rounded-lg border border-white/10 p-2"><legend className="px-1 text-[9px] font-bold uppercase tracking-wide text-neutral-400">Severities (empty=all)</legend>{['low','medium','high','critical'].map(s=> <label key={s} className="mt-1 flex items-center gap-1.5 text-[10px] text-neutral-300"><input type="checkbox" name="severities" value={s} defaultChecked={s==='low' || s==='medium'} className="h-3 w-3" />{s}</label>)}</fieldset>
       </div>
+      {formError && <p role="alert" className="mt-2 rounded-lg border border-rose-400/20 bg-rose-400/10 px-2.5 py-1.5 text-[10px] text-rose-200">{formError}</p>}
       <button type="submit" disabled={busy} className="mt-3 w-full rounded-lg bg-[#00ff87] px-3 py-1.5 text-[11px] font-bold text-black hover:bg-[#b8ffd9] disabled:opacity-50">Create policy</button>
     </form>
     <p className="mt-2 text-[9px] leading-relaxed text-neutral-500">Agent only auto-executes after an investigation. If confidence/amount/severity fail, incident stays for human. <code className="rounded bg-white/10 px-1">agent:policy/&lt;id&gt;</code> appears in audit trail for every auto-action.</p>

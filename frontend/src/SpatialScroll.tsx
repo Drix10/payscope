@@ -69,9 +69,8 @@ export function SpatialScroll() {
     if (isMobile) return
     const handleWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement
-      if (target.closest('input, textarea, button, [contenteditable="true"], [data-scrollable="true"]')) return
+      if (target.closest('input, textarea, button, a, [contenteditable="true"], [data-scrollable="true"]')) return
       e.preventDefault()
-      // Swallow the inertial momentum tail that outlives the animation lock.
       if (performance.now() - lastAdvanceAt.current < 400) {
         wheelAccum.current = 0
         return
@@ -127,11 +126,21 @@ export function SpatialScroll() {
   useEffect(() => {
     if (isMobile) return
     const onTouchStart = (e: TouchEvent) => {
+      const target = e.target as HTMLElement
+      if (target.closest('button, a, input, textarea, select, [contenteditable="true"], [data-scrollable="true"]')) {
+        touchStart.current = null
+        return
+      }
       const t = e.touches[0]
       touchStart.current = { x: t.clientX, y: t.clientY }
     }
     const onTouchEnd = (e: TouchEvent) => {
       if (!touchStart.current) return
+      const target = e.target as HTMLElement
+      if (target.closest('button, a, input, textarea, select, [contenteditable="true"], [data-scrollable="true"]')) {
+        touchStart.current = null
+        return
+      }
       const t = e.changedTouches[0]
       const dx = touchStart.current.x - t.clientX
       const dy = touchStart.current.y - t.clientY
@@ -151,11 +160,12 @@ export function SpatialScroll() {
   if (isMobile) {
     const isTablet = !isPhone
     const snapSlot: React.CSSProperties = {
-      height: '100vh',
+      minHeight: '100dvh',
+      height: '100dvh',
       boxSizing: 'border-box',
       scrollSnapAlign: 'start',
       scrollSnapStop: 'always',
-      overflow: 'hidden',
+      overflow: 'auto',
       paddingBottom: isTablet ? '36px' : 0,
     }
     return (
@@ -163,7 +173,7 @@ export function SpatialScroll() {
           ref={scrollContainerRef}
           tabIndex={0}
           role="region"
-           aria-label="PayScope product overview. Use the arrow keys to change sections."
+          aria-label="PayScope product overview. Use the arrow keys to change sections."
           onKeyDown={(event) => {
             if (event.key !== 'ArrowDown' && event.key !== 'ArrowRight' && event.key !== 'PageDown' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft' && event.key !== 'PageUp') return
             event.preventDefault()
@@ -178,8 +188,8 @@ export function SpatialScroll() {
         <div style={snapSlot}><Section1Productivity /></div>
         <div style={snapSlot}><Section2 /></div>
         <div style={snapSlot}><Section3 /></div>
-         <div style={snapSlot}><Section4 onOpenDashboard={() => window.dispatchEvent(new CustomEvent('payscope-open-dashboard'))} /></div>
-      </div>
+          <div style={snapSlot}><Section4 onOpenDashboard={() => window.dispatchEvent(new CustomEvent('payscope-open-dashboard'))} /></div>
+       </div>
     )
   }
 
@@ -198,13 +208,13 @@ export function SpatialScroll() {
           goTo((sectionRef.current + 3) % 4)
         }
       }}
-      style={{ width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: '#040406' }}
+      style={{ width: '100vw', height: '100dvh', overflow: 'hidden', backgroundColor: '#040406' }}
     >
       <motion.div style={{ x, y, position: 'relative', width: '200vw', height: '200vh', willChange: 'transform', transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}>
-        <div style={{ position: 'absolute', top: '0', left: '0', width: '100vw', height: '100vh' }}><Section1Productivity isInView={activeSection === 0} /></div>
-        <div style={{ position: 'absolute', top: '0', left: '74vw', width: '100vw', height: '100vh' }}><Section2 isInView={activeSection === 1} /></div>
-        <div style={{ position: 'absolute', top: '82vh', left: '74vw', width: '100vw', height: '100vh' }}><Section3 isInView={activeSection === 2} /></div>
-         <div style={{ position: 'absolute', top: '82vh', left: '0', width: '100vw', height: '100vh' }}><Section4 onOpenDashboard={() => window.dispatchEvent(new CustomEvent('payscope-open-dashboard'))} isInView={activeSection === 3} /></div>
+        <div style={{ position: 'absolute', top: '0', left: '0', width: '100vw', height: '100vh' }} aria-hidden={activeSection !== 0} {...(activeSection !== 0 ? ({ inert: '' } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}><Section1Productivity isInView={activeSection === 0} /></div>
+        <div style={{ position: 'absolute', top: '0', left: '74vw', width: '100vw', height: '100vh' }} aria-hidden={activeSection !== 1} {...(activeSection !== 1 ? ({ inert: '' } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}><Section2 isInView={activeSection === 1} /></div>
+        <div style={{ position: 'absolute', top: '82vh', left: '74vw', width: '100vw', height: '100vh' }} aria-hidden={activeSection !== 2} {...(activeSection !== 2 ? ({ inert: '' } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}><Section3 isInView={activeSection === 2} /></div>
+          <div style={{ position: 'absolute', top: '82vh', left: '0', width: '100vw', height: '100vh' }} aria-hidden={activeSection !== 3} {...(activeSection !== 3 ? ({ inert: '' } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}><Section4 onOpenDashboard={() => window.dispatchEvent(new CustomEvent('payscope-open-dashboard'))} isInView={activeSection === 3} /></div>
       </motion.div>
     </div>
   )

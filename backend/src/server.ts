@@ -30,7 +30,7 @@ let activeRequests = 0;
 let activeWebhookRequests = 0;
 
 if (apiAuthRequired && (!apiAccessToken || allowedOrigins.size === 0)) throw new Error('API_ACCESS_TOKEN and CORS_ORIGINS are required outside development');
-if (razorpayEnvironment === 'live' && (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.RAZORPAY_WEBHOOK_SECRET)) throw new Error('SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and RAZORPAY_WEBHOOK_SECRET are required when RAZORPAY_ENVIRONMENT=live');
+if (razorpayEnvironment === 'live' && (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.RAZORPAY_WEBHOOK_SECRET || !process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET)) throw new Error('SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RAZORPAY_WEBHOOK_SECRET, RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required when RAZORPAY_ENVIRONMENT=live');
 if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
 
 function tokenMatches(provided: string | undefined): boolean { if (!provided || !apiAccessToken) return false; const received = Buffer.from(provided); const expected = Buffer.from(apiAccessToken); return received.length === expected.length && timingSafeEqual(received, expected); }
@@ -51,8 +51,9 @@ app.post('/webhooks/razorpay', express.raw({ type: 'application/json', limit: '2
     res.status(200).json({ received: true, duplicate: result.duplicate, eventId: result.event.eventId, incidentId: result.incident?.incidentId });
   } catch (error) { next(error); }
 });
-app.use(express.json({ limit: '256kb', strict: true }));
+// API auth / rate / concurrency BEFORE body parsing to avoid unauthenticated JSON parsing
 app.use('/api', (req, res, next) => { if (!allowRequest(req, rateBuckets, 90)) { res.setHeader('Retry-After', '60'); return res.status(429).json({ success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } }); } if (apiAuthRequired) { const header = req.header('authorization'); if (!header || !/^Bearer\s+\S+$/.test(header)) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Use a valid Bearer token for API authorization' } }); if (!tokenMatches(header.slice(7).trim())) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'A valid API access token is required' } }); } if (activeRequests >= MAX_CONCURRENT_REQUESTS) { res.setHeader('Retry-After', '5'); return res.status(429).json({ success: false, error: { code: 'BUSY', message: 'Request capacity reached' } }); } activeRequests += 1; let released = false; const release = () => { if (!released) { released = true; activeRequests -= 1; } }; res.once('finish', release); res.once('close', release); next(); });
+app.use('/api', express.json({ limit: '256kb', strict: true }));
 
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'payscope', databaseConfigured: PaymentOpsService.connectionStatus().databaseConfigured }));
 app.get('/api/payment-ops/dashboard', (_req, res) => res.status(200).json({ success: true, data: PaymentOpsService.dashboard() }));
@@ -68,11 +69,9 @@ app.post('/api/payment-ops/policies', async (req, res, next) => { try { const bo
 app.delete('/api/payment-ops/policies/:policyId', async (req, res, next) => { try { await PaymentOpsService.deletePolicy(req.params.policyId); res.status(200).json({ success: true, data: { deleted: true } }); } catch (error) { next(error); } });
 
 // — PayScope Test Checkout (Razorpay Standard) —
-// Creates a Razorpay order so the dashboard can simulate a real payment and watch the webhook → incident flow
 app.post('/api/create-order', async (req, res, next) => {
   try {
     const body = record(req.body);
-    // Accept number or numeric string for amount (frontend may send string)
     const rawAmount = body.amount;
     const amount = typeof rawAmount === 'string' ? Number(rawAmount.trim()) : typeof rawAmount === 'number' ? rawAmount : undefined;
     const validAmount = Number.isInteger(amount) && amount !== undefined && amount >= 100 && amount <= 1000000 ? amount as number : undefined;
@@ -80,6 +79,7 @@ app.post('/api/create-order', async (req, res, next) => {
     const receipt = typeof body.receipt === 'string' ? body.receipt.trim().slice(0, 40) : `payscope_${randomUUID().slice(0, 8)}`;
     if (validAmount === undefined) throw new AppError('INVALID_AMOUNT', 400, 'Amount must be an integer ≥ 100 and ≤ 10,00,000 paise (₹10,000)');
     if (!/^[A-Z]{3}$/.test(currency) || currency !== 'INR') throw new AppError('INVALID_CURRENCY', 400, 'Currency must be INR for test mode');
+    if (!receipt) throw new AppError('INVALID_RECEIPT', 400, 'Receipt is required');
     const keyId = process.env.RAZORPAY_KEY_ID?.trim();
     const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
     if (!keyId || !keySecret) throw new AppError('RAZORPAY_NOT_CONFIGURED', 500, 'Razorpay keys are not configured on the server');
@@ -124,6 +124,21 @@ function record(value: unknown): Record<string, unknown> { return value && typeo
 function text(value: unknown, fallback = ''): string { return typeof value === 'string' ? value.trim().slice(0, 300) : fallback; }
 function numeric(value: unknown): number | undefined { return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined; }
 
-async function start(): Promise<void> { await PaymentOpsService.initialize(); const server = app.listen(port, () => console.log(`PayScope API listening on ${port}`)); server.requestTimeout = 30_000; server.headersTimeout = 15_000; server.keepAliveTimeout = 5_000; const shutdown = (signal: string) => { clearInterval(cleanupRateBuckets); PaymentOpsService.shutdown(); server.close(error => { if (error) { console.error(`${signal} shutdown failed`, error); process.exitCode = 1; } process.exit(); }); }; process.once('SIGTERM', () => shutdown('SIGTERM')); process.once('SIGINT', () => shutdown('SIGINT')); }
+async function start(): Promise<void> {
+  await PaymentOpsService.initialize();
+  const server = app.listen(port, () => console.log(`PayScope API listening on ${port}`));
+  server.requestTimeout = 30_000; server.headersTimeout = 15_000; server.keepAliveTimeout = 5_000;
+  const shutdown = (signal: string) => {
+    clearInterval(cleanupRateBuckets);
+    // Drain mutation queue before exiting
+    const drain = PaymentOpsService.drainQueue().catch(() => {})
+    Promise.race([drain, new Promise(resolve => setTimeout(resolve, 5_000))]).finally(() => {
+      PaymentOpsService.shutdown();
+      server.close(error => { if (error) { console.error(`${signal} shutdown failed`, error); process.exitCode = 1; } process.exit(); });
+    })
+  };
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
+}
 if (require.main === module) void start().catch(error => { console.error('PayScope could not start', error); process.exitCode = 1; });
 export default app;
