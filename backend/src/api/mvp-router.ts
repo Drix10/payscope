@@ -15,6 +15,12 @@ export type MvpRouterOptions = {
 /** Tenant-scoped presentation API with one token-gated simulated approval action. */
 export function createMvpRouter(repository: MvpRepository, organizationId: string, options?: MvpRouterOptions): Router {
   const router = Router();
+  // The MVP is deployed as one VPS process. Serializing an approval here
+  // prevents two near-simultaneous browser requests from both invoking even
+  // the simulated communications adapter before the durable RPC rejects the
+  // proposal's changed state. The database RPC remains the cross-process
+  // source of truth should deployment topology change later.
+  const approvalLocks = new Map<string, Promise<void>>();
 
   router.get('/health', async (_req, res, next) => {
     try {
@@ -85,9 +91,13 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
       if (!options?.approvalToken) return unavailable(res, 'Proposal approval is not configured on this demo server.');
       const presentedToken = req.header('x-payscope-demo-approval-token');
       if (!presentedToken || !matchesApprovalToken(presentedToken, options.approvalToken)) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'A valid demo approval token is required.' } });
-      const pending = await repository.proposalById(organizationId, req.params.proposalId);
-      const deliveryResult = await options.communications.executeApprovedAction(pending);
-      const approved = await repository.approveProposal(organizationId, pending.id, options.approvalActorId, hashToken(presentedToken), deliveryResult);
+      const approved = await withKeyLock(approvalLocks, req.params.proposalId, async () => {
+        const pending = await repository.proposalById(organizationId, req.params.proposalId);
+        if (pending.status !== 'pending') return undefined;
+        const deliveryResult = await options.communications.executeApprovedAction(pending);
+        return repository.approveProposal(organizationId, pending.id, options.approvalActorId, hashToken(presentedToken), deliveryResult);
+      });
+      if (!approved) return res.status(409).json({ success: false, error: { code: 'PROPOSAL_NOT_PENDING', message: 'This proposal has already been processed or cancelled.' } });
       res.status(200).json({ success: true, data: approved });
     } catch (error) { next(error); }
   });
@@ -168,4 +178,18 @@ function projectAuditEntry(entry: Awaited<ReturnType<MvpRepository['auditEntries
 
 function matchesApprovalToken(presented: string, configured: string): boolean {
   return timingSafeEqual(Buffer.from(hashToken(presented), 'hex'), Buffer.from(hashToken(configured), 'hex'));
+}
+
+async function withKeyLock<T>(locks: Map<string, Promise<void>>, key: string, task: () => Promise<T>): Promise<T> {
+  const predecessor = locks.get(key) ?? Promise.resolve();
+  let release: (() => void) | undefined;
+  const current = new Promise<void>(resolve => { release = resolve; });
+  locks.set(key, current);
+  await predecessor;
+  try {
+    return await task();
+  } finally {
+    release?.();
+    if (locks.get(key) === current) locks.delete(key);
+  }
 }

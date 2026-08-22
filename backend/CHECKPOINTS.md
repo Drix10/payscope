@@ -500,3 +500,15 @@ no legacy path that can create a conflicting incident, action, or audit record.
   intact. The former fixture tenant remains intentionally broken evidence of
   the pre-`202608230005` confidence-format defect and is never used by the
   demo or current integration suite.
+- [x] Post-restoration adversarial recheck: TypeScript build, production audit,
+  diff check, and the offline webhook, queue, enrichment, correlation, agent,
+  policy, API, dashboard, CORS, fixture, attribution, and audit-contract
+  suites pass. Approval requests are serialized per proposal on the single-VPS
+  MVP, so duplicate browser clicks cannot invoke even simulated delivery twice;
+  a non-pending proposal returns `409`. Opt-in Supabase tests remain explicitly
+  skipped without their Test Mode environment flags rather than being reported
+  as a live verification.
+- [x] Bound Supabase HTTP transport to 15 seconds while preserving caller
+  cancellation. This closes the remaining stalled-network path that could
+  otherwise retain a worker's in-flight promise or the in-process duplicate-
+  approval lock indefinitely.

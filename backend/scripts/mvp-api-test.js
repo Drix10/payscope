@@ -6,6 +6,8 @@ const { createMvpRouter } = require('../dist/api/mvp-router');
 const organizationId = '00000000-0000-4000-8000-000000000001';
 const incidentId = '00000000-0000-4000-8000-000000000002';
 const calls = [];
+let proposalStatus = 'pending';
+let simulatedDeliveryCount = 0;
 const repository = {
   async healthCheck(org) { calls.push(['health', org]); },
   async listIncidents(org, limit, status) { calls.push(['list', org, limit, status]); return []; },
@@ -14,12 +16,12 @@ const repository = {
   async auditIntegrity(org) { calls.push(['integrity', org]); return { status: 'intact', entryCount: 1, checkedAt: '2026-08-22T00:00:00.000Z' }; },
   async dashboardMetrics(org) { calls.push(['metrics', org]); return { operations: { totalAtRiskPaise: 100, proposalsGenerated: 1, proposalsApproved: 0, attributedRecoveries: null, recoveredPaise: null, recoveryRate: null, contactToRecoveryRatio: null }, evaluation: { status: 'not_run', split: null, fixtureSetVersion: null, runAt: null, configurationHash: null, modelId: null, sampleCount: 0, precision: null, recall: null, f1: null, falsePositiveCostPaise: null }, exceptions: ['COD/RTO unavailable', 'No dispute outreach', 'No fraud outreach', 'Human review for unmatched policy', 'Communications simulated', 'Test Mode recovery simulated'] }; },
   async dashboardQuery(org, query, limit) { calls.push(['query', org, query, limit]); return { query, interpretation: 'Tenant-scoped read-only test response.', matchedIncidentCount: 0, matchedRemainingAmountPaise: 0, incidents: [], limitations: ['Read-only tenant summary.', 'No action is available.'] }; },
-  async proposalById(org, id) { calls.push(['proposal', org, id]); return { id, organizationId: org, incidentId, actionType: 'flag_for_review', content: {}, status: 'pending', proposedAt: '2026-08-22T00:00:00.000Z', approvedAt: null, approvedBy: null, deliveryResult: null }; },
-  async approveProposal(org, id, actor, hash, delivery) { calls.push(['approve', org, id, actor, hash, delivery]); return { id, organizationId: org, incidentId, actionType: 'flag_for_review', content: {}, status: 'simulated', proposedAt: '2026-08-22T00:00:00.000Z', approvedAt: '2026-08-22T00:01:00.000Z', approvedBy: null, deliveryResult: delivery }; },
+  async proposalById(org, id) { calls.push(['proposal', org, id]); return { id, organizationId: org, incidentId, actionType: 'flag_for_review', content: {}, status: proposalStatus, proposedAt: '2026-08-22T00:00:00.000Z', approvedAt: null, approvedBy: null, deliveryResult: null }; },
+  async approveProposal(org, id, actor, hash, delivery) { proposalStatus = 'simulated'; calls.push(['approve', org, id, actor, hash, delivery]); return { id, organizationId: org, incidentId, actionType: 'flag_for_review', content: {}, status: 'simulated', proposedAt: '2026-08-22T00:00:00.000Z', approvedAt: '2026-08-22T00:01:00.000Z', approvedBy: null, deliveryResult: delivery }; },
 };
 const app = express();
 app.use(express.json());
-app.use('/api/mvp', createMvpRouter(repository, organizationId, { approvalToken: 'test-approval-token', approvalActorId: 'demo-operator', enrichmentAdapter: 'razorpay_fields_heuristic', communications: { async executeApprovedAction() { return { status: 'simulated', note: 'No delivery sent.', simulatedAt: '2026-08-22T00:01:00.000Z' }; } } }));
+app.use('/api/mvp', createMvpRouter(repository, organizationId, { approvalToken: 'test-approval-token', approvalActorId: 'demo-operator', enrichmentAdapter: 'razorpay_fields_heuristic', communications: { async executeApprovedAction() { simulatedDeliveryCount += 1; await new Promise(resolve => setTimeout(resolve, 10)); return { status: 'simulated', note: 'No delivery sent.', simulatedAt: '2026-08-22T00:01:00.000Z' }; } } }));
 
 function request(port, path, options = {}) {
   return new Promise((resolve, reject) => {
@@ -66,9 +68,17 @@ function request(port, path, options = {}) {
     }
     const approvalUnauthorized = await request(port, `/api/mvp/proposals/${incidentId}/approve`, { method: 'POST' });
     assert.equal(approvalUnauthorized.status, 401);
-    const approval = await request(port, `/api/mvp/proposals/${incidentId}/approve`, { method: 'POST', headers: { 'x-payscope-demo-approval-token': 'test-approval-token' } });
+    const [firstApproval, duplicateApproval] = await Promise.all([
+      request(port, `/api/mvp/proposals/${incidentId}/approve`, { method: 'POST', headers: { 'x-payscope-demo-approval-token': 'test-approval-token' } }),
+      request(port, `/api/mvp/proposals/${incidentId}/approve`, { method: 'POST', headers: { 'x-payscope-demo-approval-token': 'test-approval-token' } }),
+    ]);
+    const approval = firstApproval.status === 200 ? firstApproval : duplicateApproval;
+    const duplicate = firstApproval.status === 409 ? firstApproval : duplicateApproval;
     assert.equal(approval.status, 200); assert.equal(approval.body.data.status, 'simulated');
-    assert.equal(calls.at(-1)[0], 'approve'); assert.equal(calls.at(-1)[5].status, 'simulated');
+    assert.equal(duplicate.status, 409); assert.equal(duplicate.body.error.code, 'PROPOSAL_NOT_PENDING');
+    assert.equal(simulatedDeliveryCount, 1, 'duplicate approval must not invoke simulated delivery twice');
+    const approvalCalls = calls.filter(call => call[0] === 'approve');
+    assert.equal(approvalCalls.length, 1); assert.equal(approvalCalls[0][5].status, 'simulated');
     console.log('MVP API request-boundary checks passed.');
   } finally { await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

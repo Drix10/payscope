@@ -11,6 +11,11 @@
 - Source architecture: walkthrough opens the current tenant-scoped dashboard;
   proposal approval, audit integrity, Test Mode labeling, and read-only query
   logic remain on the canonical MVP path.
+- Safety/lifecycle review: the copied visual layer has no retired action API;
+  mobile scroll updates keyboard position; animations, timers, and listeners
+  clean up on unmount; non-mutating requests are aborted when the dashboard is
+  left. Source copy was rewritten where necessary to preserve the locked
+  propose-only boundary.
 - Visual browser capture: blocked. The available Desktop in-app browser cannot
   resolve the local Vite preview (`terminal.local`) and the public Vercel URL
   is not yet a build containing this change.

@@ -75,9 +75,11 @@ requests, and search the frontend for retired action names, old API paths,
 - [x] Centralize API base URL, request timeout, authorization/session transport,
   cancellation, and error handling. Never put Razorpay, Supabase service-role,
   Mesh, or communications secrets in `VITE_*` variables.
-- [x] Remove the conflicting public showcase/checkout bootstrapping rather than
-  preserve it. The static Razorpay Checkout script is deleted; the only shipped
-  surface is the Test Mode, proposal-only operator workspace.
+- [x] Remove the conflicting legacy showcase/checkout bootstrapping rather than
+  preserve it. The static Razorpay Checkout script is deleted. The restored
+  four-stage walkthrough is presentation-only and routes into the same Test
+  Mode, proposal-only operator workspace; it exposes neither checkout nor an
+  alternate action surface.
 - [x] Establish loading, empty, stale-data, error, and mobile-layout states for
   every operator screen before adding visual polish.
 - [x] Inventory the current surface before replacement. **Retain and adapt:**
@@ -108,6 +110,11 @@ requests, and search the frontend for retired action names, old API paths,
 - [x] Add request cancellation and unmount guards for refresh/detail loading;
   a rapid refresh or incident change aborts its prior request and cannot write
   stale state after a newer request or component unmount.
+- [x] Harden the restored walkthrough: mobile scroll position now synchronizes
+  keyboard navigation, all animation/timer/listener work is cleaned up on
+  unmount, and leaving the workspace aborts non-mutating dashboard reads
+  without showing an abort as an operator error. Its copy is propose-only;
+  it makes no automatic-outreach or financial-action claim.
 
 **Gate:** production build passes and fixture API responses render without a
 console error, data leak, or type-validation bypass.
@@ -244,10 +251,12 @@ development/held-out evaluation report exists.
 
 ## Phase 5 — UX, accessibility, and demo readiness
 
-- [x] Verify deployed desktop, tablet, and 390px mobile workspace layouts; no
-  horizontal overflow, clipped audit entries, inaccessible dialogs, or
-  data-only color indicators. The 2026-08-23 browser pass found no horizontal
-  overflow at 390px or 768px and no console warning/error.
+- [ ] Re-verify the restored walkthrough and workspace at deployed desktop,
+  tablet, and 390px mobile after this frontend build is deployed: no horizontal
+  overflow, clipped audit entries, inaccessible dialogs, or data-only color
+  indicators. The prior 2026-08-23 browser pass found no horizontal overflow
+  at 390px or 768px and no console warning/error, but it preceded the current
+  visual restoration and cannot certify it.
 - [x] Add keyboard focus, semantic headings, labelled controls, asynchronous
   live regions, readable contrast classes, and reduced-motion-safe behaviour.
   The current source also fixes React Strict Mode's cleanup/remount flag and
@@ -300,6 +309,11 @@ claim, or hidden component can bypass or contradict this flow.
   hairline surfaces, signal canvases, and restrained accent colors). The copy
   is updated to the locked agentic-MVP safety contract rather than restoring
   legacy autonomy or payment-action claims.
+- [x] Transplant the actual source implementation for the walkthrough from
+  commit `d1a1e13` (`SpatialScroll`, all four source sections, animated network
+  layer, responsive mobile panel, source navbar, and its animation dependency)
+  into the active React/Vite build. The temporary local reference clone was
+  removed after the transplant; no cloned repository remains in `frontend/`.
 - [x] Preserve a working route from the fourth section and product navigation
   into the current tenant-scoped Agentic MVP dashboard; existing API reads,
   proposal approval, audit-chain gate, and Test Mode labels were not replaced.

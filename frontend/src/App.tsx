@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Clock3, Database, RefreshCw, ShieldCheck } from 'lucide-react'
 import { mvpApi } from './api'
-import { Showcase } from './Showcase'
+import { SpatialScroll } from './SpatialScroll'
+import { Navbar } from './components/layout/Navbar'
 import type { AuditEntry, AuditIntegrity, DashboardMetrics, DashboardQueryResult, Incident, IncidentDetail, Investigation, MvpHealth, Proposal } from './types/mvp'
 
 const money = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paise / 100)
@@ -45,7 +46,11 @@ export default function App() {
       ])
       if (!mounted.current || refreshController.current !== controller) return
       setHealth(nextHealth); setIncidents(nextIncidents); setDashboardMetrics(nextMetrics); setLastLoadedAt(new Date().toISOString()); setError(null)
-    } catch (reason) { if (mounted.current && refreshController.current === controller) setError(reason instanceof Error ? reason.message : 'Unable to load the agentic workspace.') }
+    } catch (reason) {
+      if (!controller.signal.aborted && mounted.current && refreshController.current === controller) {
+        setError(reason instanceof Error ? reason.message : 'Unable to load the agentic workspace.')
+      }
+    }
     finally { if (mounted.current && refreshController.current === controller) { refreshController.current = null; setLoading(false) } }
   }
   useEffect(() => {
@@ -61,7 +66,23 @@ export default function App() {
       dashboardController.current?.abort()
     }
   }, [])
-  useEffect(() => { void refresh() }, [statusFilter])
+  useEffect(() => {
+    const openDashboard = () => setViewMode('dashboard')
+    document.addEventListener('payscope-open-dashboard', openDashboard)
+    return () => document.removeEventListener('payscope-open-dashboard', openDashboard)
+  }, [])
+  useEffect(() => {
+    if (viewMode === 'dashboard') {
+      void refresh()
+      return
+    }
+    // The showcase is static product education. Do not keep a tenant-scoped
+    // request alive while it is visible or surface a stale dashboard failure
+    // when the operator has not opened the workspace.
+    refreshController.current?.abort()
+    detailController.current?.abort()
+    dashboardController.current?.abort()
+  }, [statusFilter, viewMode])
 
   const open = async (incident: Incident) => {
     detailController.current?.abort()
@@ -74,7 +95,11 @@ export default function App() {
       const integrity = await mvpApi.auditIntegrity(controller.signal).catch(() => null)
       if (!mounted.current || detailController.current !== controller) return
       setSelected(detail); setAudit(entries); setAuditIntegrity(integrity); setError(null)
-    } catch (reason) { if (mounted.current && detailController.current === controller) setError(reason instanceof Error ? reason.message : 'Unable to load incident detail.') }
+    } catch (reason) {
+      if (!controller.signal.aborted && mounted.current && detailController.current === controller) {
+        setError(reason instanceof Error ? reason.message : 'Unable to load incident detail.')
+      }
+    }
     finally { if (mounted.current && detailController.current === controller) { detailController.current = null; setDetailLoading(false) } }
   }
   const totalAtRisk = useMemo(() => incidents.reduce((sum, item) => sum + item.remainingAmountPaise, 0), [incidents])
@@ -90,7 +115,7 @@ export default function App() {
       if (!mounted.current || dashboardController.current !== controller) return
       setDashboardResult(result); setError(null)
     } catch (reason) {
-      if (!mounted.current || dashboardController.current !== controller) return
+      if (controller.signal.aborted || !mounted.current || dashboardController.current !== controller) return
       const message = reason instanceof Error ? reason.message : 'Unable to run the read-only dashboard query.'
       if (!/cancelled/.test(message)) setError(message)
     } finally { if (mounted.current && dashboardController.current === controller) { dashboardController.current = null; setDashboardLoading(false) } }
@@ -124,7 +149,7 @@ export default function App() {
     finally { if (mounted.current && approvalController.current === controller) { approvalController.current = null; setApprovingProposalId(null) } }
   }
 
-  if (viewMode === 'showcase') return <Showcase onOpenDashboard={() => setViewMode('dashboard')} />
+  if (viewMode === 'showcase') return <main className="min-h-screen overflow-x-hidden bg-[#040406] text-white"><Navbar viewMode={viewMode} onViewModeChange={setViewMode} environment="test" /><SpatialScroll /></main>
 
   return <main className="min-h-screen bg-[#040406] text-neutral-100">
     <header className="sticky top-0 z-30 border-b border-white/[.07] bg-[#040406]/80 px-5 py-3 backdrop-blur-xl sm:px-8"><div className="mx-auto flex max-w-7xl items-center justify-between gap-4"><div className="flex items-center gap-3"><button type="button" onClick={() => setViewMode('showcase')} className="rounded-full border border-white/10 bg-white/[.04] px-3 py-1.5 text-[11px] font-semibold text-neutral-300 transition hover:bg-white/[.08]">Showcase</button><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#00ff87]">PayScope</p><h1 className="mt-1 text-xl font-bold">Agentic payment-operations MVP</h1></div></div><button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-full border border-white/15 bg-white/[.04] px-3 py-2 text-xs font-semibold hover:bg-white/[.1] disabled:opacity-50"><RefreshCw className="mr-1 inline h-3.5 w-3.5" />Refresh</button></div></header>
