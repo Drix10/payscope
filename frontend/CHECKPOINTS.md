@@ -4,6 +4,15 @@
 the legacy dashboard delivery record. It describes work still to do; it does not
 claim the new agentic MVP is already implemented.
 
+## Plan.md phase correlation
+
+`Plan.md` Part 8 is the only phase-gate authority. Frontend Phase 0 is contract
+and shell preparation; Phases 1–3 implement the Plan.md Phase 4 operator
+surface; Phase 4 implements the Plan.md Phase 4 Agentic Dashboard and renders
+Plan.md Phase 5 evidence; Phase 5 is Plan.md Phase 5 demo readiness. The visual
+restoration section below is presentation work permitted by the React/Vite
+decision; it cannot replace, waive, or mark complete a functional Plan.md gate.
+
 ## MVP boundary
 
 - Keep React 18 + Vite. Do not migrate to Next.js.
@@ -282,3 +291,24 @@ Mode incident travel through the agentic pipeline, approve a simulated proposal,
 inspect its verified audit trail, query tenant-scoped data, and see honest
 fixture/Test Mode metrics plus exceptions. No old dashboard, action, route,
 claim, or hidden component can bypass or contradict this flow.
+
+## Visual restoration from commit `d1a1e13`
+
+- [x] Restore the source commit's four-stage product walkthrough as the default
+  frontend entry: floating product navigation, full-viewport story sections,
+  responsive scroll snapping, and the source visual language (obsidian grid,
+  hairline surfaces, signal canvases, and restrained accent colors). The copy
+  is updated to the locked agentic-MVP safety contract rather than restoring
+  legacy autonomy or payment-action claims.
+- [x] Preserve a working route from the fourth section and product navigation
+  into the current tenant-scoped Agentic MVP dashboard; existing API reads,
+  proposal approval, audit-chain gate, and Test Mode labels were not replaced.
+- [ ] Port the source commit's sidebar/section dashboard composition onto the
+  current incident, investigation, metrics, and audit schemas. Do not restore
+  legacy `/api/payment-ops/*` requests, token-in-browser guidance, connection
+  imports, policy mutation, checkout, or direct incident-action controls.
+- [ ] Visually compare the local restored walkthrough and dashboard with the
+  source commit at desktop and 390px, then capture the exact remaining
+  differences before deployment. `design-qa.md` is currently blocked because
+  this Desktop browser cannot resolve the local preview; this row must not be
+  checked from a TypeScript build alone.

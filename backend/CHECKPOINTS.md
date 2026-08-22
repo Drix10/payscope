@@ -4,6 +4,14 @@
 the legacy PaymentOps delivery record. It is a build checklist, not a claim that
 the work below has shipped.
 
+## Plan.md phase correlation
+
+`Plan.md` Part 8 is the only phase-gate authority. This file's Phase 0 is
+contract preparation before that plan; its Phases 1–5 map directly to Plan.md
+Part 8 Phases 1–5 (foundation; enrichment/correlation; agent pipeline; audit
+and operator surface; metrics/demo). A checked code/test item never closes an
+external or evidence gate in Plan.md; those remain unchecked until observed.
+
 ## MVP boundary
 
 - Build a Test Mode, one-merchant demo with multi-tenant fields, database RLS,
