@@ -7,8 +7,8 @@ PORT=25655
 NODE_ENV=production
 REQUIRE_API_AUTH=true
 API_ACCESS_TOKEN=<long-random-token>
-CORS_ORIGINS=https://payscope.vercel.app
-PAYMENT_OPS_PUBLIC_URL=https://payscope-api.vercel.app
+CORS_ORIGINS=https://payscope-ai.vercel.app,https://payscope.vercel.app,https://payscope-frontend.vercel.app
+PAYMENT_OPS_PUBLIC_URL=https://temp.coslynx.com
 
 RAZORPAY_ENVIRONMENT=test
 RAZORPAY_KEY_ID=rzp_test_...
@@ -24,7 +24,7 @@ If using a standalone VM, bind Node to `127.0.0.1:25655` and expose Nginx on 80/
 ## Razorpay configuration
 
 1. In Razorpay Dashboard, switch to **Test Mode**.
-2. Add `https://payscope-api.vercel.app/webhooks/razorpay` under **Accounts & Settings → Webhooks**.
+2. Add `https://temp.coslynx.com/webhooks/razorpay` under **Accounts & Settings → Webhooks**.
 3. Set a unique webhook secret and store it only in `RAZORPAY_WEBHOOK_SECRET`.
 4. Enable the project event set: payment failed/authorized/captured, order paid, refund created/failed, dispute created, and the selected subscription events.
 5. Send a Test Mode transaction and confirm the PayScope dashboard receives a verified event.

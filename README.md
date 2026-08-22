@@ -92,7 +92,7 @@ Without `SUPABASE_*` the API runs in bounded memory (Test Mode only).
 | `NODE_ENV` | no | `development` skips Bearer unless `REQUIRE_API_AUTH=true` |
 | `RAZORPAY_ENVIRONMENT` | no | `test` / `live` (`live` needs `SUPABASE_*`+`RAZORPAY_WEBHOOK_SECRET`) |
 | `API_ACCESS_TOKEN` | prod | Bearer + `CORS_ORIGINS` |
-| `CORS_ORIGINS` | prod | `https://your-frontend.vercel.app` |
+| `CORS_ORIGINS` | prod | `https://domain.vercel.app` |
 | `PAYMENT_OPS_PUBLIC_URL` | no | `https://your-api.vercel.app` for webhook URL |
 | `RAZORPAY_KEY_ID/SECRET` | import | `rzp_test_*` |
 | `RAZORPAY_WEBHOOK_SECRET` | webhooks | 32+ chars |

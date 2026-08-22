@@ -15,7 +15,7 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 const razorpayEnvironment = process.env.RAZORPAY_ENVIRONMENT?.trim() || 'test';
 if (!['test', 'live'].includes(razorpayEnvironment)) throw new Error('RAZORPAY_ENVIRONMENT must be either test or live');
 const configuredOrigins = process.env.CORS_ORIGINS ?? (isDevelopment ? 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173' : '');
-const deploymentOrigins = [process.env.FRONTEND_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL]
+const deploymentOrigins = ['https://payscope-ai.vercel.app', process.env.FRONTEND_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL]
   .filter((origin): origin is string => Boolean(origin))
   .map(origin => origin.startsWith('http') ? origin : `https://${origin}`);
 const allowedOrigins = new Set([...configuredOrigins.split(','), ...deploymentOrigins].map(origin => origin.trim()).filter(Boolean));
