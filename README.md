@@ -1,144 +1,134 @@
 # PayScope
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/) [![Razorpay](https://img.shields.io/badge/Razorpay-Test_Mode-0C7FF2)](https://razorpay.com/) [![Supabase](https://img.shields.io/badge/Supabase-Postgres-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com/) [![Node](https://img.shields.io/badge/Node-22-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+PayScope is a Razorpay **Test Mode** payment-incident MVP. It receives a
+verified webhook, stores only a bounded normalized record, processes it through
+a durable queue, correlates it into an incident, and exposes a read-only React
+operator workspace.
 
-Evidence-first **payment operations** for Razorpay — verify every webhook, turn risk into reviewable incidents, investigate with bounded AI, and let admin policies auto-handle the safe stuff. **No route ever captures a payment, issues a refund, changes a subscription, or contacts a customer.**
+It is intentionally safe by default: no live payment operation, customer
+message, refund, subscription change, or direct Vulcan claim exists.
 
-Single repo: `backend/` (API) + `frontend/` (dashboard) → deploy `frontend/` on Vercel, `backend/` as standalone Node or Vercel serverless. Full plan: [`Plan.md`](./Plan.md).
+## What runs today
 
-## Why PayScope
-
-Payment webhooks are noisy and untrusted — retried, out-of-order, spoofed. PayScope turns them into **reviewable incidents** with deterministic evidence, so you (or a threshold policy) can decide safely without touching money.
-
-## Architecture
-
-```mermaid
-flowchart LR
-  R[Razorpay Test Mode] --> W[Raw webhook: 256KB]
-  W --> V[HMAC + event-id idempotency]
-  V --> S[Supabase / bounded memory]
-  S --> C[Serialized correlation]
-  C --> I[Debounced investigation: rules-v1 + optional model]
-  I --> E{Policy matches?}
-  E -->|yes| AU[Auto: agent:policy/id]
-  E -->|no| D[Dashboard]
-  D --> H[Human decision]
-  AU --> L[Audit]
-  H --> L
+```text
+Razorpay Test Mode webhook
+  -> raw-body HMAC verification and payload hashing
+  -> Supabase atomic event + durable queue job
+  -> VPS QueueWorker
+  -> labelled Razorpay-field heuristic enrichment
+  -> tenant-scoped correlation and incident lifecycle
+  -> bounded model investigation, or audited human escalation
+  -> React/Vite incident and audit workspace on Vercel
 ```
 
-**Stack:** Node 22 + Express + TypeScript strict · `crypto` HMAC-SHA256 · Supabase Postgres (service-role only, in-memory fallback) · `rules-v1` + optional OpenAI structured output · Zod, rate buckets (90/min), concurrency caps (12 API / 24 webhooks)
+- Test Mode is enforced at backend startup.
+- Customer identifiers become organization-specific HMAC hashes; raw webhook
+  bodies and contact details are never persisted.
+- Every API/database read injects the configured organization ID.
+- If the Mesh key is absent or an agent response is invalid, the incident is
+  escalated and audited—never turned into an action.
+- The audit table is append-only and hash-chained per organization.
 
-## What it does
+## Deliberate MVP limits
 
-- **HMAC ingestion** — `POST /webhooks/razorpay` needs `X-Razorpay-Signature` over raw body (401 if missing, 503 if secret missing).
-- **Idempotency** — `x-razorpay-event-id` dedup + 30s in-flight expiry; duplicate repairs correlation.
-- **Events** — `payment.failed/.authorized/.captured`, `order.paid`, `refund.created/.failed`, `payment.dispute.created`, `subscription.pending/.halted/.cancelled`; unknown → `unknown.event` (audit only).
-- **Correlation** — payment/order/subscription exact match, else 15-min customer+method window; conflicting currencies never grouped; `captured`/`order.paid` only resolves if timestamp ≥ risk and amount covers it (partial → `monitoring`, full → `recovered`).
-- **Bounded** — 2k events, 500 incidents, 100 refs/incident, 30 evidence, 50 audits/incident, sliding 300ms debounce (101 burst → 1 incident).
-- **Policies** — admin `auto_policies` (`incidentTypes`, `severities`, `minConfidence`, `maxAmountPaise`, `action`, `requireHumanForEscalate`). First enabled match auto-executes `monitor`/`prepare_follow_up`/`review` as `agent:policy/<id>`; `dismiss` ≤₹1000 low/medium only, `escalate` never auto unless allowed. 50 cap, Supabase or memory.
-- **History import** — `POST /api/payment-ops/import-history` pulls `GET /v1/payments` (`from/to/count/skip`, 5×100, 10s, 1MB cap) via `history:<id>:<type>`.
-- **Dashboard** — `loaded-window` metrics (not all-time), `Needs attention` / `All` queue, incident detail (12-line timeline, evidence, bounded investigation, `Re-run`/`Approve`/`Dismiss`, `agent:policy/<id>` audit), connection panel (webhook copy + import), policy panel, verified event stream. All payloads runtime-validated.
+The dashboard is read-only today. Proposal creation/approval, simulated
+communications, browser session transport, live Supabase/RLS verification, and
+fixture metrics remain tracked in [backend/CHECKPOINTS.md](./backend/CHECKPOINTS.md)
+and [frontend/CHECKPOINTS.md](./frontend/CHECKPOINTS.md). The repository does
+not pretend these are shipped.
 
-## API
+## Local setup
 
-| Method | Route | Purpose | Auth |
-| --- | --- | --- | --- |
-| `POST` | `/webhooks/razorpay` | Ingest verified webhook | HMAC |
-| `GET` | `/health` | `ok` + `databaseConfigured` | none |
-| `GET` | `/api/payment-ops/dashboard` | Metrics + recent + attention | Bearer |
-| `GET` | `/api/payment-ops/connection` | Health (no secrets) | Bearer |
-| `GET` | `/api/payment-ops/events` | Latest 200 summaries | Bearer |
-| `GET` | `/api/payment-ops/incidents` | List (filter `status`) | Bearer |
-| `GET` | `/api/payment-ops/incidents/:id` | Detail + events + audit | Bearer |
-| `POST` | `/api/payment-ops/incidents/:id/investigate` | Re-run investigation | Bearer |
-| `POST` | `/api/payment-ops/incidents/:id/actions` | Record human decision | Bearer |
-| `POST` | `/api/payment-ops/import-history` | Import history | Bearer |
-| `GET/POST/DELETE` | `/api/payment-ops/policies` | List / upsert / delete policies | Bearer |
+Requirements: Node.js 20+, npm, a Razorpay Test Mode account, and Supabase for
+the durable path.
 
-`Bearer <API_ACCESS_TOKEN>` required outside `development` (`REQUIRE_API_AUTH=true`). `GET /api/*` 90/min, webhooks 600/min.
-
-## Quick start — single repo
-
-```bash
-# backend
+```powershell
 cd backend
-cp .env.example .env   # fill below
-npm install
+Copy-Item .env.example .env
+
+cd ..\frontend
+Copy-Item .env.example .env
+```
+
+Keep `PAYSCOPE_MVP_PIPELINE=false` while working without Supabase. The backend
+will start in a deliberately degraded state and reject webhooks rather than
+falling back to memory. To enable the durable pipeline, complete the next
+section first.
+
+### Enable the durable Test Mode pipeline
+
+1. Authenticate the Supabase CLI, link the configured project, and push the
+   canonical migration:
+
+   ```powershell
+   cd backend
+   npx supabase login
+   npx supabase link --project-ref oheegffhhtdudlbgrtso
+   npx supabase db push
+   ```
+
+   If you prefer the dashboard for this one migration, execute
+   [the canonical migration](./backend/supabase/migrations/20260822_agentic_mvp_foundation.sql)
+   in the SQL Editor. Do not mix dashboard-only changes with later CLI pushes
+   without reconciling the migration history.
+2. Create one organization, then copy its ID into
+   `PAYSCOPE_DEMO_ORGANIZATION_ID` and its Test Mode key ID into `razorpay_key_id`.
+   Generate the customer hash secret locally; it must be at least 32 characters.
+
+   ```sql
+   insert into public.payscope_organizations (name, razorpay_key_id, customer_hash_secret)
+   values ('PayScope Test Merchant', 'rzp_test_replace_me', 'replace_with_a_random_32_plus_character_secret')
+   returning id;
+   ```
+
+3. Put the returned UUID, Supabase service-role key, Razorpay Test Mode keys,
+   and webhook secret in `backend/.env`; set `PAYSCOPE_MVP_PIPELINE=true`.
+   Add `MESH_API_KEY` to run the schema-constrained AI investigation path.
+   Mesh calls use `response_format: json_schema` and local Zod validation.
+4. Configure Razorpay Test Mode to deliver to
+   `https://<your-vps-host>/webhooks/razorpay`, using the same webhook secret.
+
+The service-role key stays on the VPS. It must never appear in Vercel, frontend
+files, or a `VITE_*` variable.
+
+## Run and verify
+
+```powershell
+cd backend
+npm ci
 npm run build
-npm start              # http://localhost:25655
+npm run test:contracts
+npm run test:database-client
+npm run test:webhook-intake
+npm run test:agentic-webhook
+npm run test:queue
+npm run test:enrichment
+npm run test:correlation
+npm run test:agents
+npm run test:investigation-runner
+npm run start
 
-# frontend (new terminal)
-cd ../frontend
-cp .env.example .env
-npm install
-npm run dev            # http://localhost:3000 → proxies /api to :25655
+cd ..\frontend
+npm ci
+npm run build
 ```
 
-Migrations (Supabase SQL editor, before setting `SUPABASE_*`):
+`GET /health` reports whether the durable pipeline is enabled. With it enabled,
+the React app uses `GET /api/mvp/health`, `/incidents`, incident detail, and
+audit history. Configure `CORS_ORIGINS` with the exact Vercel URL.
 
-```bash
-backend/supabase/migrations/20260820_paymentops_sentinel.sql
-backend/supabase/migrations/20260821_auto_policies.sql
-```
+## Deployment
 
-Without `SUPABASE_*` the API runs in bounded memory (Test Mode only).
+- **VPS:** deploy `backend/`; run `npm ci`, `npm run build`, then `npm run start`
+  behind HTTPS. Use [backend deployment notes](./backend/docs/PRODUCTION_RAZORPAY_DEPLOYMENT.md).
+- **Vercel:** deploy `frontend/` with `VITE_API_BASE_URL` set to the HTTPS VPS
+  origin. Use [frontend deployment notes](./frontend/docs/DEPLOYMENT.md).
 
-## Env — backend
+## Safety boundary
 
-| Var | Required | Notes |
-| --- | --- | --- |
-| `PORT` | no | `25655` |
-| `NODE_ENV` | no | `development` skips Bearer unless `REQUIRE_API_AUTH=true` |
-| `RAZORPAY_ENVIRONMENT` | no | `test` / `live` (`live` needs `SUPABASE_*`+`RAZORPAY_WEBHOOK_SECRET`) |
-| `API_ACCESS_TOKEN` | prod | Bearer + `CORS_ORIGINS` |
-| `CORS_ORIGINS` | prod | `https://domain.vercel.app` |
-| `PAYMENT_OPS_PUBLIC_URL` | no | `https://your-api.vercel.app` for webhook URL |
-| `RAZORPAY_KEY_ID/SECRET` | import | `rzp_test_*` |
-| `RAZORPAY_WEBHOOK_SECRET` | webhooks | 32+ chars |
-| `SUPABASE_URL/KEY` | prod | service-role, never frontend |
-| `OPENAI_API_KEY` | no | `model` investigations, else `rules-v1` |
-| `TRUST_PROXY` | no | `true` behind Nginx/Vercel |
+PayScope is a demo MVP, not a production financial-operations platform. It has
+no Live Mode, payment execution, customer outreach, or production recovery
+claim. Enrichment is labelled by its true source; no direct provider capability
+is claimed unless that adapter is explicitly implemented and enabled.
 
-## Env — frontend
-
-```env
-VITE_API_BASE_URL=http://localhost:25655
-VITE_API_TIMEOUT_MS=20000
-VITE_API_ACCESS_TOKEN=
-```
-
-`VITE_*` is baked into the bundle — never put `RAZORPAY_*`/`SUPABASE_*`/`OPENAI_*` there. `VITE_API_PROXY_TARGET` optionally overrides `vite.config.ts` proxy.
-
-## Verify — no real credentials needed
-
-```bash
-cd backend && npm run test:smoke
-```
-
-Isolated API on random port checks: HMAC valid/invalid, duplicate, partial→`monitoring` (300/1000) → `recovered` (700), out-of-order, privacy (raw not leaked), 101-burst, `dismiss` cap, Bearer gate, plus `npm run build` + `npm audit`.
-
-Frontend: `cd frontend && npm run build` must pass with no warnings.
-
-## Safety
-
-- Raw-body HMAC `timingSafeEqual`, `PAYLOAD_TOO_LARGE` 413, replay via `x-razorpay-event-id` + 30s `inFlight`, bounded concurrency.
-- `occurredAt` not `receivedAt` for recovery, capped at `amountAtRisk`, `truncated` raw payloads (16KB).
-- Atomic `incidents`+`audit_logs`+`agent_runs` via `paymentops_persist_*` RPCs, graceful `clearInterval` + `shutdown()`.
-
-## Limits
-
-`loaded-window` metrics (count + earliest/latest `occurredAt`), not all-time. Single-instance only (`mutationQueue`, `rateBuckets` are process-local).
-
-## Deploy — Vercel single repo
-
-- Push this repo; import `frontend/` as Vercel project root, `backend/` as separate Vercel project or standalone Node. Set `VITE_API_BASE_URL` to `https://your-api.vercel.app` before `vite build`, add Vercel domain to `CORS_ORIGINS`, use HTTPS.
-
-```
-payscope/
-  backend/   # Express API
-  frontend/  # React dashboard
-  Plan.md    # source of truth
-```
-
-Built for Razorpay Test Mode — where evidence, not clicks, drives payment ops.
+The locked product contract remains in [Plan.md](./Plan.md).

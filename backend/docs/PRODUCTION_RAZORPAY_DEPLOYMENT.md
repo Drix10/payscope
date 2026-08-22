@@ -1,41 +1,35 @@
-# PayScope — Razorpay Test Mode deployment (Vercel single repo)
+# PayScope backend deployment (VPS, Test Mode MVP)
 
-This repo is **single** (`backend/` + `frontend/`). Deploy `frontend/` on **Vercel**; deploy `backend/` as Vercel serverless functions or a standalone Node service behind HTTPS. Legacy Intent Canvas repos are separate.
+This is a single-instance Test Mode deployment, not a Live Mode payment system.
+Use Node.js 20 or newer. The API supplies its own WebSocket transport for
+Supabase, so Node 20/21 VPS images are supported as well as Node 22+.
 
-```env
-PORT=25655
-NODE_ENV=production
-REQUIRE_API_AUTH=true
-API_ACCESS_TOKEN=<long-random-token>
-CORS_ORIGINS=https://payscope-ai.vercel.app,https://payscope.vercel.app,https://payscope-frontend.vercel.app
-PAYMENT_OPS_PUBLIC_URL=https://temp.coslynx.com
+1. Copy `backend/.env.example` to `backend/.env` and configure the server-only
+   values. Authenticate the Supabase CLI, run `supabase link --project-ref
+   oheegffhhtdudlbgrtso`, then run `supabase db push`. Seed the organization
+   before setting `PAYSCOPE_MVP_PIPELINE=true`.
+2. Set `NODE_ENV=production`, a unique `PAYSCOPE_WORKER_ID`, and
+   `CORS_ORIGINS=https://<your-vercel-domain>`.
+3. Install and start:
 
-RAZORPAY_ENVIRONMENT=test
-RAZORPAY_KEY_ID=rzp_test_...
-RAZORPAY_KEY_SECRET=<test-mode-secret>
-RAZORPAY_WEBHOOK_SECRET=<32-plus-random-characters>
+   ```bash
+   npm ci
+   npm run build
+   npm run start
+   ```
 
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<server-only-service-role-key>
-```
+4. Put the service behind HTTPS, then point the Razorpay **Test Mode** webhook
+   at `https://<your-vps-host>/webhooks/razorpay`.
 
-If using a standalone VM, bind Node to `127.0.0.1:25655` and expose Nginx on 80/443. On Vercel, set the env vars in the project dashboard.
+The VPS alone receives `SUPABASE_SERVICE_ROLE_KEY`, Razorpay secrets, and the
+optional Mesh API key. Mesh uses provider-enforced JSON Schema structured
+outputs plus local Zod validation. Do not add these values to Vercel or a
+`VITE_*` variable.
 
-## Razorpay configuration
+The current React MVP has no session transport. Do not expose its read-only
+demo endpoint publicly beyond the intended review audience; adding real
+authentication is a tracked follow-up.
 
-1. In Razorpay Dashboard, switch to **Test Mode**.
-2. Add `https://temp.coslynx.com/webhooks/razorpay` under **Accounts & Settings → Webhooks**.
-3. Set a unique webhook secret and store it only in `RAZORPAY_WEBHOOK_SECRET`.
-4. Enable the project event set: payment failed/authorized/captured, order paid, refund created/failed, dispute created, and the selected subscription events.
-5. Send a Test Mode transaction and confirm the PayScope dashboard receives a verified event.
-
-Razorpay requires public webhook URLs and separate Test and Live Mode configuration. Do not put live keys on this test deployment.
-
-## Launch blockers for live traffic
-
-- Apply both Supabase migrations and verify backup/restore.
-- Replace the browser access-token gate with real user authentication and tenant scoping.
-- Add queue-backed webhook processing and cross-instance replay protection.
-- Configure alerts for webhook signature failure, provider failure, import failure, and database failure.
-- Perform a live-mode webhook verification with separate live keys and a rollback plan.
-- Keep the operator approval boundary until a compliant, auditable external-action workflow exists.
+Verify `GET /health` after deployment. It must report `pipeline: "agentic_mvp"`
+before configuring Razorpay deliveries. A disabled pipeline rejects webhooks
+with `503` rather than losing them in an in-memory fallback.

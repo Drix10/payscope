@@ -1,0 +1,171 @@
+import { z } from 'zod';
+
+export const EnrichmentSourceSchema = z.enum(['razorpay_fields_heuristic', 'fixture_signed', 'vulcan_direct', 'unavailable']);
+export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED']);
+export const RiskTierSchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'MONITOR']);
+export const ProposalStatusSchema = z.enum(['pending', 'approved', 'simulated', 'cancelled_by_dispute', 'cancelled_by_recovery', 'failed']);
+export const ActionTypeSchema = z.enum([
+  'retry_link_whatsapp',
+  'retry_link_sms',
+  'hinglish_voice_script',
+  'merchant_email_notification',
+  'merchant_webhook_notification',
+  'flag_for_review',
+  'prepare_chargeback_evidence',
+  'auto_resolve_infrastructure',
+]);
+
+const isoDateTime = z.string().datetime({ offset: true });
+const paise = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const uuid = z.string().uuid();
+const providerScalar = z.union([z.string().max(160), z.number().finite(), z.boolean()]);
+const providerContext = z.record(providerScalar).superRefine((value, context) => {
+  const entries = Object.entries(value);
+  if (entries.length > 8) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Provider context has too many fields' });
+  for (const [key] of entries) if (key.length > 64) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Provider context key is too long', path: [key] });
+});
+const providerData = z.record(z.union([providerScalar, providerContext])).superRefine((value, context) => {
+  const entries = Object.entries(value);
+  if (entries.length > 12) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Provider data has too many fields' });
+  for (const [key] of entries) if (key.length > 64) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Provider data key is too long', path: [key] });
+});
+
+export const NormalizedEventSchema = z.object({
+  eventId: z.string().min(1).max(160),
+  eventType: z.string().min(1).max(120),
+  occurredAt: isoDateTime,
+  receivedAt: isoDateTime,
+  paymentId: z.string().min(1).max(160).optional(),
+  orderId: z.string().min(1).max(160).optional(),
+  subscriptionId: z.string().min(1).max(160).optional(),
+  customerHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  amountPaise: paise.optional(),
+  paymentStatus: z.string().max(80).optional(),
+  paymentMethod: z.string().max(80).optional(),
+  providerData: providerData.default({}),
+}).strict();
+
+export const VulcanEnrichmentSchema = z.object({
+  failureAttribution: z.enum(['gateway_degraded', 'issuer_timeout', 'fraud_block', 'insufficient_funds', 'customer_drop', 'routing_suboptimal', 'unknown']),
+  gatewayHealthScore: z.number().min(0).max(1),
+  gatewayInDowntime: z.boolean(),
+  downtimeScheduled: z.boolean(),
+  crossBorderFlag: z.boolean(),
+  priorAttemptCount: z.number().int().nonnegative(),
+  partialRecoveryPossible: z.boolean(),
+  recommendedRetryMethod: z.string().max(80).nullable(),
+  source: EnrichmentSourceSchema.exclude(['unavailable']),
+  enrichedAt: isoDateTime,
+  signalsUsed: z.array(z.string().min(1).max(80)).max(32),
+}).strict();
+
+export const IncidentSchema = z.object({
+  id: uuid,
+  organizationId: uuid,
+  riskTier: RiskTierSchema,
+  status: IncidentStatusSchema,
+  totalFailedAmountPaise: paise,
+  recoveredAmountPaise: paise,
+  remainingAmountPaise: paise,
+  correlatedEventIds: z.array(uuid).max(100),
+  openedAt: isoDateTime,
+  resolvedAt: isoDateTime.nullable(),
+  updatedAt: isoDateTime,
+}).strict().superRefine((value, context) => {
+  if (value.recoveredAmountPaise > value.totalFailedAmountPaise) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Recovered amount cannot exceed total failed amount', path: ['recoveredAmountPaise'] });
+  if (value.remainingAmountPaise !== value.totalFailedAmountPaise - value.recoveredAmountPaise) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Remaining amount must equal total minus recovered', path: ['remainingAmountPaise'] });
+});
+
+export const InvestigationPlanSchema = z.object({
+  hypothesis: z.string().min(1).max(100),
+  primaryFailureCategory: z.enum(['infrastructure', 'fraud_suspected', 'fraud_confirmed', 'customer_error', 'subscription_issue', 'unknown']),
+  subAgents: z.array(z.object({ agent: z.enum(['risk_analyst', 'recovery_planner']), question: z.string().min(1).max(80), priority: z.union([z.literal(1), z.literal(2)]), allowedContextFields: z.array(z.string().min(1).max(80)).max(20) }).strict()).max(2),
+  estimatedAutoResolvable: z.boolean(),
+  requiresHumanReview: z.boolean(),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().min(1).max(200),
+}).strict();
+
+export const RiskAnalysisSchema = z.object({
+  failureRootCause: z.enum(['gateway_degraded', 'issuer_block', 'fraud_confirmed', 'fraud_suspected', 'customer_error', 'subscription_lapse', 'unknown']),
+  evidenceStrength: z.enum(['strong', 'moderate', 'weak']),
+  confidence: z.number().min(0).max(1),
+  falsePositiveCostEstimatePaise: paise,
+  missingEvidence: z.array(z.string().min(1).max(160)).max(12),
+  chargebackEvidenceReady: z.boolean(),
+  evidenceItems: z.array(z.string().min(1).max(200)).max(30),
+  recommendedActionCategory: z.enum(['auto_resolve_no_action', 'prepare_chargeback_evidence', 'flag_for_review', 'propose_recovery', 'escalate_fraud']),
+}).strict();
+
+export const RecoveryPlanSchema = z.object({
+  proposedActions: z.array(z.object({ actionType: ActionTypeSchema, rationale: z.string().min(1).max(100), estimatedRecoveryPaise: paise.nullable(), scriptContent: z.string().min(1).max(600).optional(), requiresOperatorApproval: z.literal(true) }).strict()).max(8),
+  noActionReason: z.string().min(1).max(200).optional(),
+  recoveryProbability: z.number().min(0).max(1),
+  confidence: z.number().min(0).max(1),
+}).strict();
+
+export const PolicyDecisionSchema = z.object({
+  outcome: z.enum(['auto_with_proposals', 'auto_no_action', 'escalate']),
+  permittedActions: z.array(RecoveryPlanSchema.shape.proposedActions.element).max(8),
+  escalationReason: z.string().min(1).max(120).nullable(),
+  matchedPolicyId: z.string().uuid().nullable(),
+}).strict();
+
+export const ActionProposalSchema = z.object({
+  id: uuid,
+  organizationId: uuid,
+  incidentId: uuid,
+  actionType: ActionTypeSchema,
+  content: z.record(z.unknown()),
+  status: ProposalStatusSchema,
+  proposedAt: isoDateTime,
+  approvedAt: isoDateTime.nullable(),
+  approvedBy: uuid.nullable(),
+  deliveryResult: z.record(z.unknown()).nullable(),
+}).strict();
+
+export const AuditEntrySchema = z.object({
+  id: uuid,
+  organizationId: uuid,
+  incidentId: uuid.nullable(),
+  sequenceNumber: z.number().int().nonnegative(),
+  eventType: z.string().min(1).max(120),
+  actorType: z.enum(['system', 'human']),
+  actorId: z.string().min(1).max(160),
+  actorSessionHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  decision: z.string().min(1).max(240),
+  rationale: z.string().min(1).max(1_000),
+  confidence: z.number().min(0).max(1).nullable(),
+  enrichmentSnapshot: z.record(z.unknown()).nullable(),
+  prevEntryHash: z.string().regex(/^[a-f0-9]{64}$/),
+  entryHash: z.string().regex(/^[a-f0-9]{64}$/),
+  createdAt: isoDateTime,
+}).strict();
+
+export const QueueJobSchema = z.object({
+  jobId: uuid,
+  organizationId: uuid,
+  type: z.enum(['enrich_event', 'correlate_event', 'investigate_incident']),
+  // Initial delivery plus the three documented retries (1s, 5s, 30s).
+  attemptNumber: z.number().int().min(1).max(4),
+  createdAt: isoDateTime,
+  eventId: uuid.optional(),
+  incidentId: uuid.optional(),
+  triggerEventId: uuid.optional(),
+}).strict();
+
+export type EnrichmentSource = z.infer<typeof EnrichmentSourceSchema>;
+export type IncidentStatus = z.infer<typeof IncidentStatusSchema>;
+export type RiskTier = z.infer<typeof RiskTierSchema>;
+export type ActionType = z.infer<typeof ActionTypeSchema>;
+export type NormalizedEvent = z.infer<typeof NormalizedEventSchema>;
+export type VulcanEnrichment = z.infer<typeof VulcanEnrichmentSchema>;
+export type Incident = z.infer<typeof IncidentSchema>;
+export type InvestigationPlan = z.infer<typeof InvestigationPlanSchema>;
+export type RiskAnalysis = z.infer<typeof RiskAnalysisSchema>;
+export type RecoveryPlan = z.infer<typeof RecoveryPlanSchema>;
+export type PolicyDecisionContract = z.infer<typeof PolicyDecisionSchema>;
+export type ActionProposal = z.infer<typeof ActionProposalSchema>;
+export type AuditEntry = z.infer<typeof AuditEntrySchema>;
+export type QueueJob = z.infer<typeof QueueJobSchema>;

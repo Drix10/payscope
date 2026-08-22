@@ -1,0 +1,14 @@
+# Supabase CLI configuration for the PayScope backend.
+# Link this project with:
+#   supabase link --project-ref oheegffhhtdudlbgrtso
+project_id = "oheegffhhtdudlbgrtso"
+
+[db]
+major_version = 17
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+# Production/Test Mode data is seeded explicitly, never by CLI reset.
+enabled = false

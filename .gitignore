@@ -1,5 +1,5 @@
-# PayScope — single repo (backend + frontend) — Vercel
-# See Plan.md — legacy Intent Canvas lives in separate repos
+# PayScope — single repository (backend + frontend)
+# See Plan.md for the locked MVP scope.
 
 # Dependencies
 node_modules/

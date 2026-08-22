@@ -1,400 +1,62 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, Bot, CircleDollarSign, RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react'
-import { SpatialScroll } from './SpatialScroll'
-import { getApiErrorMessage, isAutoPolicy, isConnectionStatus, isDashboard, isHistoryImportResult, isIncident, isIncidentDetail, isRequestCancelled, paymentOpsApi, paymentOpsPath, validAction } from './api'
-import { Navbar } from './components/layout/Navbar'
-import { DashboardSidebar, WorkspaceSection } from './components/paymentops/DashboardSidebar'
-import { DashboardWorkspace } from './components/paymentops/DashboardWorkspace'
-import { AutoPolicy, ConnectionStatus, Dashboard, Incident, IncidentDetail as IncidentDetailData } from './types/paymentOps'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, Clock3, Database, RefreshCw, ShieldCheck } from 'lucide-react'
+import { mvpApi } from './api'
+import type { AuditEntry, Incident, IncidentDetail, MvpHealth } from './types/mvp'
 
 const money = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paise / 100)
-const relative = (value: string) => {
-  const parsed = Date.parse(value)
-  if (!Number.isFinite(parsed)) return 'unknown'
-  const seconds = Math.max(0, Math.round((Date.now() - parsed) / 1000))
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  return `${Math.floor(seconds / 3600)}h ago`
-}
+const stamp = (value: string) => { const time = Date.parse(value); return Number.isFinite(time) ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(time) : 'Invalid timestamp' }
 
 export default function App() {
-  const [viewMode, setViewMode] = useState<'showcase' | 'dashboard'>('showcase')
-  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('overview')
-  const [dashboard, setDashboard] = useState<Dashboard | null>(null)
-  const [connection, setConnection] = useState<ConnectionStatus | null>(null)
+  const [health, setHealth] = useState<MvpHealth | null>(null)
   const [incidents, setIncidents] = useState<Incident[]>([])
-  const [selected, setSelected] = useState<IncidentDetailData | null>(null)
+  const [selected, setSelected] = useState<IncidentDetail | null>(null)
+  const [audit, setAudit] = useState<AuditEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [actionPending, setActionPending] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [historyProgress, setHistoryProgress] = useState<{ days: number; nextSkip: number } | null>(null)
-  const [statusMessage, setStatusMessage] = useState<string | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [policies, setPolicies] = useState<AutoPolicy[]>([])
-  const [policyBusy, setPolicyBusy] = useState(false)
-
-  const fgController = useRef<AbortController | null>(null)
-  const bgController = useRef<AbortController | null>(null)
-  const detailController = useRef<AbortController | null>(null)
-  const investigateController = useRef<AbortController | null>(null)
-  const actionController = useRef<AbortController | null>(null)
-  const importController = useRef<AbortController | null>(null)
-  const policyController = useRef<AbortController | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
+  const refreshController = useRef<AbortController | null>(null)
+  const detailController = useRef<AbortController | null>(null)
 
-  const clearAllControllers = useCallback(() => {
-    fgController.current?.abort()
-    bgController.current?.abort()
-    detailController.current?.abort()
-    investigateController.current?.abort()
-    actionController.current?.abort()
-    importController.current?.abort()
-    policyController.current?.abort()
-  }, [])
-
-  const refresh = useCallback(async (background = false) => {
+  const refresh = async () => {
+    refreshController.current?.abort()
     const controller = new AbortController()
-    if (background) {
-      bgController.current?.abort()
-      bgController.current = controller
-    } else {
-      fgController.current?.abort()
-      fgController.current = controller
-      setLoading(true)
-    }
+    refreshController.current = controller
+    setLoading(true)
     try {
-      const [dashboardResult, connectionResult, incidentResult] = await Promise.all([
-        paymentOpsApi.get(paymentOpsPath('/api/payment-ops/dashboard'), { signal: controller.signal }),
-        paymentOpsApi.get(paymentOpsPath('/api/payment-ops/connection'), { signal: controller.signal }),
-        paymentOpsApi.get(paymentOpsPath('/api/payment-ops/incidents'), { signal: controller.signal }),
-      ])
-      if (!mounted.current) return
-      if (background && bgController.current !== controller) return
-      if (!background && fgController.current !== controller) return
-      if (dashboardResult.data?.success !== true || !isDashboard(dashboardResult.data.data)) throw new Error('Invalid dashboard response')
-      if (connectionResult.data?.success !== true || !isConnectionStatus(connectionResult.data.data)) throw new Error('Invalid connection response')
-      if (incidentResult.data?.success !== true || !Array.isArray(incidentResult.data.data)) throw new Error('Invalid incident response')
-      const rows = (incidentResult.data.data as unknown[]).filter(isIncident)
-      // Strict: if any row is malformed, surface error instead of silently filtering
-      if (rows.length !== (incidentResult.data.data as unknown[]).length) throw new Error('Server returned malformed incident data')
-      setDashboard(dashboardResult.data.data)
-      setConnection(connectionResult.data.data)
-      setIncidents(rows)
-      setErrorMessage(null)
-    } catch (error) {
-      if (mounted.current && !isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to refresh the PayScope dashboard.'))
-    } finally {
-      if (mounted.current) {
-        if (background && bgController.current === controller) bgController.current = null
-        if (!background && fgController.current === controller) {
-          fgController.current = null
-          setLoading(false)
-        }
-      }
-    }
-  }, [])
+      const [nextHealth, nextIncidents] = await Promise.all([mvpApi.health(controller.signal), mvpApi.incidents(controller.signal)])
+      if (!mounted.current || refreshController.current !== controller) return
+      setHealth(nextHealth); setIncidents(nextIncidents); setError(null)
+    } catch (reason) { if (mounted.current && refreshController.current === controller) setError(reason instanceof Error ? reason.message : 'Unable to load the agentic workspace.') }
+    finally { if (mounted.current && refreshController.current === controller) { refreshController.current = null; setLoading(false) } }
+  }
+  useEffect(() => { void refresh(); return () => { mounted.current = false; refreshController.current?.abort(); detailController.current?.abort() } }, [])
 
-  const openIncident = useCallback(async (incident: Incident) => {
+  const open = async (incident: Incident) => {
     detailController.current?.abort()
     const controller = new AbortController()
     detailController.current = controller
     setDetailLoading(true)
     try {
-      const response = await paymentOpsApi.get(paymentOpsPath(`/api/payment-ops/incidents/${encodeURIComponent(incident.incidentId)}`), { signal: controller.signal })
-      if (response.data?.success !== true || !isIncidentDetail(response.data.data)) throw new Error('Invalid incident detail')
-      if (mounted.current && detailController.current === controller) setSelected(response.data.data)
-    } catch (error) {
-      if (mounted.current && detailController.current === controller && !isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to load the selected incident.'))
-    } finally {
-      if (mounted.current && detailController.current === controller) setDetailLoading(false)
-    }
-  }, [])
+      const [detail, entries] = await Promise.all([mvpApi.incident(incident.id, controller.signal), mvpApi.audit(incident.id, controller.signal)])
+      if (!mounted.current || detailController.current !== controller) return
+      setSelected(detail); setAudit(entries); setError(null)
+    } catch (reason) { if (mounted.current && detailController.current === controller) setError(reason instanceof Error ? reason.message : 'Unable to load incident detail.') }
+    finally { if (mounted.current && detailController.current === controller) { detailController.current = null; setDetailLoading(false) } }
+  }
+  const totalAtRisk = useMemo(() => incidents.reduce((sum, item) => sum + item.remainingAmountPaise, 0), [incidents])
 
-  const closeIncident = useCallback(() => {
-    detailController.current?.abort()
-    investigateController.current?.abort()
-    actionController.current?.abort()
-    setDetailLoading(false)
-    setActionPending(false)
-    setSelected(null)
-  }, [])
-
-  const investigate = useCallback(async () => {
-    if (!selected) return
-    const incidentId = selected.incident.incidentId
-    investigateController.current?.abort()
-    const controller = new AbortController()
-    investigateController.current = controller
-    setActionPending(true)
-    try {
-      const response = await paymentOpsApi.post(paymentOpsPath(`/api/payment-ops/incidents/${encodeURIComponent(incidentId)}/investigate`), {}, { signal: controller.signal })
-      if (response.data?.success !== true) throw new Error('Invalid investigation response')
-      if (!mounted.current || investigateController.current !== controller) return
-      // Verify selection still same before reopening
-      if (selected.incident.incidentId !== incidentId) return
-      await openIncident(selected.incident)
-      await refresh()
-      if (mounted.current && investigateController.current === controller) setStatusMessage('Investigation completed and attached to the incident.')
-    } catch (error) {
-      if (mounted.current && investigateController.current === controller && !isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to run the investigation.'))
-    } finally {
-      if (mounted.current && investigateController.current === controller) {
-        investigateController.current = null
-        setActionPending(false)
-      }
-    }
-  }, [openIncident, refresh, selected])
-
-  const act = useCallback(async (type: string) => {
-    if (!selected || !validAction(type)) return
-    const incidentId = selected.incident.incidentId
-    actionController.current?.abort()
-    const controller = new AbortController()
-    actionController.current = controller
-    setActionPending(true)
-    try {
-      const response = await paymentOpsApi.post(paymentOpsPath(`/api/payment-ops/incidents/${encodeURIComponent(incidentId)}/actions`), { type, operator: 'Payment operations admin' }, { signal: controller.signal })
-      if (response.data?.success !== true || !isIncident(response.data.data)) throw new Error('Invalid action response')
-      if (!mounted.current || actionController.current !== controller) return
-      await openIncident(response.data.data)
-      await refresh()
-      if (mounted.current && actionController.current === controller) setStatusMessage(type === 'dismiss' ? 'Incident dismissed. No financial action was taken.' : 'Operator decision recorded. No financial action was taken.')
-    } catch (error) {
-      if (mounted.current && actionController.current === controller && !isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to record the operator decision.'))
-    } finally {
-      if (mounted.current && actionController.current === controller) {
-        actionController.current = null
-        setActionPending(false)
-      }
-    }
-  }, [openIncident, refresh, selected])
-
-  const importHistory = useCallback(async (days: number, skip = 0) => {
-    importController.current?.abort()
-    const controller = new AbortController()
-    importController.current = controller
-    setImporting(true)
-    try {
-      const response = await paymentOpsApi.post(paymentOpsPath('/api/payment-ops/import-history'), { days, skip }, { signal: controller.signal })
-      if (response.data?.success !== true || !isHistoryImportResult(response.data.data)) throw new Error('Invalid import response')
-      if (!mounted.current || importController.current !== controller) return
-      const result = response.data.data
-      setHistoryProgress(result.hasMore && result.nextSkip !== undefined ? { days, nextSkip: result.nextSkip } : null)
-      await refresh()
-      if (mounted.current && importController.current === controller) setStatusMessage(`Imported ${result.eventsImported} payment events from ${result.paymentsScanned} records.${result.hasMore ? ' Continue to import the next batch.' : ''}`)
-    } catch (error) {
-      if (mounted.current && importController.current !== controller) return
-      if (!isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to import Razorpay payment history. Confirm the server-side Test Mode API keys.'))
-    } finally {
-      if (mounted.current && importController.current === controller) {
-        importController.current = null
-        setImporting(false)
-      }
-    }
-  }, [refresh])
-
-  const fetchPolicies = useCallback(async () => {
-    policyController.current?.abort()
-    const controller = new AbortController()
-    policyController.current = controller
-    try {
-      const res = await paymentOpsApi.get(paymentOpsPath('/api/payment-ops/policies'), { signal: controller.signal })
-      if (!mounted.current || policyController.current !== controller) return
-      if (res.data?.success !== true || !Array.isArray(res.data.data)) throw new Error('Invalid policies response')
-      const rows = (res.data.data as unknown[]).filter(isAutoPolicy)
-      if (rows.length !== (res.data.data as unknown[]).length) throw new Error('Server returned malformed policy data')
-      setPolicies(rows)
-    } catch (error) {
-      if (!isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to load policies.'))
-    } finally {
-      if (mounted.current && policyController.current === controller) policyController.current = null
-    }
-  }, [])
-
-  const togglePolicy = useCallback(async (policy: AutoPolicy) => {
-    policyController.current?.abort()
-    const controller = new AbortController()
-    policyController.current = controller
-    setPolicyBusy(true)
-    try {
-      const res = await paymentOpsApi.post(paymentOpsPath('/api/payment-ops/policies'), { ...policy, enabled: !policy.enabled }, { signal: controller.signal })
-      if (res.data?.success !== true || !isAutoPolicy(res.data.data)) throw new Error('Invalid policy')
-      if (!mounted.current || policyController.current !== controller) return
-      setPolicies(prev => prev.map(p => (p.policyId === policy.policyId ? res.data.data as AutoPolicy : p)))
-      setStatusMessage(`Policy "${policy.name}" ${!policy.enabled ? 'enabled' : 'disabled'}.`)
-    } catch (error) {
-      if (mounted.current && policyController.current === controller && !isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to toggle policy.'))
-    } finally {
-      if (mounted.current && policyController.current === controller) {
-        policyController.current = null
-        setPolicyBusy(false)
-      }
-    }
-  }, [])
-
-  const deletePolicy = useCallback(async (policyId: string) => {
-    policyController.current?.abort()
-    const controller = new AbortController()
-    policyController.current = controller
-    setPolicyBusy(true)
-    try {
-      const res = await paymentOpsApi.delete(paymentOpsPath(`/api/payment-ops/policies/${encodeURIComponent(policyId)}`), { signal: controller.signal })
-      if (res.data?.success !== true) throw new Error('Invalid delete response')
-      if (!mounted.current || policyController.current !== controller) return
-      setPolicies(prev => prev.filter(p => p.policyId !== policyId))
-      setStatusMessage('Policy removed.')
-    } catch (error) {
-      if (mounted.current && policyController.current === controller && !isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to delete policy.'))
-    } finally {
-      if (mounted.current && policyController.current === controller) {
-        policyController.current = null
-        setPolicyBusy(false)
-      }
-    }
-  }, [])
-
-  const createPolicy = useCallback(async (draft: Partial<AutoPolicy> & { name: string; action: AutoPolicy['action'] }) => {
-    policyController.current?.abort()
-    const controller = new AbortController()
-    policyController.current = controller
-    setPolicyBusy(true)
-    try {
-      const res = await paymentOpsApi.post(paymentOpsPath('/api/payment-ops/policies'), draft, { signal: controller.signal })
-      if (res.data?.success !== true || !isAutoPolicy(res.data.data)) throw new Error('Invalid policy')
-      if (!mounted.current || policyController.current !== controller) return
-      setPolicies(prev => [...prev, res.data.data as AutoPolicy])
-      setStatusMessage(`Policy "${(res.data.data as AutoPolicy).name}" created.`)
-    } catch (error) {
-      if (mounted.current && policyController.current === controller && !isRequestCancelled(error)) setErrorMessage(getApiErrorMessage(error, 'Unable to create policy. Check dismissal caps (≤₹1000, low/med only).'))
-    } finally {
-      if (mounted.current && policyController.current === controller) {
-        policyController.current = null
-        setPolicyBusy(false)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    mounted.current = true
-    if (viewMode === 'dashboard') {
-      void refresh()
-      void fetchPolicies()
-    } else {
-      // Leaving dashboard: abort in-flight dashboard work
-      fgController.current?.abort()
-      bgController.current?.abort()
-      detailController.current?.abort()
-      investigateController.current?.abort()
-      actionController.current?.abort()
-      importController.current?.abort()
-      policyController.current?.abort()
-      setLoading(true)
-    }
-    const interval = window.setInterval(() => {
-      if (viewMode === 'dashboard' && !document.hidden) void refresh(true)
-    }, 30_000)
-    const onVisibilityChange = () => {
-      if (viewMode === 'dashboard' && !document.hidden) void refresh(true)
-    }
-    const onOpenDashboard = () => setViewMode('dashboard')
-    document.addEventListener('payscope-open-dashboard', onOpenDashboard)
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => {
-      window.clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      document.removeEventListener('payscope-open-dashboard', onOpenDashboard)
-    }
-  }, [refresh, fetchPolicies, viewMode])
-
-  // Keep selected detail in sync, and clear if incident disappears
-  useEffect(() => {
-    if (!selected) return
-    const stillExists = incidents.some(incident => incident.incidentId === selected.incident.incidentId)
-    if (!stillExists) {
-      detailController.current?.abort()
-      setSelected(null)
-      setDetailLoading(false)
-      return
-    }
-    const refreshedIncident = incidents.find(incident => incident.incidentId === selected.incident.incidentId)
-    if (refreshedIncident && refreshedIncident.updatedAt !== selected.incident.updatedAt) void openIncident(refreshedIncident)
-  }, [incidents, openIncident, selected])
-
-  useEffect(() => {
-    if (!statusMessage && !errorMessage) return
-    const timer = window.setTimeout(() => {
-      setStatusMessage(null)
-      setErrorMessage(null)
-    }, 6_000)
-    return () => window.clearTimeout(timer)
-  }, [statusMessage, errorMessage])
-
-  useEffect(() => () => {
-    mounted.current = false
-    clearAllControllers()
-  }, [clearAllControllers])
-
-  if (viewMode === 'dashboard')
-    return (
-      <main className="min-h-screen overflow-x-hidden bg-[#040406] text-white">
-        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_85%_0%,rgba(0,255,135,.08),transparent_30%),radial-gradient(circle_at_10%_20%,rgba(56,189,248,.08),transparent_28%)]" />
-        <Navbar viewMode={viewMode} onViewModeChange={setViewMode} environment={dashboard?.environment ?? connection?.environment ?? 'test'} variant="inline" />
-        <header className="relative border-b border-white/[.06] bg-white/[0.02] backdrop-blur">
-          <div className="mx-auto flex max-w-[1480px] items-center justify-between gap-3 px-4 py-3 sm:px-5 lg:px-8">
-            <div className="flex items-center gap-3">
-              <p className="text-[11px] font-bold uppercase tracking-[.14em] text-neutral-400">Workspace</p>
-              <span className="hidden h-3 w-px bg-white/10 sm:block" />
-              <p className="hidden text-xs font-semibold text-white sm:block">Review, verify, and control — nothing touches money automatically.</p>
-              <p className="text-xs font-semibold text-white sm:hidden">Command center</p>
-            </div>
-            <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[.04] px-3 py-1.5 text-[11px] font-semibold text-neutral-200 transition hover:bg-white/[.08] disabled:opacity-50" aria-label="Refresh dashboard">
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
-            </button>
-          </div>
-        </header>
-        <div className="relative mx-auto grid max-w-[1480px] gap-5 px-4 py-5 sm:px-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:px-8 lg:py-6">
-          <DashboardSidebar activeSection={workspaceSection} onChange={setWorkspaceSection} dashboard={dashboard} connection={connection} />
-          <div className="min-w-0">
-            {errorMessage && (
-              <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-rose-400/25 bg-rose-400/[.08] px-3 py-2.5 text-[11px] text-rose-100">
-                <span>{errorMessage}</span>
-                <button type="button" onClick={() => { setErrorMessage(null); void refresh() }} className="rounded-lg border border-rose-300/20 px-2 py-1 text-[10px] font-semibold hover:bg-rose-300/10">Retry</button>
-              </div>
-            )}
-            {statusMessage && <div role="status" className="mb-4 rounded-xl border border-[#00ff87]/20 bg-[#00ff87]/[.07] px-3 py-2.5 text-[11px] text-[#b8ffd9]">{statusMessage}</div>}
-            <DashboardWorkspace
-              section={workspaceSection}
-              dashboard={dashboard}
-              connection={connection}
-              incidents={incidents}
-              selected={selected}
-              loading={loading}
-              detailLoading={detailLoading}
-              actionPending={actionPending}
-              importing={importing}
-              historyProgress={historyProgress}
-              policies={policies}
-              policyBusy={policyBusy}
-              onSelectIncident={incident => { setWorkspaceSection('incidents'); void openIncident(incident) }}
-              onCloseIncident={closeIncident}
-              onInvestigate={() => void investigate()}
-              onAction={type => void act(type)}
-              onImport={(days, skip) => void importHistory(days, skip)}
-              onTogglePolicy={policy => void togglePolicy(policy)}
-              onDeletePolicy={id => void deletePolicy(id)}
-              onCreatePolicy={draft => void createPolicy(draft)}
-              onRefresh={() => void refresh()}
-            />
-          </div>
-        </div>
-      </main>
-    )
-
-  return (
-    <main className="min-h-screen overflow-x-hidden bg-[#040406] text-white">
-      <Navbar viewMode={viewMode} onViewModeChange={setViewMode} environment={dashboard?.environment ?? connection?.environment ?? 'test'} />
-      <SpatialScroll />
-    </main>
-  )
+  return <main className="min-h-screen bg-[#090a0f] text-neutral-100">
+    <header className="border-b border-white/10 bg-[#0d0f16] px-5 py-4 sm:px-8"><div className="mx-auto flex max-w-7xl items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#00ff87]">PayScope</p><h1 className="mt-1 text-xl font-bold">Agentic payment-operations MVP</h1></div><button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold hover:bg-white/10 disabled:opacity-50"><RefreshCw className="mr-1 inline h-3.5 w-3.5" />Refresh</button></div></header>
+    <section className="mx-auto max-w-7xl px-5 py-6 sm:px-8"><div className="mb-5 rounded-xl border border-amber-200/20 bg-amber-200/[.05] p-4 text-sm text-amber-50"><ShieldCheck className="mr-2 inline h-4 w-4" /><strong>Test Mode · proposal-only.</strong> Enrichment is labelled by source, communications are simulated when implemented, and no payment action is available here.</div>
+      {error && <div role="alert" className="mb-5 rounded-xl border border-rose-300/30 bg-rose-300/[.08] p-4 text-sm text-rose-100"><AlertTriangle className="mr-2 inline h-4 w-4" />{error}</div>}
+      <div className="mb-6 grid gap-3 sm:grid-cols-3"><Metric label="Incidents" value={String(incidents.length)} /><Metric label="Remaining at risk" value={money(totalAtRisk)} /><Metric label="Pipeline" value={health?.pipeline ?? 'Checking'} detail={health ? 'Tenant-scoped · Test Mode' : undefined} /></div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"><section className="rounded-2xl border border-white/10 bg-white/[.025]"><div className="border-b border-white/10 p-4"><h2 className="font-bold">Incident queue</h2><p className="mt-1 text-xs text-neutral-400">Deterministic lifecycle state from the durable pipeline.</p></div>{loading ? <p className="p-6 text-sm text-neutral-400">Loading incidents…</p> : incidents.length === 0 ? <p className="p-6 text-sm text-neutral-400">No incidents yet. A verified Test Mode event will appear after the durable worker processes it.</p> : <ul>{incidents.map(incident => <li key={incident.id}><button type="button" onClick={() => void open(incident)} className="w-full border-b border-white/[.08] p-4 text-left last:border-none hover:bg-white/[.04]"><div className="flex items-start justify-between gap-3"><span className="font-semibold">{incident.status.replace(/_/g, ' ')}</span><span className="rounded border border-white/15 px-1.5 py-0.5 text-[10px] font-bold text-[#00ff87]">{incident.riskTier}</span></div><p className="mt-2 text-sm">{money(incident.remainingAmountPaise)} remaining</p><p className="mt-1 text-xs text-neutral-500"><Clock3 className="mr-1 inline h-3 w-3" />{stamp(incident.updatedAt)}</p></button></li>)}</ul>}</section>
+        <Detail detail={selected} audit={audit} loading={detailLoading} />
+      </div>
+    </section>
+  </main>
 }
+
+function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) { return <div className="rounded-xl border border-white/10 bg-white/[.025] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{label}</p><p className="mt-2 text-xl font-bold">{value}</p>{detail && <p className="mt-1 text-xs text-neutral-500">{detail}</p>}</div> }
+function Detail({ detail, audit, loading }: { detail: IncidentDetail | null; audit: AuditEntry[]; loading: boolean }) { if (loading) return <section className="rounded-2xl border border-white/10 p-5 text-sm text-neutral-400">Loading incident…</section>; if (!detail) return <section className="rounded-2xl border border-dashed border-white/15 p-5 text-sm text-neutral-400"><Database className="mb-2 h-5 w-5" />Select an incident to inspect its normalized timeline, enrichment source, proposals, and audit entries.</section>; return <section className="rounded-2xl border border-white/10 bg-white/[.025] p-5"><h2 className="font-bold">Incident detail</h2><p className="mt-1 text-sm text-neutral-400">{money(detail.incident.remainingAmountPaise)} remaining · {detail.incident.status}</p><h3 className="mt-5 text-xs font-bold uppercase tracking-wide text-neutral-400">Normalized timeline</h3><ol className="mt-2 space-y-2">{detail.events.map(event => <li key={event.id} className="rounded-lg border border-white/[.08] p-3 text-sm"><p className="font-semibold">{event.event.eventType}</p><p className="mt-1 text-xs text-neutral-400">{stamp(event.event.occurredAt)} · {event.enrichment ? `${event.enrichment.source}: ${event.enrichment.failureAttribution}` : 'Enrichment unavailable — human review required'}</p></li>)}</ol><h3 className="mt-5 text-xs font-bold uppercase tracking-wide text-neutral-400">Audit trail</h3>{audit.length ? <ol className="mt-2 space-y-2">{audit.map(entry => <li key={entry.id} className="border-l border-[#00ff87]/40 pl-3 text-sm"><p>{entry.decision}</p><p className="text-xs text-neutral-400">#{entry.sequenceNumber} · {entry.actorType} · {stamp(entry.createdAt)}</p></li>)}</ol> : <p className="mt-2 text-sm text-neutral-500">No audit entries have been recorded for this incident yet.</p>}</section> }

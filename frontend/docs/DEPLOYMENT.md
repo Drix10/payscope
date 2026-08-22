@@ -1,22 +1,22 @@
-# PayScope dashboard — Vercel deployment
+# PayScope frontend deployment (Vercel)
 
-This is a **single repo** (`backend/` + `frontend/`). The `frontend/` is deployed on **Vercel**; the `backend/` runs alongside (Vercel serverless or standalone Node). Legacy Intent Canvas stays in its own repos.
+Deploy the `frontend/` directory as a Vite static application.
 
-Build the dashboard with the API origin:
+Set only these Vercel build variables:
 
 ```env
-VITE_API_BASE_URL=https://temp.coslynx.com
+VITE_API_BASE_URL=https://<your-vps-host>
 VITE_API_TIMEOUT_MS=20000
-VITE_API_ACCESS_TOKEN=<temporary-browser-gate-only>
 ```
 
-```bash
-npm run build   # → frontend/dist/
-```
+Run `npm ci` and `npm run build`; Vercel publishes `dist/`.
 
-- Set `VITE_API_BASE_URL` to `https://temp.coslynx.com` (or the final API origin if it changes).
-- Add `https://payscope-ai.vercel.app` to the backend `CORS_ORIGINS`.
-- `VITE_*` is baked into the bundle at build time — never put Razorpay `RAZORPAY_*`, Supabase service-role, or OpenAI keys in `VITE_*`.
-- For local dev, `vite.config.ts` proxies `/api` to `http://localhost:25655` (or `VITE_API_PROXY_TARGET`).
+`VITE_*` variables are public bundle data. Never add Razorpay secrets, a
+Razorpay key ID, Supabase credentials, Anthropic credentials, API bearer token,
+or communications credentials. The frontend makes only read-only requests to
+`/api/mvp`; its configured Vercel origin must be present in the backend
+`CORS_ORIGINS` value.
 
-Use `npm run build` and serve `dist/` via Vercel. A Vite environment value is part of the browser bundle, so `VITE_API_ACCESS_TOKEN` is never a production authentication mechanism. Add real user authentication before a public multi-tenant release.
+The deployed interface is explicitly Test Mode and proposal-only. It should be
+used only with a backend whose `/health` endpoint reports `pipeline:
+"agentic_mvp"`.

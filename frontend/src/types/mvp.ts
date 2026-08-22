@@ -1,0 +1,14 @@
+export type IncidentStatus = 'OPEN' | 'MONITORING' | 'ESCALATED' | 'DISPUTE_OPENED' | 'RESOLVED' | 'HUMAN_RESOLVED' | 'DISMISSED'
+export type RiskTier = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'MONITOR'
+
+export type Incident = {
+  id: string; organizationId: string; riskTier: RiskTier; status: IncidentStatus
+  totalFailedAmountPaise: number; recoveredAmountPaise: number; remainingAmountPaise: number
+  correlatedEventIds: string[]; openedAt: string; resolvedAt: string | null; updatedAt: string
+}
+
+export type Event = { id: string; organizationId: string; event: { eventType: string; occurredAt: string; amountPaise?: number; paymentMethod?: string }; enrichment: { source: string; failureAttribution: string; gatewayHealthScore: number; gatewayInDowntime: boolean } | null }
+export type Proposal = { id: string; actionType: string; status: string; proposedAt: string; content: Record<string, unknown> }
+export type IncidentDetail = { incident: Incident; events: Event[]; proposals: Proposal[] }
+export type AuditEntry = { id: string; sequenceNumber: number; eventType: string; actorType: string; decision: string; rationale: string; createdAt: string }
+export type MvpHealth = { organizationId: string; pipeline: 'agentic_mvp'; testMode: true; communications: 'proposal_only' }
