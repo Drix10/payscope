@@ -15,7 +15,7 @@ const model = new EchoModelAdapter(request => request.systemPrompt.includes('Sup
     : { proposedActions: [{ actionType: 'auto_resolve_infrastructure', rationale: 'Infrastructure issue', estimatedRecoveryPaise: null, requiresOperatorApproval: true }], recoveryProbability: 0.1, confidence: 0.9 });
 
 (async () => {
-  const supervisor = await runInvestigationSupervisor(model, { incident, enrichment, merchantPolicyCount: 1, autoResolveBudgetRemaining: 5 }, org);
+  const supervisor = await runInvestigationSupervisor(model, { incident, enrichment, merchantPolicyCount: 1, autoResolveBudgetRemaining: 0.5 }, org);
   assert.equal(supervisor.plan.estimatedAutoResolvable, true);
   const risk = await runRiskAnalyst(model, { getIncidentTimeline: async () => [], getMerchantFailureRate: async () => 0.3, getNetworkFailureRate: async () => 0.28, getCustomerIncidentCount: async () => 0 }, { incident, enrichment, gateway: 'upi' }, org);
   const recovery = await runRecoveryPlanner(model, { incident, riskAnalysis: risk.analysis, merchantOptedInToRecovery: false }, org);

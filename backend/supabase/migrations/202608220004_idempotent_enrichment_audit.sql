@@ -23,8 +23,8 @@ begin
     raise exception 'PayScope event not found for enrichment';
   end if;
 
-  insert into public.payscope_queue_jobs (id, organization_id, job_key, job_type, payload)
-  values (p_job_id, p_organization_id, 'correlate:' || p_event_id::text, 'correlate_event', p_job_payload)
+  insert into public.payscope_queue_jobs (id, organization_id, source_event_id, job_key, job_type, payload)
+  values (p_job_id, p_organization_id, p_event_id, 'correlate:' || p_event_id::text, 'correlate_event', p_job_payload)
   on conflict (job_key) do nothing;
 
   if newly_enriched then

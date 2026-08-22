@@ -13,7 +13,7 @@ const SupervisorInputSchema = z.object({
   incident: z.object({ id: z.string().uuid(), riskTier: z.string(), status: z.string(), totalFailedAmountPaise: z.number().int().nonnegative(), correlatedEventIds: z.array(z.string().uuid()).max(100), openedAt: z.string().datetime({ offset: true }) }),
   enrichment: z.unknown().nullable(),
   merchantPolicyCount: z.number().int().nonnegative(),
-  autoResolveBudgetRemaining: z.number().int().nonnegative(),
+  autoResolveBudgetRemaining: z.number().min(0).max(1),
 });
 
 const SYSTEM_PROMPT = `You are the PayScope Investigation Supervisor. You receive a structured payment incident and must produce an investigation plan.

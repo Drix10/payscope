@@ -35,4 +35,18 @@ const policyTraceMigration = fs.readFileSync(path.join(__dirname, '..', 'supabas
 for (const required of ['policy_decision', 'auto_resolve_ceiling', 'human_review_floor', "policy_decision ? 'gates'"]) assert.match(policyTraceMigration, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
 const approvalSafetyMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608220006_approval_locking_and_contact_limits.sql'), 'utf8');
 for (const required of ['pg_advisory_xact_lock', 'customerReferenceAvailable', 'payscope_contact_attempts', 'PayScope outreach proposal has no customer reference']) assert.match(approvalSafetyMigration, new RegExp(required, 'i'));
+const phase3SafetyMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608220007_risk_tools_and_audit_integrity.sql'), 'utf8');
+for (const required of ['payscope_risk_tool_metrics', 'payscope_audit_chain_summary', 'p_window_hours not in (1, 4, 24)', 'payscope_verify_audit_chain']) assert.match(phase3SafetyMigration, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+const auditApprovalMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608220008_audit_integrity_approval_gate.sql'), 'utf8');
+for (const required of ['payscope_verify_audit_chain', 'audit integrity is broken', 'pg_advisory_xact_lock']) assert.match(auditApprovalMigration, new RegExp(required, 'i'));
+const queueIntegrityMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608220009_queue_event_integrity.sql'), 'utf8');
+for (const required of ['source_event_id', 'foreign key (organization_id, source_event_id)', 'on delete cascade', 'p_fixture_job_id', "payload->>'testFixture'", 'drop function if exists public.payscope_claim_queue_job(text)']) assert.match(queueIntegrityMigration, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+const queueRpcMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608220010_queue_event_integrity_rpc.sql'), 'utf8');
+for (const required of ['payscope_ingest_event_and_enqueue', 'payscope_complete_enrichment_and_enqueue', 'payscope_persist_correlation', 'source_event_id']) assert.match(queueRpcMigration, new RegExp(required, 'i'));
+const dashboardMetricsMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608230001_dashboard_metrics.sql'), 'utf8');
+for (const required of ['payscope_dashboard_metrics', 'p_organization_id', 'attributedRecoveries', 'Recovery is Test Mode simulation only', 'grant execute']) assert.match(dashboardMetricsMigration, new RegExp(required, 'i'));
+const safeMetricsMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608230002_dashboard_metrics_safe_counts.sql'), 'utf8');
+for (const required of ['9007199254740991', 'proposalsGenerated', 'proposalsApproved', 'create or replace function']) assert.match(safeMetricsMigration, new RegExp(required, 'i'));
+const evaluationReportMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '202608230003_evaluation_reports.sql'), 'utf8');
+for (const required of ['payscope_evaluation_reports', 'payscope_record_evaluation_report', 'held-out evaluation already exists', 'evaluation_report_recorded', 'payscope_dashboard_metrics', 'grant execute on function public.payscope_record_evaluation_report']) assert.match(evaluationReportMigration, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
 console.log('Agentic MVP schema contract checks passed.');

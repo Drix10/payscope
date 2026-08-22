@@ -17,15 +17,21 @@ const createdJobIds = [];
 const createdEventIds = [];
 const now = new Date().toISOString();
 const normalized = (eventId) => ({ eventId, eventType: 'payment.failed', occurredAt: now, receivedAt: now, amountPaise: 100, currency: 'INR', providerData: {} });
-const payload = (jobId, eventId) => ({ jobId, organizationId, type: 'enrich_event', attemptNumber: 1, createdAt: now, eventId });
+// Fixture jobs are invisible to the live VPS worker. The database integration
+// check claims none of them, so cleanup cannot race an enrichment hand-off.
+const payload = (jobId, eventId) => ({ jobId, organizationId, type: 'enrich_event', attemptNumber: 1, createdAt: now, eventId, testFixture: true });
+const eventRow = (id, razorpayEventId) => ({ id, organization_id: organizationId, razorpay_event_id: razorpayEventId, event_type: 'payment.failed', payload_hash: 'f'.repeat(64), normalized: normalized(razorpayEventId) });
 
 (async () => {
   try {
     // The primary-key collision happens after the event INSERT in the RPC. A
     // missing event afterwards proves the function rolled back atomically.
-    const collisionJobId = randomUUID(); const collisionEventId = randomUUID();
-    createdJobIds.push(collisionJobId);
-    const { error: setupError } = await client.from('payscope_queue_jobs').insert({ id: collisionJobId, organization_id: organizationId, job_key: `integration-collision:${collisionJobId}`, job_type: 'enrich_event', payload: payload(collisionJobId, collisionEventId), next_attempt_at: '2099-01-01T00:00:00.000Z' });
+    const collisionJobId = randomUUID(); const collisionEventId = randomUUID(); const collisionParentEventId = randomUUID();
+    createdJobIds.push(collisionJobId); createdEventIds.push(collisionParentEventId);
+    const collisionParentRazorpayId = `integration-collision-parent-${randomUUID()}`;
+    const { error: collisionEventError } = await client.from('payscope_events').insert(eventRow(collisionParentEventId, collisionParentRazorpayId));
+    if (collisionEventError) throw new Error(`Could not prepare collision event: ${collisionEventError.message}`);
+    const { error: setupError } = await client.from('payscope_queue_jobs').insert({ id: collisionJobId, organization_id: organizationId, source_event_id: collisionParentEventId, job_key: `integration-collision:${collisionJobId}`, job_type: 'enrich_event', payload: payload(collisionJobId, collisionParentEventId), next_attempt_at: '2099-01-01T00:00:00.000Z' });
     if (setupError) throw new Error(`Could not prepare rollback check: ${setupError.message}`);
     const rollbackRazorpayId = `integration-rollback-${randomUUID()}`;
     const { error: rollbackError } = await client.rpc('payscope_ingest_event_and_enqueue', { p_event_id: collisionEventId, p_organization_id: organizationId, p_razorpay_event_id: rollbackRazorpayId, p_event_type: 'payment.failed', p_payload_hash: 'a'.repeat(64), p_normalized: normalized(rollbackRazorpayId), p_job_id: collisionJobId, p_job_payload: payload(collisionJobId, collisionEventId) });

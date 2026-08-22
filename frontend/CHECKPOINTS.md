@@ -85,8 +85,8 @@ requests, and search the frontend for retired action names, old API paths,
 - [x] Replace the legacy entry point with the tenant-scoped Agentic MVP
   incident workspace. It consumes `/api/mvp/health`, `/incidents`, incident
   detail, and audit reads; it contains explicit Test Mode/proposal-only copy
-  and no old direct-action controls. The canonical proposal/investigation and
-  metrics panels remain unfinished.
+  and no old direct-action controls. Proposal and investigation panels are
+  implemented; metrics remain a later phase.
 - [x] Delete unreferenced PaymentOps dashboard components, checkout flow,
   policy editor, old API/types, browser token environment typing, and unused
   showcase/autonomy components after the replacement workspace built cleanly.
@@ -160,6 +160,19 @@ state and heuristic-source label in desktop and 390px mobile layouts.
 **Gate:** infrastructure, fraud, unavailable-enrichment, and invalid-model
 fixture results are understandable from the UI without reading server logs.
 
+### Phase 0–2 implementation verification — 2026-08-22
+
+- [x] Rechecked runtime guards, cancellation/unmount handling, lifecycle
+  filters, bounded presentation data, enrichment labels, investigation/policy
+  panels, and production Vite compilation. The source implementation covers
+  the Phase 0–2 checklist.
+- [x] Hardening recheck: the current production Vite build and dependency audit
+  pass; a repository source search found no runnable PaymentOps, retired-route,
+  static-token, direct-Vulcan, or live-delivery code. Empty former component
+  folders contain no shipped source or import consumer.
+- [ ] Public-browser proof remains pending until the current backend/frontend
+  builds are deployed; it is tracked in the deployment row above.
+
 ## Phase 3 — proposal approval and tamper-evident audit
 
 - [x] Build proposal cards with type, rationale/content, source incident,
@@ -171,14 +184,15 @@ fixture results are understandable from the UI without reading server logs.
 - [x] After approval, show the `LoggingCommunicationsAdapter` simulated result;
   it is explicitly labelled as no customer message sent, never as channel
   delivery.
-- [ ] Disable/cancel a pending proposal when API state reports recovery or an
-  open dispute. Explain the cancellation in the UI.
-- [ ] Build audit timeline with actor, event type, decision, rationale,
-  confidence, time, sequence number, and enrichment snapshot label.
-- [ ] Add audit-integrity status from `verify_audit_chain`: intact, checking,
-  broken, or unavailable. A broken chain is a blocking alert, never a silent
-  cosmetic warning.
-- [ ] Show the minimal operator/organization context but do not build account or
+- [x] Disable approval for non-pending proposals and explain recovery/dispute
+  cancellations in the UI; the database also cancels them atomically.
+- [x] Build an audit timeline with actor, event type, decision, rationale,
+  confidence, time, sequence number, and enrichment snapshot label, while
+  excluding internal hashes and session data from the browser response.
+- [x] Add audit-integrity status from `verify_audit_chain`: the UI renders
+  intact/broken status and the approval RPC rejects all approvals when the
+  chain is broken, so it is a hard gate rather than a cosmetic warning.
+- [x] Show minimal Demo operator/organization context without account or
   organization administration screens.
 
 **Gate:** seeded operator approves a proposal and sees a simulated result plus
@@ -186,54 +200,70 @@ an intact, ordered audit chain; Org B data never appears in Org A UI tests.
 
 ## Phase 4 — Agentic Dashboard and metrics
 
-- [ ] Add a read-only natural-language dashboard input. It submits to the
+- [x] Add a read-only natural-language dashboard input. It calls the
   tenant-scoped `dashboard/query` endpoint and renders only structured incident
-  summary, metrics, evidence references, and explicit limitations returned by
-  the API.
-- [ ] Never interpret dashboard-query text in the browser as executable action,
-  SQL, arbitrary filter, or cross-tenant selector. Provide prompt examples and
-  cancellation/error/timeout states.
-- [ ] Build metrics view with fixture-evaluation precision, recall, F1,
-  false-positive cost, total at risk, generated/approved proposals, attributed
-  Test Mode recoveries, recovered paise, recovery rate, and contact-to-recovery
-  ratio.
-- [ ] Require evaluation metadata alongside metrics: development vs held-out,
+  summaries, aggregate amounts, and server-supplied limitations.
+- [x] Never interpret dashboard-query text in the browser as executable action,
+  SQL, arbitrary filter, or cross-tenant selector. It is encoded as text only;
+  prompt examples, cancellation, timeout, loading, and error paths use the
+  shared API boundary.
+- [x] Build the metrics view for precision, recall, F1, false-positive cost,
+  total at risk, generated/approved proposals, attributed Test Mode recoveries,
+  recovered paise, recovery rate, and contact-to-recovery ratio. The UI now
+  renders every field; fields without a defensible source render `Not
+  available`, never a synthetic zero.
+- [x] Require evaluation metadata alongside metrics: development vs held-out,
   fixture set version, run time, configuration hash, model/adapter, and sample
-  count. Render divide-by-zero metrics as `Not available`.
-- [ ] Place the exception list before or alongside metrics: heuristic/fixture
-  enrichment status, simulated communications, simulated Test Mode recovery,
-  no COD/RTO decisioning, no dispute/fraud outreach, no Live Mode, and no
-  financial execution.
-- [ ] Add clear copy explaining that metrics are fixture/Test Mode results, not
-  real merchant production outcomes.
+  count. Before Phase 5's first report it explicitly states `not_run`.
+- [x] Place the exception list alongside metrics: no COD/RTO decisioning, no
+  dispute/fraud outreach, simulated communications/Test Mode recovery, no Live
+  Mode, and no financial execution.
+- [x] Add clear copy explaining that available values are Test Mode operational
+  counts and that evaluation/recovery figures are not real merchant outcomes.
 
-**Gate:** a reviewer can trace every headline number to the API evaluation
-report and cannot mistake a simulation for a real customer or financial action.
+**Gate:** the surface cannot mistake a simulation for a real customer or
+financial action. The report-trace portion remains a Phase 5 gate until the
+development/held-out evaluation report exists.
+
+### Phase 4 hardening recheck — 2026-08-23
+
+- [x] Rebuilt the dashboard after adversarial query and unavailable-metric
+  checks. Query cancellation/unmount cleanup, bounded input, explicit API
+  guards, safe integer display, complete evaluation-state validation, and `Not
+  available` rendering all pass; no legacy source/import remains in the
+  shipped frontend.
 
 ## Phase 5 — UX, accessibility, and demo readiness
 
 - [ ] Verify desktop, tablet, and 390px mobile workspace layouts; no horizontal
   overflow, clipped audit entries, inaccessible dialogs, or data-only color
   indicators.
-- [ ] Add keyboard focus, semantic headings, live regions for async status,
-  labelled controls, readable contrast, and reduced-motion-safe behaviour.
+- [x] Add keyboard focus, semantic headings, labelled controls, asynchronous
+  live regions, readable contrast classes, and reduced-motion-safe behaviour.
+  The current source also fixes React Strict Mode's cleanup/remount flag and
+  keeps a successful approval visible when a later audit refresh fails.
 - [ ] Test slow/retried backend requests, empty account, unavailable enrichment,
   queue delay, failed investigation, malformed API object, proposal cancellation,
   and stale approval responses.
-- [ ] Remove old dashboard labels, examples, API token instructions, and visual
-  claims that conflict with the canonical buildathon MVP.
-- [ ] Verify `npm run build` has no warnings; record bundle output and run a
+- [x] Remove old dashboard labels, examples, API token instructions, and visual
+  claims that conflict with the canonical buildathon MVP. Metrics now explain
+  causal Test Mode recovery and the synthetic-fixture limitation without a
+  revenue claim.
+- [x] Verify `npm run build` has no warnings and record the current production
+  bundle output (2026-08-23: 35.24 kB app / 134.67 kB React before gzip). Run a
   manual browser-console/network audit against the deployed Test Mode demo.
 - [x] Complete a first deployed empty-state smoke check at
   `https://payscope-ai.vercel.app`: the workspace loaded the `agentic_mvp`
   health state and empty tenant-scoped incident list with no browser-console
   warnings or errors. `https://payscope.vercel.app` is a separate legacy
   payroll-login deployment and is not the PayScope operator URL.
-- [ ] Update README/demo copy, screenshots, and pitch flow only after the
-  backend evaluation report and exception list are final.
-- [ ] Delete obsolete components, styles, handlers, API validators, test
+- [x] Update README and deployment copy for the exception list, Test Mode
+  attribution rule, and evaluation-report procedure. Screenshots and final
+  pitch flow remain pending until manually curated held-out evidence exists.
+- [x] Delete obsolete components, styles, handlers, API validators, test
   fixtures, and imports after their replacements pass. Run a production build
-  and search the bundle/source to prove retired actions and claims are absent.
+  and source search to prove retired actions and claims are absent. Removed the
+  empty former `components`, `hooks`, and `sections` directory shells as well.
 - [ ] Run the complete browser integration sequence against the deployed or
   local durable backend: incident appears → investigation panels populate →
   proposal is approved → simulated result and audit entry appear → integrity

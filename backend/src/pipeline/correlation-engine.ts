@@ -115,7 +115,7 @@ function riskEvent(eventType: string): boolean {
 }
 
 function recoveryEvent(eventType: string): boolean {
-  return eventType === 'payment.captured' || eventType === 'order.paid';
+  return eventType === 'payment.captured' || eventType === 'payment_link.paid' || eventType === 'order.paid';
 }
 
 function riskTierFor(incoming: CorrelationEvent): RiskTier {

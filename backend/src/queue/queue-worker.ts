@@ -71,7 +71,23 @@ export class QueueWorker {
   }
 
   private kick(): void {
-    void this.processOne().catch(error => console.error('[PayScope queue worker error]', error instanceof Error ? error.message : 'unknown error'));
+    void this.processAvailable();
+  }
+
+  /**
+   * A poll only needs to wake the worker; once it has claimed work, continue
+   * draining sequentially. This avoids an artificial five-second delay per
+   * job during a webhook burst without creating concurrent jobs or timers.
+   */
+  private async processAvailable(): Promise<void> {
+    try {
+      const claimed = await this.processOne();
+      if (claimed && this.acceptingWork) queueMicrotask(() => this.kick());
+    } catch (error) {
+      // A later interval retries a transient claim failure. `processOne` has
+      // already released its in-flight/processing state in its finally block.
+      console.error('[PayScope queue worker error]', error instanceof Error ? error.message : 'unknown error');
+    }
   }
 
   private async processOneInternal(): Promise<boolean> {

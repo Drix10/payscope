@@ -66,10 +66,11 @@ export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: strin
   const payment = object(object(payload.payment).entity);
   const order = object(object(payload.order).entity);
   const subscription = object(object(payload.subscription).entity);
+  const paymentLink = object(object(payload.payment_link).entity);
   const eventType = razorpayWebhookEventType(rawBody);
-  const occurredAt = timestamp(payment.created_at) ?? timestamp(order.created_at) ?? timestamp(subscription.created_at) ?? timestamp(envelope.created_at);
+  const occurredAt = timestamp(payment.created_at) ?? timestamp(order.created_at) ?? timestamp(subscription.created_at) ?? timestamp(paymentLink.created_at) ?? timestamp(envelope.created_at);
   if (!occurredAt) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'Razorpay webhook event timestamp is required');
-  const customerReference = text(payment.customer_id) ?? text(order.customer_id) ?? text(subscription.customer_id);
+  const customerReference = text(payment.customer_id) ?? text(order.customer_id) ?? text(subscription.customer_id) ?? text(paymentLink.customer_id);
   const providerData: UnknownRecord = {};
   for (const key of ['error_source', 'error_step', 'error_reason', 'error_code', 'attempts', 'international']) {
     const value = payment[key];
@@ -77,6 +78,8 @@ export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: strin
   }
   const orderAmountPaise = number(order.amount);
   if (orderAmountPaise !== undefined) providerData.order_amount_paise = orderAmountPaise;
+  const paymentLinkReferenceId = text(paymentLink.reference_id);
+  if (paymentLinkReferenceId) providerData.payment_link_reference_id = paymentLinkReferenceId;
   const acquirerData = allowlistedAcquirerData(object(payment.acquirer_data));
   if (Object.keys(acquirerData).length) providerData.acquirer_data = acquirerData;
   return NormalizedEventSchema.parse({
@@ -85,12 +88,12 @@ export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: strin
     occurredAt,
     receivedAt,
     paymentId: text(payment.id),
-    orderId: text(payment.order_id) ?? text(order.id),
+    orderId: text(payment.order_id) ?? text(order.id) ?? text(paymentLink.order_id),
     subscriptionId: text(payment.subscription_id) ?? text(subscription.id),
     customerHash: hashCustomer(customerReference, customerHashSecret),
-    currency: currency(payment.currency) ?? currency(order.currency),
-    amountPaise: number(payment.amount) ?? number(order.amount),
-    paymentStatus: text(payment.status, 80) ?? text(order.status, 80),
+    currency: currency(payment.currency) ?? currency(order.currency) ?? currency(paymentLink.currency),
+    amountPaise: number(payment.amount) ?? number(order.amount) ?? number(paymentLink.amount),
+    paymentStatus: text(payment.status, 80) ?? text(order.status, 80) ?? text(paymentLink.status, 80),
     paymentMethod: text(payment.method, 80),
     providerData,
   });

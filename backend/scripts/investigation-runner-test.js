@@ -14,6 +14,7 @@ const calls = [];
 const repository = {
   incidentDetail: async () => ({ incident, events: [], proposals: [] }),
   policyContext: async () => ({ policy: { id: '00000000-0000-4000-8000-000000000004', enabled: true, minimumConfidence: 0.8, rootCauses: ['gateway_degraded'], allowedActions: ['flag_for_review'], merchantOptedIn: false }, stats: { autoResolveFraction: 0, humanReviewFraction: 0.2 }, contact: { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false, customerReferenceAvailable: false } }),
+  riskToolMetrics: async () => ({ merchantFailureRate: 0.2, networkFailureRate: 0.1, customerIncidentCount: null }),
   persistInvestigation: async (...args) => calls.push(['persist', args]),
   recordInvestigationUnavailable: async (...args) => calls.push(['failed', args]),
 };

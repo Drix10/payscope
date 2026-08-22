@@ -7,6 +7,7 @@
 const INCIDENT_EVENT_TYPES = new Set([
   'payment.failed',
   'payment.captured',
+  'payment_link.paid',
   'order.paid',
   'payment.dispute.created',
   'payment.dispute.under_review',
@@ -23,5 +24,5 @@ export function isPayScopeDisputeOpeningEvent(eventType: string): boolean {
 
 /** Events allowed to attach to an already terminal incident for a complete timeline. */
 export function canCorrelateWithTerminalIncident(eventType: string): boolean {
-  return isPayScopeDisputeOpeningEvent(eventType) || eventType === 'payment.captured' || eventType === 'order.paid';
+  return isPayScopeDisputeOpeningEvent(eventType) || eventType === 'payment.captured' || eventType === 'payment_link.paid' || eventType === 'order.paid';
 }

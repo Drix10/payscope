@@ -33,7 +33,8 @@ create table if not exists public.payscope_events (
   enrichment_source text check (enrichment_source in ('razorpay_fields_heuristic', 'fixture_signed', 'vulcan_direct', 'unavailable')),
   processed_at timestamptz,
   created_at timestamptz not null default now(),
-  unique (organization_id, razorpay_event_id)
+  unique (organization_id, razorpay_event_id),
+  unique (organization_id, id)
 );
 create index if not exists payscope_events_org_created_idx on public.payscope_events (organization_id, created_at desc);
 create index if not exists payscope_events_org_type_idx on public.payscope_events (organization_id, event_type, created_at desc);
@@ -123,6 +124,10 @@ create table if not exists public.payscope_processed_jobs (
 create table if not exists public.payscope_queue_jobs (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.payscope_organizations(id) on delete cascade,
+  -- This is deliberately a first-class relation rather than a value that
+  -- exists only in payload JSON.  It keeps every pipeline job tenant-bound to
+  -- its triggering event and cascades cleanup safely.
+  source_event_id uuid not null,
   job_key text not null unique check (char_length(job_key) between 1 and 240),
   job_type text not null check (job_type in ('enrich_event', 'correlate_event', 'investigate_incident')),
   payload jsonb not null check (jsonb_typeof(payload) = 'object'),
@@ -132,9 +137,12 @@ create table if not exists public.payscope_queue_jobs (
   locked_at timestamptz,
   locked_by text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  foreign key (organization_id, source_event_id)
+    references public.payscope_events(organization_id, id) on delete cascade
 );
 create index if not exists payscope_queue_jobs_due_idx on public.payscope_queue_jobs (status, next_attempt_at, created_at);
+create index if not exists payscope_queue_jobs_source_event_idx on public.payscope_queue_jobs (organization_id, source_event_id);
 
 -- Audit rows never update or delete, including through the service role. A
 -- rejecting trigger is deliberate: silently doing nothing could mislead a
@@ -284,8 +292,8 @@ begin
     return next;
     return;
   end if;
-  insert into public.payscope_queue_jobs (id, organization_id, job_key, job_type, payload)
-  values (p_job_id, p_organization_id, 'enrich:' || p_event_id::text, 'enrich_event', p_job_payload)
+  insert into public.payscope_queue_jobs (id, organization_id, source_event_id, job_key, job_type, payload)
+  values (p_job_id, p_organization_id, p_event_id, 'enrich:' || p_event_id::text, 'enrich_event', p_job_payload)
   on conflict (job_key) do nothing;
   event_id := inserted_event_id;
   duplicate := false;
@@ -295,12 +303,22 @@ $$;
 revoke all on function public.payscope_ingest_event_and_enqueue(uuid, uuid, text, text, text, jsonb, uuid, jsonb) from public;
 grant execute on function public.payscope_ingest_event_and_enqueue(uuid, uuid, text, text, text, jsonb, uuid, jsonb) to service_role;
 
-create or replace function public.payscope_claim_queue_job(p_worker_id text)
+create or replace function public.payscope_claim_queue_job(
+  p_worker_id text,
+  p_fixture_job_id uuid default null
+)
 returns setof public.payscope_queue_jobs
 language sql security definer set search_path = public, pg_temp as $$
   with next_job as (
     select id from public.payscope_queue_jobs
-    where status = 'pending' and next_attempt_at <= now()
+    where status = 'pending'
+      and next_attempt_at <= now()
+      -- Integration fixtures are never available to the live VPS worker. The
+      -- test passes its exact job ID, so it cannot claim a merchant job.
+      and (
+        (p_fixture_job_id is null and coalesce((payload->>'testFixture')::boolean, false) = false)
+        or (p_fixture_job_id is not null and id = p_fixture_job_id and coalesce((payload->>'testFixture')::boolean, false) = true)
+      )
     order by created_at asc
     for update skip locked
     limit 1
@@ -311,8 +329,8 @@ language sql security definer set search_path = public, pg_temp as $$
   where jobs.id = next_job.id
   returning jobs.*
 $$;
-revoke all on function public.payscope_claim_queue_job(text) from public;
-grant execute on function public.payscope_claim_queue_job(text) to service_role;
+revoke all on function public.payscope_claim_queue_job(text, uuid) from public;
+grant execute on function public.payscope_claim_queue_job(text, uuid) to service_role;
 
 create or replace function public.payscope_requeue_stale_jobs(p_lock_timeout_seconds integer default 30)
 returns integer
@@ -343,8 +361,8 @@ begin
   set enrichment = p_enrichment, enrichment_source = p_enrichment_source, processed_at = null
   where id = p_event_id and organization_id = p_organization_id;
   if not found then raise exception 'PayScope event not found for enrichment'; end if;
-  insert into public.payscope_queue_jobs (id, organization_id, job_key, job_type, payload)
-  values (p_job_id, p_organization_id, 'correlate:' || p_event_id::text, 'correlate_event', p_job_payload)
+  insert into public.payscope_queue_jobs (id, organization_id, source_event_id, job_key, job_type, payload)
+  values (p_job_id, p_organization_id, p_event_id, 'correlate:' || p_event_id::text, 'correlate_event', p_job_payload)
   on conflict (job_key) do nothing;
 end;
 $$;
@@ -463,8 +481,8 @@ begin
   end if;
   if p_enqueue_investigation then
     if p_incident is null then raise exception 'PayScope investigation requires an incident'; end if;
-    insert into public.payscope_queue_jobs (id, organization_id, job_key, job_type, payload)
-    values (p_job_id, p_organization_id, 'investigate:' || (p_incident->>'id') || ':' || p_event_id::text, 'investigate_incident', p_job_payload)
+    insert into public.payscope_queue_jobs (id, organization_id, source_event_id, job_key, job_type, payload)
+    values (p_job_id, p_organization_id, p_event_id, 'investigate:' || (p_incident->>'id') || ':' || p_event_id::text, 'investigate_incident', p_job_payload)
     on conflict (job_key) do nothing;
   end if;
 end;

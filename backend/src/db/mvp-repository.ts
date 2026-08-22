@@ -1,17 +1,20 @@
 import { randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ActionProposal, ActionProposalSchema, AuditEntry, AuditEntrySchema, EnrichmentSource, EnrichmentSourceSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, QueueJobSchema, RecoveryPlan, RiskAnalysis, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
+import { ActionProposal, ActionProposalSchema, AuditEntry, AuditEntrySchema, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, QueueJobSchema, RecoveryPlan, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
 import { CorrelationEvent, IncidentCandidate } from '../pipeline/correlation-engine';
 import { CustomerContactStats, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
 import { SimulatedDeliveryResult } from '../providers/communications/interface';
 import { canCorrelateWithTerminalIncident } from '../pipeline/webhook-event-policy';
+import type { FixtureEvaluationReport } from '../evaluation/run-evaluation';
 
 type DemoOrganization = { id: string; customerHashSecret: string };
 type IngestResult = { eventId: string; duplicate: boolean };
 export type StoredEvent = CorrelationEvent & { organizationId: string; enrichmentSource: EnrichmentSource | null };
 export type ProposalDraft = { id: string; actionType: ActionProposal['actionType']; content: Record<string, unknown>; rationale: string };
 export type PolicyContext = { policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats };
+export type RiskToolMetrics = { merchantFailureRate: number | null; networkFailureRate: number | null; customerIncidentCount: number | null };
+export type AuditIntegrity = { status: 'intact' | 'broken'; entryCount: number; checkedAt: string };
 
 const PolicyContextSchema = z.object({
   policy: z.object({
@@ -22,6 +25,18 @@ const PolicyContextSchema = z.object({
   }).strict(),
   stats: z.object({ autoResolveFraction: z.number().min(0).max(1), humanReviewFraction: z.number().min(0).max(1) }).strict(),
   contact: z.object({ incidentAttempts: z.number().int().nonnegative(), attemptsLast24Hours: z.number().int().nonnegative(), attemptsLast7Days: z.number().int().nonnegative(), merchantOptedIn: z.boolean(), customerReferenceAvailable: z.boolean() }).strict(),
+}).strict();
+
+const RiskToolMetricsSchema = z.object({
+  merchantFailureRate: z.number().min(0).max(1).nullable(),
+  networkFailureRate: z.number().min(0).max(1).nullable(),
+  customerIncidentCount: z.number().int().nonnegative().nullable(),
+}).strict();
+
+const AuditIntegritySchema = z.object({
+  status: z.enum(['intact', 'broken']),
+  entryCount: z.number().int().nonnegative(),
+  checkedAt: z.string().datetime({ offset: true }),
 }).strict();
 
 function databaseError(operation: string, message: string): Error {
@@ -153,6 +168,18 @@ export class MvpRepository {
     return PolicyContextSchema.parse(data);
   }
 
+  /** Read-only, server-scoped facts supplied to the bounded Risk Analyst. */
+  async riskToolMetrics(organizationId: string, gateway: string, customerHash: string | undefined, windowHours: 1 | 4 | 24): Promise<RiskToolMetrics> {
+    const { data, error } = await this.client.rpc('payscope_risk_tool_metrics', {
+      p_organization_id: organizationId,
+      p_gateway: gateway.slice(0, 80),
+      p_customer_hash: customerHash ?? null,
+      p_window_hours: windowHours,
+    });
+    if (error) throw databaseError('risk-tool metrics', error.message);
+    return RiskToolMetricsSchema.parse(data);
+  }
+
   async listIncidents(organizationId: string, limit = 100, status?: Incident['status']): Promise<Incident[]> {
     let query = this.client
       .from('payscope_incidents')
@@ -196,6 +223,71 @@ export class MvpRepository {
     const { data, error } = await query;
     if (error) throw databaseError('audit list', error.message);
     return (data ?? []).map(row => auditFromRow(row as Record<string, unknown>));
+  }
+
+  async auditIntegrity(organizationId: string): Promise<AuditIntegrity> {
+    const { data, error } = await this.client.rpc('payscope_audit_chain_summary', { p_organization_id: organizationId });
+    if (error) throw databaseError('audit integrity', error.message);
+    return AuditIntegritySchema.parse(data);
+  }
+
+  /** Aggregate only presentation-safe tenant metrics; no PII or raw events. */
+  async dashboardMetrics(organizationId: string): Promise<DashboardMetrics> {
+    const { data, error } = await this.client.rpc('payscope_dashboard_metrics', { p_organization_id: organizationId });
+    if (error) throw databaseError('dashboard metrics', error.message);
+    return DashboardMetricsSchema.parse(data);
+  }
+
+  /** Persists a validated, append-only fixture report through the audit-backed RPC. */
+  async recordFixtureEvaluationReport(organizationId: string, report: FixtureEvaluationReport): Promise<FixtureEvaluationReport> {
+    if (report.precision === null || report.recall === null || report.f1 === null || report.falsePositiveCostPaise === null) {
+      throw new Error('PayScope cannot persist an incomplete fixture evaluation report');
+    }
+    const { data, error } = await this.client.rpc('payscope_record_evaluation_report', {
+      p_organization_id: organizationId,
+      p_report: report,
+    });
+    if (error) throw databaseError('evaluation report persistence', error.message);
+    return parseFixtureEvaluationReport(data);
+  }
+
+  /**
+   * A bounded deterministic interpreter for the MVP's read-only dashboard.
+   * User text never reaches SQL, a model prompt, or an organization selector.
+   */
+  async dashboardQuery(organizationId: string, query: string, limit: number): Promise<DashboardQueryResponse> {
+    const normalizedQuery = query.trim();
+    const parsed = parseDashboardFilters(normalizedQuery);
+    const incidents = await this.listIncidents(organizationId, 100);
+    const matching = incidents.filter(incident =>
+      (!parsed.statuses.length || parsed.statuses.includes(incident.status)) &&
+      (!parsed.riskTiers.length || parsed.riskTiers.includes(incident.riskTier)),
+    );
+    const displayed = matching.slice(0, limit).map(incident => ({
+      id: incident.id,
+      status: incident.status,
+      riskTier: incident.riskTier,
+      remainingAmountPaise: incident.remainingAmountPaise,
+      updatedAt: incident.updatedAt,
+    }));
+    const matchedRemainingAmountPaise = matching.reduce((sum, incident) => {
+      const next = sum + incident.remainingAmountPaise;
+      if (!Number.isSafeInteger(next)) throw new Error('PayScope dashboard metric exceeds the safe integer range');
+      return next;
+    }, 0);
+    return DashboardQueryResponseSchema.parse({
+      query: normalizedQuery,
+      interpretation: describeDashboardFilters(parsed.statuses, parsed.riskTiers),
+      matchedIncidentCount: matching.length,
+      matchedRemainingAmountPaise,
+      incidents: displayed,
+      limitations: [
+        'Read-only tenant incident summary; this query cannot trigger an action or contact a customer.',
+        'Only lifecycle state and risk tier terms are interpreted in this MVP; other wording is not executed or translated to SQL.',
+        'Incident summaries exclude customer identifiers, payment/order IDs, raw provider data, and recovery claims without causal attribution.',
+        'The query considers at most the 100 most recently updated incidents, then returns up to the requested display limit.',
+      ],
+    });
   }
 
   async recordInvestigationUnavailable(organizationId: string, incidentId: string, triggerEventId: string | undefined, reason: string): Promise<void> {
@@ -322,13 +414,20 @@ function auditFromRow(row: Record<string, unknown>): AuditEntry {
 }
 
 function investigationFromRow(row: Record<string, unknown>): Investigation {
+  const risk = row.risk_analysis === null || row.risk_analysis === undefined
+    ? null
+    : RiskAnalysisSchema.parse({
+      ...record(row.risk_analysis),
+      // Historical investigations predate the explicit server-tool trace.
+      toolResults: record(row.risk_analysis).toolResults ?? { incidentTimelineEventCount: 0, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },
+    });
   return InvestigationSchema.parse({
     id: row.id,
     organizationId: row.organization_id,
     incidentId: row.incident_id,
     status: row.status,
     plan: row.plan ?? null,
-    riskAnalysis: row.risk_analysis ?? null,
+    riskAnalysis: risk,
     recoveryPlan: row.recovery_plan ?? null,
     policyDecision: row.policy_decision ?? null,
     modelId: row.model_id ?? null,
@@ -348,4 +447,58 @@ function numeric(value: unknown): number {
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('PayScope database row is invalid');
   return value as Record<string, unknown>;
+}
+
+function parseDashboardFilters(query: string): { statuses: Incident['status'][]; riskTiers: RiskTier[] } {
+  const text = query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/[_-]/g, ' ');
+  const statuses = ([
+    ['open', 'OPEN'], ['monitoring', 'MONITORING'], ['escalated', 'ESCALATED'], ['dispute opened', 'DISPUTE_OPENED'],
+    ['resolved', 'RESOLVED'], ['human resolved', 'HUMAN_RESOLVED'], ['dismissed', 'DISMISSED'],
+  ] as const).filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
+  const riskTiers = ([['critical', 'CRITICAL'], ['high', 'HIGH'], ['medium', 'MEDIUM'], ['monitor', 'MONITOR']] as const)
+    .filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
+  // A specific multi-word lifecycle term wins over its shorter component:
+  // “human resolved” is not also a request for every RESOLVED incident.
+  const normalizedStatuses = statuses.includes('HUMAN_RESOLVED')
+    ? statuses.filter(status => status !== 'RESOLVED')
+    : statuses;
+  return { statuses: normalizedStatuses, riskTiers };
+}
+
+function includesTerm(text: string, term: string): boolean {
+  return new RegExp(`(^|\\s)${term.replace(/ /g, '\\s+')}(?=\\s|$)`, 'i').test(text);
+}
+
+function describeDashboardFilters(statuses: Incident['status'][], riskTiers: RiskTier[]): string {
+  const parts = [
+    statuses.length ? `lifecycle: ${statuses.map(value => value.replace(/_/g, ' ').toLowerCase()).join(', ')}` : 'all lifecycle states',
+    riskTiers.length ? `risk tier: ${riskTiers.map(value => value.toLowerCase()).join(', ')}` : 'all risk tiers',
+  ];
+  return `Showing recent tenant-scoped incidents for ${parts.join(' · ')}.`;
+}
+
+function parseFixtureEvaluationReport(value: unknown): FixtureEvaluationReport {
+  const row = record(value);
+  const split = row.split === 'development' || row.split === 'held_out' ? row.split : null;
+  if (!split) throw new Error('PayScope evaluation report has an invalid split');
+  const report: FixtureEvaluationReport = {
+    split,
+    fixtureSetVersion: typeof row.fixtureSetVersion === 'string' ? row.fixtureSetVersion : '',
+    runAt: typeof row.runAt === 'string' ? row.runAt : '',
+    configurationHash: typeof row.configurationHash === 'string' ? row.configurationHash : '',
+    modelId: typeof row.modelId === 'string' ? row.modelId : '',
+    sampleCount: numeric(row.sampleCount),
+    precision: numberInRange(row.precision),
+    recall: numberInRange(row.recall),
+    f1: numberInRange(row.f1),
+    falsePositiveCostPaise: numeric(row.falsePositiveCostPaise),
+  };
+  if (!report.fixtureSetVersion || !report.runAt || !report.configurationHash.match(/^[a-f0-9]{64}$/) || !report.modelId) throw new Error('PayScope evaluation report is invalid');
+  return report;
+}
+
+function numberInRange(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) throw new Error('PayScope evaluation report contains an invalid metric');
+  return parsed;
 }

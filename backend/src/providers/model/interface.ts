@@ -7,6 +7,8 @@ export type ModelRequest<T> = {
   userContent: string;
   maxInputTokens: number;
   maxTokens: number;
+  /** Optional caller deadline; adapters must never exceed their own cap. */
+  timeoutMs?: number;
   responseSchema: z.ZodType<T>;
   tenantId: string;
 };

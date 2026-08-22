@@ -27,6 +27,14 @@ const client = {
   from() { return query; },
 };
 
+const waitFor = async (predicate, message) => {
+  const deadline = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(message);
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+};
+
 (async () => {
   const processed = [];
   const worker = new QueueWorker(client, 'test-worker', async job => processed.push(job), 60_000);
@@ -35,5 +43,49 @@ const client = {
   assert.equal(processed.length, 1, 'a fourth delivery must be executable before dead-lettering');
   assert.equal(processed[0].attemptNumber, 4);
   assert.equal(updates[0].status, 'complete');
+
+  // A burst drains serially as soon as a completion is persisted; it does not
+  // create one timer/promise per job or wait an entire poll interval per row.
+  const burstProcessed = [];
+  let burstClaims = 0;
+  const burstJobIds = ['00000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000005'];
+  const burstClient = {
+    async rpc() {
+      burstClaims += 1;
+      if (burstClaims > 2) return { data: [], error: null };
+      const claimedJobId = burstJobIds[burstClaims - 1];
+      return { data: [{ id: claimedJobId, attempt_number: 1, locked_by: 'burst-worker', payload: { jobId: claimedJobId, organizationId: org, type: 'enrich_event', createdAt: '2026-08-22T00:00:00.000Z', eventId } }], error: null };
+    },
+    from() { return query; },
+  };
+  const burstWorker = new QueueWorker(burstClient, 'burst-worker', async job => burstProcessed.push(job.jobId), 60_000);
+  burstWorker.start();
+  await waitFor(() => burstProcessed.length === 2, 'worker did not serially drain both immediately available jobs');
+  await burstWorker.stopAndDrain();
+  assert.equal(burstClaims, 3, 'worker must stop draining only after an empty claim');
+
+  // A failed claim releases internal state, allowing the scheduled retry to
+  // recover instead of leaving the singleton worker permanently busy.
+  let recoveryClaims = 0;
+  const recoveryClient = {
+    async rpc() {
+      recoveryClaims += 1;
+      if (recoveryClaims === 1) return { data: null, error: { message: 'temporary database outage' } };
+      if (recoveryClaims === 2) return { data: [{ id: '00000000-0000-4000-8000-000000000006', attempt_number: 1, locked_by: 'recovery-worker', payload: { jobId: '00000000-0000-4000-8000-000000000006', organizationId: org, type: 'enrich_event', createdAt: '2026-08-22T00:00:00.000Z', eventId } }], error: null };
+      return { data: [], error: null };
+    },
+    from() { return query; },
+  };
+  const previousError = console.error;
+  console.error = () => {};
+  try {
+    const recoveryProcessed = [];
+    const recoveryWorker = new QueueWorker(recoveryClient, 'recovery-worker', async job => recoveryProcessed.push(job.jobId), 5);
+    recoveryWorker.start();
+    await waitFor(() => recoveryProcessed.length === 1, 'worker did not recover after a transient claim failure');
+    await recoveryWorker.stopAndDrain();
+  } finally {
+    console.error = previousError;
+  }
   console.log('Agentic MVP queue retry and worker-lifecycle checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

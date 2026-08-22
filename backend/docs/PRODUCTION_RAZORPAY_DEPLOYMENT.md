@@ -15,7 +15,9 @@ Supabase, so Node 20/21 VPS images are supported as well as Node 22+.
    demo, also set a random 32+ character `PAYSCOPE_DEMO_APPROVAL_TOKEN` and
    optional `PAYSCOPE_DEMO_OPERATOR_ID`. The token remains on the VPS; the
    operator types it for the one approval action and it is never persisted in
-   the browser.
+   the browser. Set a separate 32+ character `PAYSCOPE_FIXTURE_SIGNING_SECRET`
+   only when recording signed fixture evaluation reports; it never belongs in
+   Vercel.
 3. Install and start:
 
    ```bash
@@ -27,9 +29,9 @@ Supabase, so Node 20/21 VPS images are supported as well as Node 22+.
 4. Put the service behind HTTPS, then point the Razorpay **Test Mode** webhook
    at `https://<your-vps-host>/webhooks/razorpay`. The endpoint verifies HMAC
    before reading event data. It persists only payment failure/capture,
-   `order.paid`, and dispute-opening events; all other correctly signed events
-   are acknowledged and ignored, so enabling a broader Razorpay event list
-   cannot create a false incident.
+   `payment_link.paid`, `order.paid`, and dispute-opening events; all other
+   correctly signed events are acknowledged and ignored, so enabling a broader
+   Razorpay event list cannot create a false incident.
 
 The VPS alone receives `SUPABASE_SERVICE_ROLE_KEY`, Razorpay secrets, and the
 optional Mesh API key. Mesh uses provider-enforced JSON Schema structured
@@ -43,3 +45,8 @@ intended review audience; adding real authentication is a tracked follow-up.
 Verify `GET /health` after deployment. It must report `pipeline: "agentic_mvp"`
 before configuring Razorpay deliveries. A disabled pipeline rejects webhooks
 with `503` rather than losing them in an in-memory fallback.
+
+For a fixture report, run `PAYSCOPE_RUN_EVALUATION=true npm run run:evaluation`
+on the VPS after build. Run `development` before `held_out`; the latter is
+database-locked to one report per fixture version. Reports and causal recovery
+counts are Test Mode evidence only, never real-revenue claims.

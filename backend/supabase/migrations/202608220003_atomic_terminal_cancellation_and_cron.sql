@@ -66,8 +66,8 @@ begin
 
   if p_enqueue_investigation then
     if p_incident is null then raise exception 'PayScope investigation requires an incident'; end if;
-    insert into public.payscope_queue_jobs (id, organization_id, job_key, job_type, payload)
-    values (p_job_id, p_organization_id, 'investigate:' || (p_incident->>'id') || ':' || p_event_id::text, 'investigate_incident', p_job_payload)
+    insert into public.payscope_queue_jobs (id, organization_id, source_event_id, job_key, job_type, payload)
+    values (p_job_id, p_organization_id, p_event_id, 'investigate:' || (p_incident->>'id') || ':' || p_event_id::text, 'investigate_incident', p_job_payload)
     on conflict (job_key) do nothing;
   end if;
 end;

@@ -1,0 +1,27 @@
+const assert = require('node:assert/strict');
+const { createDevelopmentFixtures } = require('../dist/fixtures/development-fixtures');
+const { createHeldOutFixtures } = require('../dist/fixtures/held-out-fixtures');
+const { verifyFixture } = require('../dist/fixtures/schema');
+const { signFixture } = require('../dist/fixtures/schema');
+const { runFixtureEvaluation } = require('../dist/evaluation/run-evaluation');
+
+const secret = 'phase-five-fixture-signing-secret-at-least-32-characters';
+const development = createDevelopmentFixtures(secret);
+const heldOut = createHeldOutFixtures(secret);
+assert.equal(development.length, 300);
+assert.equal(heldOut.length, 200);
+assert.equal(new Set([...development, ...heldOut].map(fixture => fixture.id)).size, 500, 'fixture identifiers must not overlap across splits');
+for (const fixture of development) verifyFixture(fixture, secret, 'development');
+for (const fixture of heldOut) verifyFixture(fixture, secret, 'held_out');
+assert.throws(() => verifyFixture(heldOut[0], secret, 'development'));
+const report = runFixtureEvaluation(development, secret, 'development', '2026-08-23T00:00:00.000Z');
+assert.equal(report.sampleCount, 300);
+assert.equal(report.precision, 2 / 3);
+assert.equal(report.recall, 2 / 3);
+assert.equal(report.f1, 2 / 3);
+assert.equal(report.falsePositiveCostPaise > 0, true);
+const { signature: _signature, ...unsigned } = development[0];
+const altered = signFixture({ ...unsigned, event: { ...unsigned.event, providerData: { fixture_revision: 'changed' } } }, secret);
+const changedCorpusReport = runFixtureEvaluation([altered, ...development.slice(1)], secret, 'development', '2026-08-23T00:00:00.000Z');
+assert.notEqual(changedCorpusReport.configurationHash, report.configurationHash, 'the report hash must bind the exact signed-fixture contents');
+console.log('Phase 5 development/held-out fixture corpus and evaluation checks passed.');

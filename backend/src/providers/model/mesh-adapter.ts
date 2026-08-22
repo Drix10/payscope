@@ -30,7 +30,9 @@ export class MeshModelAdapter implements ModelProvider {
 
   async complete<T>(request: ModelRequest<T>): Promise<ModelResult<T>> {
     if (!Number.isSafeInteger(request.maxTokens) || request.maxTokens < 1 || request.maxTokens > 768) throw new Error('Model output token budget must be between 1 and 768');
+    if (request.timeoutMs !== undefined && (!Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1)) throw new Error('Model request timeout must be a positive integer');
     assertInputWithinBudget(`${request.systemPrompt}\n\n${request.userContent}`, request.maxInputTokens);
+    const timeoutMs = request.timeoutMs === undefined ? this.timeoutMs : Math.min(this.timeoutMs, request.timeoutMs);
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.apiKey}`, 'content-type': 'application/json' },
@@ -51,7 +53,7 @@ export class MeshModelAdapter implements ModelProvider {
           },
         },
       }),
-      signal: AbortSignal.timeout(this.timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const payload = await response.json().catch(() => ({})) as MeshResponse;
     if (!response.ok) throw new Error(`Mesh model request failed (${response.status})`);

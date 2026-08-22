@@ -1,4 +1,4 @@
-import { Incident, NormalizedEvent, RiskAnalysis, RiskAnalysisSchema, VulcanEnrichment } from '../domain/contracts';
+import { Incident, NormalizedEvent, RiskAnalysis, RiskAnalysisModelOutputSchema, RiskAnalysisSchema, VulcanEnrichment } from '../domain/contracts';
 import { ModelProvider } from '../providers/model/interface';
 
 export type RiskAnalystTools = {
@@ -38,12 +38,19 @@ export async function runRiskAnalyst(provider: ModelProvider, tools: RiskAnalyst
     userContent: JSON.stringify({ incident: input.incident, enrichment: input.enrichment, timeline: safeTimeline, merchantFailureRate, networkFailureRate, customerIncidentCount }),
     maxInputTokens: 3_072,
     maxTokens: 768,
-    responseSchema: RiskAnalysisSchema,
+    responseSchema: RiskAnalysisModelOutputSchema,
     tenantId,
   });
-  const analysis = requiredMissingEvidence.length
-    ? RiskAnalysisSchema.parse({ ...result.content, missingEvidence: [...new Set([...requiredMissingEvidence, ...result.content.missingEvidence])].slice(0, 12) })
-    : result.content;
+  const analysis = RiskAnalysisSchema.parse({
+    ...result.content,
+    missingEvidence: requiredMissingEvidence.length ? [...new Set([...requiredMissingEvidence, ...result.content.missingEvidence])].slice(0, 12) : result.content.missingEvidence,
+    toolResults: {
+      incidentTimelineEventCount: safeTimeline.length,
+      merchantFailureRate,
+      networkFailureRate,
+      customerIncidentCount,
+    },
+  });
   if (!input.enrichment && !analysis.missingEvidence.length) throw new Error('Risk analysis must record missing enrichment evidence');
   if (analysis.failureRootCause === 'fraud_confirmed' &&
     (!input.enrichment?.crossBorderFlag || customerIncidentCount === null || customerIncidentCount < 3 || analysis.evidenceStrength !== 'strong')) {

@@ -29,10 +29,12 @@ let originalPolicy;
     const { error: proposalError } = await client.from('payscope_action_proposals').insert([{ id: firstProposalId, organization_id: organizationId, incident_id: incidentId, action_type: 'retry_link_sms', content: {} }, { id: secondProposalId, organization_id: organizationId, incident_id: incidentId, action_type: 'retry_link_sms', content: {} }]);
     if (proposalError) throw new Error(proposalError.message);
     const delivery = { status: 'simulated', note: 'integration test; no customer message sent', simulatedAt: now };
-    const first = await client.rpc('payscope_approve_proposal', { p_organization_id: organizationId, p_proposal_id: firstProposalId, p_actor_id: 'integration-test', p_actor_session_hash: 'e'.repeat(64), p_delivery_result: delivery });
-    if (first.error) throw new Error(first.error.message);
-    const second = await client.rpc('payscope_approve_proposal', { p_organization_id: organizationId, p_proposal_id: secondProposalId, p_actor_id: 'integration-test', p_actor_session_hash: 'e'.repeat(64), p_delivery_result: delivery });
-    assert.ok(second.error, 'one-per-24h stopping rule must reject a second simulated outreach approval');
+    const [first, second] = await Promise.all([
+      client.rpc('payscope_approve_proposal', { p_organization_id: organizationId, p_proposal_id: firstProposalId, p_actor_id: 'integration-test', p_actor_session_hash: 'e'.repeat(64), p_delivery_result: delivery }),
+      client.rpc('payscope_approve_proposal', { p_organization_id: organizationId, p_proposal_id: secondProposalId, p_actor_id: 'integration-test', p_actor_session_hash: 'e'.repeat(64), p_delivery_result: delivery }),
+    ]);
+    assert.equal([first, second].filter(result => !result.error).length, 1, 'the advisory lock must admit exactly one concurrent outreach approval');
+    assert.equal([first, second].filter(result => result.error).length, 1, 'one-per-24h stopping rule must reject the competing approval');
     const contacts = await client.from('payscope_contact_attempts').select('id').eq('organization_id', organizationId).eq('incident_id', incidentId);
     if (contacts.error) throw new Error(contacts.error.message);
     assert.equal(contacts.data.length, 1);

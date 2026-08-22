@@ -60,7 +60,7 @@ memory path.
 - [x] Link the CLI to the configured hosted project, apply the foundation and
   audit-schema repair migrations, seed the Test Mode organization, and verify
   its database-generated audit genesis entry with `payscope_verify_audit_chain`.
-  Org A/Org B RLS testing remains a separate unchecked acceptance gate.
+  The hosted Org A/Org B RLS test now also passes with disposable operators.
 - [x] Make the VPS database client compatible with Node 20/21 by injecting the
   `ws` transport into Supabase Realtime (which initializes eagerly even though
   this MVP makes no Realtime subscription). The no-native-WebSocket regression
@@ -151,7 +151,7 @@ for valid and invalid payloads.
 - [x] Add the feature-gated `PAYSCOPE_MVP_PIPELINE` webhook path. Its isolated
   test verifies HMAC before parsing, organization lookup, raw-payload hashing,
   customer-reference hashing, and atomic-intake handoff; real Supabase
-  verification remains part of the unchecked durable-intake gate above.
+  verification passed in the hosted durable-intake rollback/idempotency test.
 - [x] Implement the service-role repository and atomic
   `payscope_ingest_event_and_enqueue` RPC contract. It accepts a normalized,
   raw-payload-free event and creates its `enrich_event` job in the same
@@ -167,9 +167,9 @@ for valid and invalid payloads.
 - [x] Add the feature-gated QueueWorker implementation and unit-check its
   1s/5s/30s retry schedule plus terminal dead-letter decision. It now accepts
   the documented fourth delivery, rejects lost leases rather than silently
-  completing them, and supports graceful stop-and-drain; live claim,
-  stale-lock, and database-outage verification remain part of the unchecked
-  durable-worker task above.
+  completing them, supports graceful stop-and-drain, serially drains a burst
+  without parallel handlers, and recovers from a transient database-claim
+  failure without leaving its processing state stuck.
 - [x] Start one QueueWorker with the VPS server when the durable pipeline is
   enabled. It processes enrichment, correlation, and full validated
   investigations; a missing Mesh key or invalid agent result writes a FAILED
@@ -187,6 +187,14 @@ for valid and invalid payloads.
   stale-worker replay cannot enqueue duplicate downstream work while a later
   event can still trigger a new investigation. The hosted durable intake and
   queue-lease tests exercise the replay/idempotency boundary.
+- [x] Make every queue row tenant-scoped to its source event with a composite
+  foreign key and delete cascade. Migration `202608220009` removed the two
+  already-proven orphaned Test Mode jobs, and `202608220010` replaced all three
+  enqueue RPC bodies before accepting new work. Hosted durable-intake and
+  queue-lease checks now use isolated fixture jobs, so they cannot race the
+  live VPS worker or leave retry/dead-letter debris. The dedicated hosted
+  source-event regression exercises enrichment/correlation/investigation
+  enqueue RPCs and proves cascade cleanup.
 - [x] Use `pg_cron` only to reclaim stale locks and wake scheduled retries; the
   VPS Node worker, not Postgres, runs provider and model calls. Hosted Cron now
   runs `payscope-requeue-stale-locks` every minute and the job definition was
@@ -251,7 +259,7 @@ for valid and invalid payloads.
   second attempt in the same 24-hour window.
 - [x] Add pure correlation coverage proving that a linked dispute enters
   `DISPUTE_OPENED` with CRITICAL tier. Durable proposal cancellation and audit
-  persistence remain part of the unchecked task above.
+  persistence are covered by the hosted terminal-transition test.
 - [x] Generate signed fixture sets A/B and test gateway, bank, customer,
   infrastructure, fraud, partial recovery, duplicate, concurrency, and
   out-of-order-event cases. PII-free signed fixtures cover the infrastructure
@@ -261,45 +269,60 @@ for valid and invalid payloads.
 **Gate:** every fixture event is transparently enriched or marked unavailable,
 then produces the correct correlated incident, risk tier, and state transition.
 
+### Phase 0–2 implementation verification — 2026-08-22
+
+- [x] Rechecked contracts, strict TypeScript builds, signed fixtures, durable
+  intake/queue/RLS/terminal-transition integrations, enrichment degradation,
+  correlation, contact locking, and public-response PII projection. The source
+  implementations satisfy their Phase 0–2 checklist items.
+- [x] Hardening recheck: all local backend tests, production dependency audit,
+  and diff validation pass. Hosted migration `202608220009`/`010`, atomic
+  intake, and `SKIP LOCKED` fixture tests pass; the queue contains no dead or
+  source-event-invalid row after cleanup.
+- [ ] Operational proof remains external to source code: deploy the current
+  VPS/Vercel builds and observe one Razorpay-originated Test Mode delivery.
+  These are tracked in the Phase 1 deployment/webhook rows above and do not
+  have a local fallback.
+
 ## Phase 3 — bounded agent pipeline and policy gates
 
 - [x] Add the injected model-provider interface plus Mesh Chat Completions and
   deterministic Echo adapters. Mesh requests use provider-enforced JSON Schema
   structured output, temperature zero, prompt/output caps, and local Zod
   validation; Echo schema-validation tests pass. Pipeline latency persistence
-  and failure audit logging remain part of the unchecked integration task above.
+  and failure audit logging are covered by the durable investigation runner.
 - [x] Use an eight-second bounded Mesh timeout: this stays below the MVP's
   ten-second end-to-end target while allowing a schema-constrained gateway
   response to complete instead of incorrectly escalating on normal latency.
 - [x] Select Mesh's `openai/gpt-4o-mini-2024-07-18` route as the MVP default
   after a live probe confirmed strict JSON Schema output. The Gemini route was
   rejected because it returned prose despite the structured-output request.
-- [ ] Implement the Investigation Supervisor exactly within its 2,048/512 token
-  budget and schema. It may short-circuit clear infrastructure events and must
-  require human review when enrichment is unavailable.
+- [x] Implement the Investigation Supervisor within its 2,048/512 token
+  budget and schema. It may short-circuit clear infrastructure events and
+  rejects output that omits required human review when enrichment is unavailable.
 - [x] Add the schema-validated Supervisor module and offline test coverage for
   an infrastructure short-circuit. Persisted token-budget accounting and queue
-  dispatch remain part of the unchecked integration task above.
-- [ ] Implement the four tenant-scoped, read-only Risk Analyst tools: incident
+  dispatch are covered by the durable investigation runner.
+- [x] Implement the four tenant-scoped, read-only Risk Analyst tools: incident
   timeline, merchant failure rate, network/gateway failure proxy, and hashed
-  customer incident count. Tool handlers inject organization scope; model input
-  cannot select an organization.
-- [ ] Extend the model orchestration contract so the Risk Analyst can make only
-  those declared tool calls, or collect the four server-side tool results before
-  analysis and record that orchestration explicitly. No unrestricted tools.
-- [ ] Implement Risk Analyst output validation, missing-evidence reporting,
+  customer incident count. The service-role RPC injects organization scope;
+  the model receives only bounded aggregate results.
+- [x] Collect the four server-side tool results before Risk Analyst inference,
+  record them as `toolResults` in the persisted risk analysis, and expose no
+  unrestricted tool-call or tenant-selector path to the model.
+- [x] Implement Risk Analyst output validation, missing-evidence reporting,
   evidence items without raw data, false-positive cost on every run, and fraud
   conclusions only under the plan's evidence rules.
 - [x] Add the bounded Risk Analyst module with all four declared server-tool
-  interfaces and test coverage for a schema-validated analysis. Durable tool
-  queries remain pending.
-- [ ] Implement Recovery Planner output validation and its eight approved action
+  interfaces and test coverage for a schema-validated analysis. The hosted
+  scope test verifies the durable aggregate-tool RPC and its allowlist.
+- [x] Implement Recovery Planner output validation and its eight approved action
   strings only. Fraud or dispute paths produce no outreach. Hinglish scripts are
   at most 75 words and include opt-out wording.
 - [x] Add Recovery Planner schema validation, approved-action enforcement,
   fraud/dispute/opt-in guards, and the 75-word script limit; offline agent
   pipeline coverage passes.
-- [ ] Implement deterministic Policy Evaluator gates in order: fraud,
+- [x] Implement deterministic Policy Evaluator gates in order: fraud,
   dispute, auto-resolve ceiling, human-review floor, critical tier, contact
   limits, then merchant-policy match.
 - [x] Add the pure deterministic Policy Evaluator in the required gate order,
@@ -319,13 +342,14 @@ then produces the correct correlated incident, risk tier, and state transition.
 - [x] Treat unavailable aggregate-risk tooling as unknown rather than a zero
   signal, and let repository-read failures reach the durable queue retry path;
   only actual agent/model failures produce the audited failed investigation.
-- [ ] Execute independent Risk Analyst/Recovery Planner work in parallel only
-  when the Supervisor marks it safe; otherwise preserve declared order. Capture
-  full pipeline latency and use the degraded path when timeouts occur.
-- [ ] Test offline end-to-end: infrastructure fixture produces a bounded
-  auto-resolve proposal; fraud fixture escalates with no proposal; unavailable
-  enrichment forces review; invalid model output escalates; rate/contact gates
-  hold under concurrent jobs.
+- [x] Preserve declared Risk Analyst → Recovery Planner order because Recovery
+  consumes the validated Risk conclusion; no speculative concurrent model call
+  is made. A shared 9.5-second deadline is passed to every model request and
+  timeout/schema failures enter the audited escalation path.
+- [x] Test offline end-to-end: infrastructure produces a bounded auto-resolve
+  proposal; fraud escalates with no proposal; unavailable enrichment forces
+  review; invalid model output escalates; and the hosted concurrent outreach
+  test proves rate/contact gates serialize correctly.
 
 **Gate:** Echo-adapter pipeline is fully deterministic and every agent output is
 schema-valid; targeted real-model runs remain bounded and meet the documented
@@ -334,9 +358,9 @@ under-10-second buildathon target where provider latency permits.
 ## Phase 4 — proposals, audit, and MVP API
 
 - [x] Add tenant-scoped, read-only Agentic MVP API reads for health, incident
-  queue/detail, and incident audit history. Every database query injects the
-  configured organization ID; proposal approval and dashboard metrics remain
-  unchecked.
+  queue/detail, incident audit history, and compact audit integrity. Every
+  database query injects the configured organization ID; dashboard metrics
+  remain a later phase.
 - [x] Validate MVP read-route request boundaries before database access: an
   incident/audit identifier must be a UUID and incident-list limits are bounded
   to 1–100. Invalid input returns `400 INVALID_REQUEST`, while an absent valid
@@ -354,14 +378,27 @@ under-10-second buildathon target where provider latency permits.
   The adapter has no transport or credential path and returns `simulated`.
   The tenant-scoped approval RPC records the actor/session hash, approval,
   simulated delivery, and two audit entries; no live channel adapter exists.
-- [ ] Add proposal cancellation when a later success resolves an incident or a
+- [x] Add proposal cancellation when a later success resolves an incident or a
   dispute opens; retain the cancellation as an audit event.
-- [ ] Add API routes for tenant-scoped incident lists/detail, proposals and
-  approval, audit history/verification, dashboard metrics, metrics data, and
-  natural-language dashboard query.
-- [ ] Make dashboard-query structured and read-only: a natural-language request
-  is converted to a bounded incident-summary response, with tenant filters
-  injected server-side. It cannot execute actions or access PII.
+- [x] Add API routes for tenant-scoped incident lists/detail, proposal
+  approval, audit history, and audit verification. Their request-boundary test
+  rejects malformed IDs and never exposes internal hashes or PII.
+- [x] Add tenant-scoped dashboard metrics/data and the natural-language query
+  contract. `payscope_dashboard_metrics` returns real operational totals but
+  explicit `null`/`not_run` evaluation and recovery-attribution fields until
+  Phase 5 has a versioned fixture report and causal Payment Link evidence.
+- [x] Make dashboard-query structured and read-only: a natural-language input
+  is bounded to 240 characters and deterministically recognizes only lifecycle
+  state/risk-tier words. It never reaches SQL, a model prompt, an action, or an
+  organization selector; returned incident summaries exclude PII and provider
+  IDs. Router/repository regressions cover malformed limits, injection-like
+  text, punctuation, compound lifecycle terms, and the explicit 100-incident
+  recent-data bound.
+- [x] Phase 4 hardening recheck: complete local suite, all hosted Supabase
+  integrations, frontend build, production dependency audits, and diff checks
+  pass. Dashboard aggregates preserve safe-integer precision, `not_run`
+  evaluation payloads cannot contain partial scores, and unavailable values are
+  displayed instead of silently converted to zero.
 - [ ] Add audit events for receipt, enrichment outcome, correlation transition,
   investigation lifecycle, policy decision, proposal creation/approval,
   simulated delivery, cancellation, escalation, and human resolution.
@@ -375,33 +412,40 @@ proposal, see simulated delivery, and verify an intact audit chain.
 ## Phase 5 — fixtures, evaluation, demo evidence
 
 - [x] Define and test one HMAC-signed fixture schema with stable IDs, tenant
-  ID, normalized event/enrichment data, expected incident outcome, and
-  manually-set fraud ground truth. Verification rejects tampering and a
-  fixture from the wrong development/held-out partition.
-- [ ] Build 300 development fixtures and 200 held-out fixtures before tuning
-  prompts/thresholds. Store the held-out set separately and do not inspect it
-  while changing logic.
+  ID, normalized event/enrichment data, expected incident outcome, and fraud
+  ground truth. Verification rejects tampering and a fixture from the wrong
+  development/held-out partition.
+- [x] Build and verify separate, non-overlapping 300-development / 200-held-out
+  signed PII-free regression fixtures. The current corpus is deterministic and
+  generated, so it is explicitly **not** represented as the plan's manually
+  curated adjudication set.
+- [ ] Replace the generated ground-truth labels with 500 manually curated
+  fixtures before making a final precision/recall claim. Do not tune against
+  the held-out labels after they are adjudicated.
 - [x] Implement the pure fixture evaluation metric core for precision, recall,
   F1, confusion-matrix counts, median-based false-positive cost, and safe
   integer amounts. Zero denominators return `not_available`, never zero or
-  infinity; the execution/report and 300/200 fixture sets remain pending.
-- [ ] Implement recovery attribution. A recovery counts only with a proposal,
+  infinity. The runner generates a versioned, configuration-hashed report.
+- [x] Implement recovery attribution. A recovery counts only with a proposal,
   operator approval, captured payment within 24 hours, and proposal ID bound to
-  a payment-link reference or explicit incident correlation.
-- [ ] Mark all recovery results as Test Mode simulation while communications are
+  a payment-link reference or explicit incident correlation. The pure and
+  hosted tests cover duplicate credits, disputes, late captures, no approval,
+  and per-incident amount caps.
+- [x] Mark all recovery results as Test Mode simulation while communications are
   simulated. Do not state or imply real merchant revenue recovery.
-- [ ] Render and publish the exception list: no COD/RTO decisioning, no dispute
+- [x] Render and publish the exception list: no COD/RTO decisioning, no dispute
   outreach, no fraud outreach, no unmatched-policy recovery, no live message
   delivery, and no Razorpay Live Mode.
 - [ ] Run development evaluation, lock thresholds, then run held-out evaluation
   once and preserve the raw report with timestamp, fixture set version, model
   adapter/model ID, and configuration hash.
-- [ ] Update README, deployment guide, and API examples to match the completed
-  MVP; remove old claims that conflict with the canonical plan.
-- [ ] Remove obsolete backend code, unused dependencies, migration paths,
+- [x] Update README, VPS deployment guidance, environment examples, and metric
+  methodology for the current MVP. They state the programmatic-fixture
+  limitation, Test Mode attribution rule, and held-out one-run database lock.
+- [x] Remove obsolete backend code, unused dependencies, migration paths,
   environment variables, endpoints, fixtures, and tests after their canonical
-  replacements are green. Do not leave inaccessible dead code as a second
-  source of truth.
+  replacements are green. Source/import/dependency scans find no runnable
+  legacy path or incompatible second source of truth.
 - [ ] Run the complete backend suite from a clean install, then run an
   integration sequence against Supabase: signed event → queue worker →
   enrichment → correlation → investigation → policy → proposal → approval →
@@ -411,3 +455,12 @@ proposal, see simulated delivery, and verify an intact audit chain.
 the durable pipeline; the offline fixture suite reports defensible metrics and
 the UI/README clearly state every simulation and exception. The repository has
 no legacy path that can create a conflicting incident, action, or audit record.
+
+### Phase 5 implementation recheck — 2026-08-23
+
+- [x] Applied `202608230003_evaluation_reports.sql` to hosted Supabase and
+  verified the live metrics contract. Evaluation remains `not_run` until the
+  VPS-only signing secret is configured and a report is deliberately recorded.
+- [x] Added and passed local fixture/attribution tests plus the hosted causal
+  attribution integration. The temporary integration rows are removed after
+  the assertion; no report or merchant-recovery claim was fabricated.

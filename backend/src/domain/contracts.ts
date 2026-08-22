@@ -87,6 +87,13 @@ export const InvestigationPlanSchema = z.object({
   reasoning: z.string().min(1).max(200),
 }).strict();
 
+export const RiskToolResultsSchema = z.object({
+  incidentTimelineEventCount: z.number().int().min(0).max(100),
+  merchantFailureRate: z.number().min(0).max(1).nullable(),
+  networkFailureRate: z.number().min(0).max(1).nullable(),
+  customerIncidentCount: z.number().int().nonnegative().nullable(),
+}).strict();
+
 export const RiskAnalysisSchema = z.object({
   failureRootCause: z.enum(['gateway_degraded', 'issuer_block', 'fraud_confirmed', 'fraud_suspected', 'customer_error', 'subscription_lapse', 'unknown']),
   evidenceStrength: z.enum(['strong', 'moderate', 'weak']),
@@ -96,7 +103,11 @@ export const RiskAnalysisSchema = z.object({
   chargebackEvidenceReady: z.boolean(),
   evidenceItems: z.array(z.string().min(1).max(200)).max(30),
   recommendedActionCategory: z.enum(['auto_resolve_no_action', 'prepare_chargeback_evidence', 'flag_for_review', 'propose_recovery', 'escalate_fraud']),
+  toolResults: RiskToolResultsSchema,
 }).strict();
+
+/** Model output excludes server-calculated tool facts; those are added locally. */
+export const RiskAnalysisModelOutputSchema = RiskAnalysisSchema.omit({ toolResults: true });
 
 export const RecoveryPlanSchema = z.object({
   proposedActions: z.array(z.object({ actionType: ActionTypeSchema, rationale: z.string().min(1).max(100), estimatedRecoveryPaise: paise.nullable(), scriptContent: z.string().min(1).max(600).optional(), requiresOperatorApproval: z.literal(true) }).strict()).max(8),
@@ -173,6 +184,68 @@ export const QueueJobSchema = z.object({
   triggerEventId: uuid.optional(),
 }).strict();
 
+/** Read-only, tenant-scoped natural-language dashboard response. */
+export const DashboardIncidentSummarySchema = z.object({
+  id: uuid,
+  status: IncidentStatusSchema,
+  riskTier: RiskTierSchema,
+  remainingAmountPaise: paise,
+  updatedAt: isoDateTime,
+}).strict();
+
+export const DashboardQueryResponseSchema = z.object({
+  query: z.string().min(1).max(240),
+  interpretation: z.string().min(1).max(240),
+  matchedIncidentCount: z.number().int().nonnegative().max(100),
+  matchedRemainingAmountPaise: paise,
+  incidents: z.array(DashboardIncidentSummarySchema).max(20),
+  limitations: z.array(z.string().min(1).max(240)).min(2).max(8),
+}).strict();
+
+/**
+ * Evaluation and recovery attribution are deliberately nullable until a
+ * versioned fixture run / causal Payment Link reference exists. This makes an
+ * absent metric visible instead of converting unknown evidence into zero.
+ */
+export const DashboardMetricsSchema = z.object({
+  operations: z.object({
+    totalAtRiskPaise: paise.nullable(),
+    proposalsGenerated: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    proposalsApproved: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    attributedRecoveries: z.number().int().nonnegative().nullable(),
+    recoveredPaise: paise.nullable(),
+    recoveryRate: z.number().min(0).max(1).nullable(),
+    contactToRecoveryRatio: z.number().nonnegative().nullable(),
+  }).strict(),
+  evaluation: z.object({
+    status: z.enum(['not_run', 'available']),
+    split: z.enum(['development', 'held_out']).nullable(),
+    fixtureSetVersion: z.string().min(1).max(160).nullable(),
+    runAt: isoDateTime.nullable(),
+    configurationHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+    modelId: z.string().min(1).max(160).nullable(),
+    sampleCount: z.number().int().nonnegative(),
+    precision: z.number().min(0).max(1).nullable(),
+    recall: z.number().min(0).max(1).nullable(),
+    f1: z.number().min(0).max(1).nullable(),
+    falsePositiveCostPaise: paise.nullable(),
+  }).strict(),
+  exceptions: z.array(z.string().min(1).max(240)).min(6).max(10),
+}).strict().superRefine((value, context) => {
+  const evaluationValues = [
+    value.evaluation.split, value.evaluation.fixtureSetVersion, value.evaluation.runAt,
+    value.evaluation.configurationHash, value.evaluation.modelId, value.evaluation.precision,
+    value.evaluation.recall, value.evaluation.f1, value.evaluation.falsePositiveCostPaise,
+  ];
+  if (value.evaluation.status === 'not_run') {
+    if (value.evaluation.sampleCount !== 0 || evaluationValues.some(item => item !== null)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'A not_run evaluation must not expose partial metrics.', path: ['evaluation'] });
+    }
+  } else if (value.evaluation.sampleCount < 1 || evaluationValues.some(item => item === null)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'An available evaluation must include complete metadata and metrics.', path: ['evaluation'] });
+  }
+});
+
 export type EnrichmentSource = z.infer<typeof EnrichmentSourceSchema>;
 export type IncidentStatus = z.infer<typeof IncidentStatusSchema>;
 export type RiskTier = z.infer<typeof RiskTierSchema>;
@@ -182,9 +255,12 @@ export type VulcanEnrichment = z.infer<typeof VulcanEnrichmentSchema>;
 export type Incident = z.infer<typeof IncidentSchema>;
 export type InvestigationPlan = z.infer<typeof InvestigationPlanSchema>;
 export type RiskAnalysis = z.infer<typeof RiskAnalysisSchema>;
+export type RiskToolResults = z.infer<typeof RiskToolResultsSchema>;
 export type RecoveryPlan = z.infer<typeof RecoveryPlanSchema>;
 export type PolicyDecisionContract = z.infer<typeof PolicyDecisionSchema>;
 export type Investigation = z.infer<typeof InvestigationSchema>;
 export type ActionProposal = z.infer<typeof ActionProposalSchema>;
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;
 export type QueueJob = z.infer<typeof QueueJobSchema>;
+export type DashboardQueryResponse = z.infer<typeof DashboardQueryResponseSchema>;
+export type DashboardMetrics = z.infer<typeof DashboardMetricsSchema>;

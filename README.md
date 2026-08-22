@@ -93,8 +93,9 @@ section first.
    Mesh calls use `response_format: json_schema` and local Zod validation.
 4. Configure Razorpay Test Mode to deliver to
    `https://<your-vps-host>/webhooks/razorpay`, using the same webhook secret.
-   PayScope persists only `payment.failed`, `payment.captured`, `order.paid`,
-   and dispute-opening events (`created`, `under_review`, `action_required`).
+   PayScope persists only `payment.failed`, `payment.captured`,
+   `payment_link.paid`, `order.paid`, and dispute-opening events (`created`,
+   `under_review`, `action_required`).
    Other correctly signed Razorpay events are acknowledged with `200` and
    discarded: they create no event, queue job, audit entry, or incident.
 
@@ -127,6 +128,34 @@ npm run build
 `GET /health` reports whether the durable pipeline is enabled. With it enabled,
 the React app uses `GET /api/mvp/health`, `/incidents`, incident detail, and
 audit history. Configure `CORS_ORIGINS` with the exact Vercel URL.
+
+## Evaluation and Test Mode recovery evidence
+
+The dashboard never invents a recovery. A value is credited only when a
+recovery proposal was created, an operator approved its simulation, a
+`payment.captured` event occurred within 24 hours, and the capture has either
+the proposal's `ps:<proposal-uuid>` Payment Link reference or an explicit
+incident correlation. Each capture is credited once and never above its
+incident's original at-risk amount. These are still **Test Mode simulation
+metrics, not real merchant revenue**.
+
+The Phase 5 runner needs the VPS-only `PAYSCOPE_FIXTURE_SIGNING_SECRET` from
+`backend/.env.example`. Run development first, lock the baseline, then run the
+held-out split exactly once per fixture version:
+
+```powershell
+cd backend
+$env:PAYSCOPE_RUN_EVALUATION = 'true'
+$env:PAYSCOPE_EVALUATION_SPLIT = 'development' # then held_out after lock
+npm run run:evaluation
+```
+
+The database records a versioned report and audit entry; it rejects a second
+held-out report for the same organization and fixture version. The current
+500-item split (300 development / 200 held-out) is HMAC-signed, PII-free, and
+deterministic, but it is programmatically generated. It is useful for pipeline
+regression only and **must be replaced with the locked plan's manually curated
+labels before presenting a final precision/recall claim**.
 
 ## Deployment
 
