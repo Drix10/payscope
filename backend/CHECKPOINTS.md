@@ -512,3 +512,14 @@ no legacy path that can create a conflicting incident, action, or audit record.
   cancellation. This closes the remaining stalled-network path that could
   otherwise retain a worker's in-flight promise or the in-process duplicate-
   approval lock indefinitely.
+
+### Demo-data integrity cleanup — 2026-08-23
+
+- [x] Quarantined the 13 legacy demo incidents whose `correlated_event_ids`
+  referenced missing durable event rows. Hard deletion is intentionally blocked
+  because it would mutate append-only audit rows. The cleanup is recorded by a
+  compensating audit entry, sets those records to `DISMISSED`, and leaves the
+  two evidence-backed incidents active.
+- [x] Exclude `DISMISSED` incidents from the default active incident API list;
+  an explicit lifecycle filter can still retrieve them for audit review. This
+  prevents unverifiable legacy records from re-entering the operator queue.

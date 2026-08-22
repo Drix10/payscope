@@ -187,7 +187,10 @@ export class MvpRepository {
       .eq('organization_id', organizationId)
       .order('updated_at', { ascending: false })
       .limit(Math.min(Math.max(limit, 1), 100));
+    // Dismissed records are retained for auditability but are not actionable
+    // incidents. A caller can still request that explicit lifecycle state.
     if (status) query = query.eq('status', status);
+    else query = query.neq('status', 'DISMISSED');
     const { data, error } = await query;
     if (error) throw databaseError('incident list', error.message);
     return (data ?? []).map(row => incidentFromRow(row as Record<string, unknown>));
