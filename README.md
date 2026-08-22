@@ -99,6 +99,7 @@ npm ci
 npm run build
 npm run test:contracts
 npm run test:database-client
+npm run test:mvp-api
 npm run test:webhook-intake
 npm run test:agentic-webhook
 npm run test:queue

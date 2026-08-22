@@ -19,6 +19,7 @@
     "test:agents": "npm run build && node scripts/agent-pipeline-test.js",
     "test:investigation-runner": "npm run build && node scripts/investigation-runner-test.js",
     "test:agentic-webhook": "npm run build && node scripts/agentic-webhook-intake-test.js",
+    "test:mvp-api": "npm run build && node scripts/mvp-api-test.js",
     "test:database-client": "npm run build && node scripts/database-client-test.js"
   },
   "dependencies": {

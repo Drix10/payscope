@@ -217,6 +217,11 @@ report and cannot mistake a simulation for a real customer or financial action.
   claims that conflict with the canonical buildathon MVP.
 - [ ] Verify `npm run build` has no warnings; record bundle output and run a
   manual browser-console/network audit against the deployed Test Mode demo.
+- [x] Complete a first deployed empty-state smoke check at
+  `https://payscope-ai.vercel.app`: the workspace loaded the `agentic_mvp`
+  health state and empty tenant-scoped incident list with no browser-console
+  warnings or errors. `https://payscope.vercel.app` is a separate legacy
+  payroll-login deployment and is not the PayScope operator URL.
 - [ ] Update README/demo copy, screenshots, and pitch flow only after the
   backend evaluation report and exception list are final.
 - [ ] Delete obsolete components, styles, handlers, API validators, test

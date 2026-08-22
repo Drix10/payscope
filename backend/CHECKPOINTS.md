@@ -292,6 +292,15 @@ under-10-second buildathon target where provider latency permits.
   queue/detail, and incident audit history. Every database query injects the
   configured organization ID; proposal approval and dashboard metrics remain
   unchecked.
+- [x] Validate MVP read-route request boundaries before database access: an
+  incident/audit identifier must be a UUID and incident-list limits are bounded
+  to 1–100. Invalid input returns `400 INVALID_REQUEST`, while an absent valid
+  identifier returns `404`; the API regression test covers both paths.
+- [ ] Redeploy the validated request-boundary fix to the VPS, then repeat the
+  public `GET /api/mvp/incidents/not-a-uuid` smoke check and confirm `400`.
+  Reduce the VPS `CORS_ORIGINS` value to the one current operator origin
+  (`https://payscope-ai.vercel.app`); do not retain a stale Vercel project or
+  localhost origins in production.
 - [ ] Add `CommunicationsProvider` and `LoggingCommunicationsAdapter` only.
   `proposeAction` stores a proposal; approval records actor/time and produces a
   simulated delivery result. No live channel adapter is registered.
