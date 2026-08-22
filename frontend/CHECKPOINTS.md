@@ -325,6 +325,11 @@ claim, or hidden component can bypass or contradict this flow.
   query detail move behind clear disclosures; no legacy `/api/payment-ops/*`
   request, token-in-browser guidance, connection import, policy mutation,
   checkout, or direct incident-action control was restored.
+- [x] Fix the walkthrough-to-dashboard entry event and simplify the operator
+  language after the Resolution Flow implementation: the landing CTA now
+  reaches the dashboard through the same `window` event it dispatches, and the
+  dashboard leads with “Handle an incident”, Received → Checked → Your review
+  → Logged, and “What PayScope found” rather than internal agent terminology.
 - [ ] Visually compare the Resolution Flow dashboard at desktop and 390px with
   the selected direction-3 reference, then capture and correct exact remaining
   differences before deployment. `design-qa.md` is blocked because this
