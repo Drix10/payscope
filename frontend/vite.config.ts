@@ -7,6 +7,8 @@ export default defineConfig(({ mode }) => {
   return {
   plugins: [react(), tailwindcss()],
   server: {
+    host: '0.0.0.0',
+    allowedHosts: ['terminal.local'],
     port: 3000,
     proxy: {
       '/api': {

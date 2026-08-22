@@ -317,12 +317,16 @@ claim, or hidden component can bypass or contradict this flow.
 - [x] Preserve a working route from the fourth section and product navigation
   into the current tenant-scoped Agentic MVP dashboard; existing API reads,
   proposal approval, audit-chain gate, and Test Mode labels were not replaced.
-- [ ] Port the source commit's sidebar/section dashboard composition onto the
-  current incident, investigation, metrics, and audit schemas. Do not restore
-  legacy `/api/payment-ops/*` requests, token-in-browser guidance, connection
-  imports, policy mutation, checkout, or direct incident-action controls.
-- [ ] Visually compare the local restored walkthrough and dashboard with the
-  source commit at desktop and 390px, then capture the exact remaining
-  differences before deployment. `design-qa.md` is currently blocked because
-  this Desktop browser cannot resolve the local preview; this row must not be
-  checked from a TypeScript build alone.
+- [x] Replace the source commit's legacy dashboard composition with the
+  selected Resolution Flow direction: a prioritised queue, a single active
+  incident, plain-language Received → Investigated → Ready for review →
+  Recorded progress, concise verified timeline and evidence explanation, and a
+  final approval-gated simulation. Full agent, audit, metrics, and read-only
+  query detail move behind clear disclosures; no legacy `/api/payment-ops/*`
+  request, token-in-browser guidance, connection import, policy mutation,
+  checkout, or direct incident-action control was restored.
+- [ ] Visually compare the Resolution Flow dashboard at desktop and 390px with
+  the selected direction-3 reference, then capture and correct exact remaining
+  differences before deployment. `design-qa.md` is blocked because this
+  Desktop browser cannot resolve `terminal.local`; this row must not be checked
+  from a TypeScript build alone.
