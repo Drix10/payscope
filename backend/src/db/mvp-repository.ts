@@ -1,12 +1,11 @@
-import { createHash, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ActionProposal, ActionProposalSchema, ActionTypeSchema, AuditEntry, AuditEntrySchema, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
+import { ActionProposal, ActionProposalSchema, ActionTypeSchema, AuditEntry, AuditEntrySchema, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, ExecutionActionSummary, ExecutionActionSummarySchema, ExecutionStateSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
 import { CorrelationEvent, IncidentCandidate } from '../pipeline/correlation-engine';
 import { CustomerContactStats, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
 import { canCorrelateWithTerminalIncident } from '../pipeline/webhook-event-policy';
-import type { FixtureEvaluationReport } from '../evaluation/run-evaluation';
-
+import { Reconciler } from '../providers/execution/reconciliation';
 type DemoOrganization = { id: string; customerHashSecret: string };
 type IngestResult = { eventId: string; duplicate: boolean };
 export type StoredEvent = CorrelationEvent & { organizationId: string; enrichmentSource: EnrichmentSource | null };
@@ -86,16 +85,8 @@ export class MvpRepository {
     if (event.eventType !== 'payment_link.paid') return;
     const referenceId = typeof event.providerData.payment_link_reference_id === 'string' ? event.providerData.payment_link_reference_id : undefined;
     if (!referenceId || !/^ps_[a-f0-9]{32}$/.test(referenceId)) return;
-    const { data, error } = await this.client.from('payscope_execution_actions').select('id').eq('organization_id', organizationId).eq('capability', 'deliver_recovery_link_email').eq('command_payload->>referenceId', referenceId).in('state', ['accepted', 'unreconciled', 'dispatching']).limit(1);
-    if (error) throw databaseError('Payment Link execution reconciliation lookup', error.message);
-    const actionId = Array.isArray(data) && data[0] && typeof (data[0] as Record<string, unknown>).id === 'string' ? (data[0] as Record<string, unknown>).id as string : null;
-    if (!actionId) return;
-    const payload = { referenceId, razorpayEventId: event.eventId, paymentId: event.paymentId ?? null, amountPaise: event.amountPaise ?? null, currency: event.currency ?? null };
-    const { error: receiptError } = await this.client.rpc('payscope_record_execution_receipt', {
-      p_organization_id: organizationId, p_action_id: actionId, p_provider: 'razorpay', p_receipt_kind: 'payment_link_paid', p_provider_operation_id: '',
-      p_receipt_hash: createHash('sha256').update(JSON.stringify(payload)).digest('hex'), p_redacted_payload: payload, p_state: 'confirmed', p_terminal_reason: 'PAYMENT_LINK_PAID',
-    });
-    if (receiptError) throw databaseError('Payment Link execution reconciliation', receiptError.message);
+    const reconciler = new Reconciler(this.client);
+    await reconciler.reconcilePaymentLinkPaid(organizationId, referenceId, event.eventId, event.paymentId ?? null);
   }
 
   async eventById(organizationId: string, eventId: string): Promise<StoredEvent> {
@@ -213,7 +204,7 @@ export class MvpRepository {
     return (data ?? []).map(row => incidentFromRow(row as Record<string, unknown>));
   }
 
-  async incidentDetail(organizationId: string, incidentId: string): Promise<{ incident: Incident; events: StoredEvent[]; proposals: ActionProposal[]; investigation: Investigation | null }> {
+  async incidentDetail(organizationId: string, incidentId: string): Promise<{ incident: Incident; events: StoredEvent[]; proposals: ActionProposal[]; investigation: Investigation | null; execution: ExecutionActionSummary[] }> {
     const { data, error } = await this.client
       .from('payscope_incidents')
       .select('*')
@@ -223,18 +214,20 @@ export class MvpRepository {
     if (error) throw databaseError('incident detail', error.message);
     if (!data) throw new Error('PayScope incident was not found');
     const incident = incidentFromRow(data as Record<string, unknown>);
-    const [eventsResult, proposalsResult, investigationResult] = await Promise.all([
+    const [eventsResult, proposalsResult, investigationResult, executionResult] = await Promise.all([
       incident.correlatedEventIds.length
         ? this.client.from('payscope_events').select('id, organization_id, normalized, enrichment, enrichment_source').eq('organization_id', organizationId).in('id', incident.correlatedEventIds)
         : Promise.resolve({ data: [], error: null }),
       this.client.from('payscope_action_proposals').select('*').eq('organization_id', organizationId).eq('incident_id', incidentId).order('proposed_at', { ascending: false }),
       this.client.from('payscope_investigations').select('*').eq('organization_id', organizationId).eq('incident_id', incidentId).order('started_at', { ascending: false }).limit(1).maybeSingle(),
+      this.client.from('payscope_execution_actions').select('id, capability, state, amount_paise, currency, terminal_reason, provider_object_id, retry_count, policy_version, capability_version, created_at, dispatched_at, completed_at').eq('organization_id', organizationId).eq('incident_id', incidentId).order('created_at', { ascending: false }).limit(50),
     ]);
     if (eventsResult.error) throw databaseError('incident events', eventsResult.error.message);
     if (proposalsResult.error) throw databaseError('incident proposals', proposalsResult.error.message);
     if (investigationResult.error) throw databaseError('incident investigation', investigationResult.error.message);
+    if (executionResult.error) throw databaseError('incident execution', executionResult.error.message);
     const events = (eventsResult.data ?? []).map(row => eventFromRow(row as Record<string, unknown>)).sort((left, right) => left.event.occurredAt.localeCompare(right.event.occurredAt));
-    return { incident, events, proposals: (proposalsResult.data ?? []).map(row => proposalFromRow(row as Record<string, unknown>)), investigation: investigationResult.data ? investigationFromRow(investigationResult.data as Record<string, unknown>) : null };
+    return { incident, events, proposals: (proposalsResult.data ?? []).map(row => proposalFromRow(row as Record<string, unknown>)), investigation: investigationResult.data ? investigationFromRow(investigationResult.data as Record<string, unknown>) : null, execution: (executionResult.data ?? []).map(row => executionSummaryFromRow(row as Record<string, unknown>)) };
   }
 
   async auditEntries(organizationId: string, incidentId?: string): Promise<AuditEntry[]> {
@@ -273,19 +266,6 @@ export class MvpRepository {
     return DashboardMetricsSchema.parse(data);
   }
 
-  /** Persists a validated, append-only fixture report through the audit-backed RPC. */
-  async recordFixtureEvaluationReport(organizationId: string, report: FixtureEvaluationReport): Promise<FixtureEvaluationReport> {
-    if (report.precision === null || report.recall === null || report.f1 === null || report.falsePositiveCostPaise === null) {
-      throw new Error('PayScope cannot persist an incomplete fixture evaluation report');
-    }
-    const { data, error } = await this.client.rpc('payscope_record_evaluation_report', {
-      p_organization_id: organizationId,
-      p_report: report,
-    });
-    if (error) throw databaseError('evaluation report persistence', error.message);
-    return parseFixtureEvaluationReport(data);
-  }
-
   /**
    * A bounded deterministic interpreter for the MVP's read-only dashboard.
    * User text never reaches SQL, a model prompt, or an organization selector.
@@ -294,9 +274,28 @@ export class MvpRepository {
     const normalizedQuery = query.trim();
     const parsed = parseDashboardFilters(normalizedQuery);
     const incidents = await this.listIncidents(organizationId, 100);
+    // Execution-state / provider / unresolved-receipt filters require a bounded
+    // join from execution actions back to their incidents (read-only, deterministic).
+    let executionIncidentIds: Set<string> | null = null;
+    if (parsed.executionStates.length || parsed.providers.length || parsed.unresolvedReceipts) {
+      let actionQuery = this.client.from('payscope_execution_actions').select('incident_id, state, capability').eq('organization_id', organizationId);
+      if (parsed.providers.length) actionQuery = actionQuery.in('capability', parsed.providers);
+      const { data: actionRows, error: actionError } = await actionQuery.limit(200);
+      if (actionError) throw databaseError('dashboard execution filter', actionError.message);
+      executionIncidentIds = new Set((actionRows ?? [])
+        .filter(row => {
+          const value = record(row as Record<string, unknown>);
+          const state = String(value.state ?? '');
+          if (parsed.executionStates.length && !parsed.executionStates.includes(state as never)) return false;
+          if (parsed.unresolvedReceipts && !['accepted', 'dispatching'].includes(state)) return false;
+          return typeof value.incident_id === 'string';
+        })
+        .map(row => (row as Record<string, unknown>).incident_id as string));
+    }
     const matching = incidents.filter(incident =>
       (!parsed.statuses.length || parsed.statuses.includes(incident.status)) &&
-      (!parsed.riskTiers.length || parsed.riskTiers.includes(incident.riskTier)),
+      (!parsed.riskTiers.length || parsed.riskTiers.includes(incident.riskTier)) &&
+      (!executionIncidentIds || executionIncidentIds.has(incident.id)),
     );
     const displayed = matching.slice(0, limit).map(incident => ({
       id: incident.id,
@@ -312,13 +311,13 @@ export class MvpRepository {
     }, 0);
     return DashboardQueryResponseSchema.parse({
       query: normalizedQuery,
-      interpretation: describeDashboardFilters(parsed.statuses, parsed.riskTiers),
+      interpretation: describeDashboardFilters(parsed),
       matchedIncidentCount: matching.length,
       matchedRemainingAmountPaise,
       incidents: displayed,
       limitations: [
         'Read-only tenant incident summary; this query cannot trigger an action or contact a customer.',
-        'Only lifecycle state and risk tier terms are interpreted in this MVP; other wording is not executed or translated to SQL.',
+        'Only lifecycle state, risk tier, execution state, provider, and unresolved-receipt terms are interpreted; other wording is not executed or translated to SQL.',
         'Incident summaries exclude customer identifiers, payment/order IDs, raw provider data, and recovery claims without causal attribution.',
         'The query considers at most the 100 most recently updated incidents, then returns up to the requested display limit.',
       ],
@@ -335,24 +334,7 @@ export class MvpRepository {
     if (error) throw databaseError('investigation failure record', error.message);
   }
 
-  async persistInvestigation(organizationId: string, incidentId: string, triggerEventId: string, plan: InvestigationPlan, risk: RiskAnalysis, recovery: RecoveryPlan, policy: PolicyDecisionContract, proposals: ProposalDraft[], modelId: string, tokensUsed: number, latencyMs: number): Promise<void> {
-    const { error } = await this.client.rpc('payscope_persist_investigation_with_proposals', {
-      p_organization_id: organizationId,
-      p_incident_id: incidentId,
-      p_trigger_event_id: triggerEventId,
-      p_plan: plan,
-      p_risk_analysis: risk,
-      p_recovery_plan: recovery,
-      p_policy_decision: policy,
-      p_proposals: proposals.map(proposal => ({ id: proposal.id, action_type: proposal.actionType, content: proposal.content, rationale: proposal.rationale })),
-      p_model_id: modelId,
-      p_tokens_used: tokensUsed,
-      p_latency_ms: latencyMs,
-    });
-    if (error) throw databaseError('investigation persistence', error.message);
-  }
-
-  /** Direct-execution persistence is a separate forward-migration RPC. */
+  /** Direct-execution persistence — legacy `persistInvestigation` (simulation) has been removed. */
   async persistDirectInvestigation(organizationId: string, incidentId: string, triggerEventId: string, plan: InvestigationPlan, risk: RiskAnalysis, recovery: RecoveryPlan, policy: PolicyDecisionContract, proposals: ProposalDraft[], modelId: string, tokensUsed: number, latencyMs: number): Promise<void> {
     const { error } = await this.client.rpc('payscope_persist_direct_investigation', {
       p_organization_id: organizationId,
@@ -368,15 +350,6 @@ export class MvpRepository {
       p_latency_ms: latencyMs,
     });
     if (error) throw databaseError('direct investigation persistence', error.message);
-  }
-
-  /** The durable worker, never a browser, records every permitted action. */
-  async autonomouslySimulatePendingProposals(organizationId: string, incidentId: string): Promise<void> {
-    const { error } = await this.client.rpc('payscope_autonomously_simulate_pending_proposals', {
-      p_organization_id: organizationId,
-      p_incident_id: incidentId,
-    });
-    if (error) throw databaseError('autonomous simulated execution', error.message);
   }
 
 }
@@ -448,6 +421,24 @@ function auditFromRow(row: Record<string, unknown>): AuditEntry {
     prevEntryHash: row.prev_entry_hash,
     entryHash: row.entry_hash,
     createdAt: row.created_at,
+  });
+}
+
+function executionSummaryFromRow(row: Record<string, unknown>): ExecutionActionSummary {
+  return ExecutionActionSummarySchema.parse({
+    id: row.id,
+    capability: row.capability,
+    state: ExecutionStateSchema.parse(row.state),
+    amountPaise: row.amount_paise === null || row.amount_paise === undefined ? null : numeric(row.amount_paise),
+    currency: typeof row.currency === 'string' ? row.currency : null,
+    terminalReason: typeof row.terminal_reason === 'string' ? row.terminal_reason : null,
+    providerObjectId: typeof row.provider_object_id === 'string' ? row.provider_object_id : null,
+    retryCount: Number.isSafeInteger(Number(row.retry_count)) ? Number(row.retry_count) : 0,
+    policyVersion: typeof row.policy_version === 'string' && row.policy_version ? row.policy_version : 'direct-execution-policy-v2',
+    capabilityVersion: typeof row.capability_version === 'string' && row.capability_version ? row.capability_version : 'deliver_recovery_link_email-v1',
+    createdAt: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+    dispatchedAt: typeof row.dispatched_at === 'string' ? row.dispatched_at : null,
+    completedAt: typeof row.completed_at === 'string' ? row.completed_at : null,
   });
 }
 
@@ -535,7 +526,7 @@ function record(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function parseDashboardFilters(query: string): { statuses: Incident['status'][]; riskTiers: RiskTier[] } {
+function parseDashboardFilters(query: string): { statuses: Incident['status'][]; riskTiers: RiskTier[]; executionStates: string[]; providers: string[]; unresolvedReceipts: boolean } {
   const text = query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/[_-]/g, ' ');
   const statuses = ([
     ['open', 'OPEN'], ['monitoring', 'MONITORING'], ['dispute opened', 'DISPUTE_OPENED'],
@@ -543,7 +534,18 @@ function parseDashboardFilters(query: string): { statuses: Incident['status'][];
   ] as const).filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
   const riskTiers = ([['critical', 'CRITICAL'], ['high', 'HIGH'], ['medium', 'MEDIUM'], ['monitor', 'MONITOR']] as const)
     .filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
-  return { statuses, riskTiers };
+  const executionStates = ([
+    ['queued', 'queued'], ['dispatching', 'dispatching'], ['accepted', 'accepted'],
+    ['unreconciled', 'unreconciled'], ['confirmed', 'confirmed'], ['retry scheduled', 'retry_scheduled'],
+    ['compensating', 'compensating'], ['failed', 'failed'], ['cancelled', 'cancelled'],
+  ] as const).filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
+  const providers = ([
+    ['recovery email', 'deliver_recovery_link_email'], ['capture', 'capture_authorized_payment'],
+    ['refund', 'refund_payment'], ['dispute', 'submit_dispute_evidence'],
+    ['risk signal', 'record_risk_signal'], ['infrastructure', 'resolve_infrastructure'],
+  ] as const).filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
+  const unresolvedReceipts = includesTerm(text, 'pending receipt') || includesTerm(text, 'awaiting receipt') || includesTerm(text, 'unresolved receipt');
+  return { statuses, riskTiers, executionStates, providers, unresolvedReceipts };
 }
 
 function simulatedAt(value: unknown): string | null {
@@ -555,32 +557,15 @@ function includesTerm(text: string, term: string): boolean {
   return new RegExp(`(^|\\s)${term.replace(/ /g, '\\s+')}(?=\\s|$)`, 'i').test(text);
 }
 
-function describeDashboardFilters(statuses: Incident['status'][], riskTiers: RiskTier[]): string {
+function describeDashboardFilters(parsed: { statuses: Incident['status'][]; riskTiers: RiskTier[]; executionStates: string[]; providers: string[]; unresolvedReceipts: boolean }): string {
   const parts = [
-    statuses.length ? `lifecycle: ${statuses.map(value => value.replace(/_/g, ' ').toLowerCase()).join(', ')}` : 'all lifecycle states',
-    riskTiers.length ? `risk tier: ${riskTiers.map(value => value.toLowerCase()).join(', ')}` : 'all risk tiers',
-  ];
+    parsed.statuses.length ? `lifecycle: ${parsed.statuses.map(value => value.replace(/_/g, ' ').toLowerCase()).join(', ')}` : 'all lifecycle states',
+    parsed.riskTiers.length ? `risk tier: ${parsed.riskTiers.map(value => value.toLowerCase()).join(', ')}` : 'all risk tiers',
+    parsed.executionStates.length ? `execution state: ${parsed.executionStates.map(value => value.replace(/_/g, ' ')).join(', ')}` : '',
+    parsed.providers.length ? `provider: ${parsed.providers.map(value => value.replace(/_/g, ' ')).join(', ')}` : '',
+    parsed.unresolvedReceipts ? 'unresolved receipts' : '',
+  ].filter(Boolean);
   return `Showing recent tenant-scoped incidents for ${parts.join(' · ')}.`;
-}
-
-function parseFixtureEvaluationReport(value: unknown): FixtureEvaluationReport {
-  const row = record(value);
-  const split = row.split === 'development' || row.split === 'held_out' ? row.split : null;
-  if (!split) throw new Error('PayScope evaluation report has an invalid split');
-  const report: FixtureEvaluationReport = {
-    split,
-    fixtureSetVersion: typeof row.fixtureSetVersion === 'string' ? row.fixtureSetVersion : '',
-    runAt: typeof row.runAt === 'string' ? row.runAt : '',
-    configurationHash: typeof row.configurationHash === 'string' ? row.configurationHash : '',
-    modelId: typeof row.modelId === 'string' ? row.modelId : '',
-    sampleCount: numeric(row.sampleCount),
-    precision: numberInRange(row.precision),
-    recall: numberInRange(row.recall),
-    f1: numberInRange(row.f1),
-    falsePositiveCostPaise: numeric(row.falsePositiveCostPaise),
-  };
-  if (!report.fixtureSetVersion || !report.runAt || !report.configurationHash.match(/^[a-f0-9]{64}$/) || !report.modelId) throw new Error('PayScope evaluation report is invalid');
-  return report;
 }
 
 function numberInRange(value: unknown): number {

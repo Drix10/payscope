@@ -10,7 +10,9 @@ export type Incident = {
 export type Event = { id: string; organizationId: string; event: { eventType: string; occurredAt: string; receivedAt: string; amountPaise?: number; paymentMethod?: string }; enrichment: { source: string; failureAttribution: string; gatewayHealthScore: number; gatewayInDowntime: boolean; downtimeScheduled: boolean; crossBorderFlag: boolean; priorAttemptCount: number; partialRecoveryPossible: boolean; recommendedRetryMethod: string | null; signalsUsed: string[] } | null; enrichmentSource: 'razorpay_fields_heuristic' | 'fixture_signed' | 'vulcan_direct' | 'unavailable' | null }
 export type ProposalStatus = 'pending' | 'simulated' | 'cancelled_by_dispute' | 'cancelled_by_recovery' | 'failed'
 export type Proposal = { id: string; organizationId: string; incidentId: string; actionType: string; status: ProposalStatus; proposedAt: string; simulatedAt: string | null; content: Record<string, unknown>; deliveryResult: Record<string, unknown> | null }
-export type IncidentDetail = { incident: Incident; events: Event[]; proposals: Proposal[]; investigation: Investigation | null }
+export type ExecutionState = 'queued' | 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'retry_scheduled' | 'compensating' | 'failed' | 'cancelled'
+export type ExecutionActionSummary = { id: string; capability: string; state: ExecutionState; amountPaise: number | null; currency: string | null; terminalReason: string | null; providerObjectId: string | null; retryCount: number; policyVersion: string; capabilityVersion: string; createdAt: string; dispatchedAt: string | null; completedAt: string | null }
+export type IncidentDetail = { incident: Incident; events: Event[]; proposals: Proposal[]; investigation: Investigation | null; execution: ExecutionActionSummary[] }
 export type AuditEntry = { id: string; organizationId: string; incidentId: string | null; sequenceNumber: number; eventType: string; actorType: 'system' | 'legacy'; actorId: string; decision: string; rationale: string; confidence: number | null; enrichmentSource: string | null; createdAt: string }
 export type AuditIntegrity = { status: 'intact' | 'broken'; entryCount: number; checkedAt: string }
 export type MvpHealth = { organizationId: string; pipeline: 'autonomous'; razorpayEnvironment: 'test' | 'live'; communications: 'autonomous_simulation' | 'email_execution' | 'email_execution_unavailable'; database: 'ready'; queueWorker: 'configured'; webhook: 'signed'; enrichmentAdapter: 'razorpay_fields_heuristic' }
@@ -29,7 +31,7 @@ export type DashboardQueryResult = {
   limitations: string[]
 }
 export type DashboardMetrics = {
-  operations: { totalAtRiskPaise: number | null; proposalsGenerated: number | null; proposalsSimulated: number | null; attributedRecoveries: number | null; recoveredPaise: number | null; recoveryRate: number | null; contactToRecoveryRatio: number | null }
+  operations: { totalAtRiskPaise: number | null; actionsDispatched: number; smtpAccepted: number; smtpRejected: number; unreconciledEmails: number; confirmedRecoveries: number; refunded: number; failedActions: number; retried: number; compensated: number; unresolvedReceipts: number }
   evaluation: { status: 'not_run' | 'available'; split: 'development' | 'held_out' | null; fixtureSetVersion: string | null; runAt: string | null; configurationHash: string | null; modelId: string | null; sampleCount: number; precision: number | null; recall: number | null; f1: number | null; falsePositiveCostPaise: number | null }
   exceptions: string[]
 }

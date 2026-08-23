@@ -38,7 +38,7 @@ PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution
     </td>
     <td width="50%" valign="top">
       <strong>04 — Autonomous execution</strong><br />
-      An incident becomes a real command, provider receipt, reconciled callback, and verified outcome.<br /><br />
+      An incident becomes a real command, provider receipt, reconciled callback, and verified outcome by our AI Agent system.<br /><br />
       <img src="docs/screenshots/04-autonomous-execution.png" alt="PayScope autonomous execution engine" />
     </td>
   </tr>
@@ -194,18 +194,15 @@ Use the same webhook secret as `RAZORPAY_WEBHOOK_SECRET`; HMAC verification happ
 ```bash
 # backend
 npm run build
-npm run test:contracts
-npm run test:schema
-npm run test:agents
-npm run test:investigation-runner
-npm run test:phase3
-npm run test:mvp-api
+npm run test
 npm audit --omit=dev --audit-level=high
 
 # frontend
 npm run build
 npm audit --omit=dev --audit-level=high
 ```
+
+The backend test command runs the end-to-end agent suite, exercising the full Supervisor → Risk Analyst → Recovery Planner → deterministic policy → durable investigation path across infrastructure, fraud, dispute, contact-limit, consent, quiet-hours, idempotency, retry-budget, and memory-bounded scenarios, plus the execution worker's encrypted-recipient → Payment Link → SMTP accepted flow, ambiguous-send no-resend, withdrawn-consent no-dispatch, and Payment Link reference reconciliation.
 
 The repository’s canonical implementation details and remaining environment-level proof steps live in [`Plan.md`](Plan.md), [`backend/CHECKPOINTS.md`](backend/CHECKPOINTS.md), and [`frontend/CHECKPOINTS.md`](frontend/CHECKPOINTS.md).
 

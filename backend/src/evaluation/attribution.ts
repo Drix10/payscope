@@ -1,9 +1,7 @@
 import type { ActionProposal } from '../domain/contracts';
 
 const ATTRIBUTABLE_ACTIONS = new Set<ActionProposal['actionType']>([
-  'retry_link_whatsapp',
-  'retry_link_sms',
-  'hinglish_voice_script',
+  'deliver_recovery_link_email',
 ]);
 const ATTRIBUTION_WINDOW_MS = 24 * 60 * 60 * 1_000;
 
@@ -48,11 +46,11 @@ export function attributeRecoveries(
       const capturedAt = timestamp(payment.capturedAt, 'Captured payment time');
       if (payment.disputeOpenedBeforeCapture) return null;
       const matches = proposals.filter(proposal => isEligibleProposal(proposal, capturedAt) &&
-        (payment.paymentLinkReferenceId === paymentLinkReferenceForProposal(proposal.id) || payment.incidentId === proposal.incidentId));
+        (isPaymentLinkReferenceForProposal(payment.paymentLinkReferenceId, proposal.id) || payment.incidentId === proposal.incidentId));
       if (!matches.length) return null;
       // An exact Payment Link reference is stronger than shared incident
       // correlation. One capture can never be counted more than once.
-      matches.sort((left, right) => Number(payment.paymentLinkReferenceId === paymentLinkReferenceForProposal(right.id)) - Number(payment.paymentLinkReferenceId === paymentLinkReferenceForProposal(left.id)) || timestamp(right.simulatedAt!, 'Proposal simulation') - timestamp(left.simulatedAt!, 'Proposal simulation'));
+      matches.sort((left, right) => Number(isPaymentLinkReferenceForProposal(payment.paymentLinkReferenceId, right.id)) - Number(isPaymentLinkReferenceForProposal(payment.paymentLinkReferenceId, left.id)) || timestamp(right.simulatedAt!, 'Proposal simulation') - timestamp(left.simulatedAt!, 'Proposal simulation'));
       const proposal = matches[0];
       const incident = incidentById.get(proposal.incidentId);
       if (!incident) throw new Error('Attribution proposal references an unknown incident');
@@ -74,10 +72,18 @@ export function attributeRecoveries(
   return recoveries;
 }
 
-/** The short reference fits typical provider limits while binding the UUID. */
+/** The short reference fits typical provider limits while binding the UUID. Supports both legacy ps: and direct ps_ */
 export function paymentLinkReferenceForProposal(proposalId: string): string {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(proposalId)) throw new Error('Proposal ID must be a UUID for payment-link attribution');
   return `ps:${proposalId.toLowerCase()}`;
+}
+export function paymentLinkReferenceForProposalDirect(proposalId: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(proposalId)) throw new Error('Proposal ID must be a UUID for payment-link attribution');
+  return `ps_${proposalId.toLowerCase().replace(/-/g, '')}`;
+}
+export function isPaymentLinkReferenceForProposal(reference: string | null, proposalId: string): boolean {
+  if (!reference) return false;
+  return reference === paymentLinkReferenceForProposal(proposalId) || reference === paymentLinkReferenceForProposalDirect(proposalId);
 }
 
 function isEligibleProposal(proposal: AttributionProposal, capturedAt: number): boolean {

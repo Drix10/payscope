@@ -93,7 +93,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
   }, [isMobile])
 
   if (isMobile) {
-    return <MobileShowcasePanel eyebrow="01 / Stop chasing payments" title="See incidents. Not noise." description="PayScope verifies every Razorpay webhook, correlates risk into reviewable incidents, and keeps a bounded audit trail — so you decide with evidence, not guesses." accentClass="text-[#24ff95]" />
+    return <MobileShowcasePanel eyebrow="01 — What happens first" title="We turn noisy payment events into clear incidents" description="PayScope checks every Razorpay webhook is real, removes duplicates, and groups related events — so you see one incident with evidence, not 50 confusing alerts." accentClass="text-[#24ff95]" />
   }
 
   const card = (
@@ -154,7 +154,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             </span>
             <span className="font-mono text-xs font-bold tracking-widest text-[#b8ffd9]">01 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-300">Verified Signals</span>
+            <span className="text-[11px] font-semibold text-neutral-300">How we verify</span>
           </div>
         </motion.div>
 
@@ -170,7 +170,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             marginBottom: '8px',
           }}
         >
-          <BlurFadeWords text="Stop Chasing Payments. See Incidents." baseDelay={0.4} isInView={isInView} />
+          <BlurFadeWords text="Every payment event is verified first." baseDelay={0.4} isInView={isInView} />
         </h1>
 
         <p
@@ -185,7 +185,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
           }}
         >
           <BlurFadeWords
-            text="No noise. No guesswork. Just verified payment signals."
+            text="Real webhooks stay. Fake or duplicate ones are blocked."
             baseDelay={0.65}
             isInView={isInView}
             wordStyle={{
@@ -207,9 +207,9 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             maxWidth: '420px',
           }}
         >
-          <BlurFadeWords text="Raw webhooks are noisy, retried, and out-of-order." baseDelay={0.9} isInView={isInView} />
-          <br />
-          <BlurFadeWords text="PayScope turns them into reviewable incidents with evidence you can trust." baseDelay={1.15} isInView={isInView} />
+           <BlurFadeWords text="How: We check Razorpay's signature and event ID." baseDelay={0.9} isInView={isInView} />
+           <br />
+           <BlurFadeWords text="What you get: One clean incident with amount and proof." baseDelay={1.15} isInView={isInView} />
         </p>
       </div>
 
@@ -257,26 +257,26 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#00ff87] uppercase tracking-wider">
-                  <Cpu className="h-3.5 w-3.5" /> HMAC Signature Engine
+                  <Cpu className="h-3.5 w-3.5" /> How we check it's real
                 </span>
                 <span className="rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2 py-0.5 text-[9px] font-bold text-[#00ff87]">
                   Verified v1.0
                 </span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-1">Raw Webhook ➔ Verified Event</h3>
+              <h3 className="text-xl font-bold text-white mb-1">Webhook → Trusted event</h3>
               <p className="text-xs text-neutral-300 leading-relaxed">
-                Every webhook is signature-checked with timing-safe comparison and deduplicated by event ID before it becomes an incident.
+                We verify the Razorpay signature (like a password check) and ignore duplicates. Only real, new events become incidents you can act on.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-4">
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">Event Ledger</div>
-                <div className="text-sm font-bold text-white">Bounded memory</div>
+                <div className="text-[10px] text-neutral-400 font-mono">What we store</div>
+                <div className="text-sm font-bold text-white">Why it happened</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">Replay Window</div>
-                 <div className="text-sm font-bold text-[#00ff87]">30s Idempotency</div>
+                <div className="text-[10px] text-neutral-400 font-mono">Why this matters</div>
+                 <div className="text-sm font-bold text-[#00ff87]">No double counting</div>
               </div>
             </div>
 
@@ -296,31 +296,31 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#00ff87] uppercase tracking-wider">
-                  <Sparkles className="h-3.5 w-3.5" /> Incident Correlation Engine
+                  <Sparkles className="h-3.5 w-3.5" /> How we group events
                 </span>
                  <span className="font-mono text-[10px] text-neutral-400">Payment · Order · Subscription</span>
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Reviewable Incident Output</h3>
+              <h3 className="text-lg font-bold text-white mb-2">One incident, not many alerts</h3>
               
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
                   <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff87]" /> Partial recovery → monitoring
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff87]" /> Payments from same order? One incident.
                   </span>
-                  <span className="font-mono font-bold text-amber-400">Ready to inspect</span>
+                  <span className="font-mono font-bold text-amber-400">Grouped</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
                   <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff87]" /> Full recovery → recovered
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff87]" /> Different currencies? Never grouped.
                   </span>
-                  <span className="font-mono text-sky-400">Amount verified</span>
+                  <span className="font-mono text-sky-400">Safe</span>
                 </div>
               </div>
             </div>
 
             <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-              <span className="text-[11px] text-neutral-400">Correlation Basis:</span>
-              <span className="text-xs font-bold text-[#00ff87]">15-min customer + method window</span>
+              <span className="text-[11px] text-neutral-400">How we match:</span>
+              <span className="text-xs font-bold text-[#00ff87]">Same payment/order or 15-min window</span>
             </div>
 
             <MagicBorder color={MAGIC_BORDER_GREEN} radius="24px" reverse isInView={isInView} />

@@ -6,6 +6,7 @@ export type RuntimeConfig = {
   supabaseUrl?: string;
   supabaseServiceRoleKey?: string;
   webhookSecret?: string;
+  previousWebhookSecret?: string;
   organizationId?: string;
   workerId: string;
   enrichmentTimeoutMs: number;
@@ -95,6 +96,11 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     supabaseUrl: optional(env.SUPABASE_URL),
     supabaseServiceRoleKey: optional(env.SUPABASE_SERVICE_ROLE_KEY),
     webhookSecret: optional(env.RAZORPAY_WEBHOOK_SECRET),
+    previousWebhookSecret: (() => {
+      const prev = optional(env.RAZORPAY_WEBHOOK_SECRET_PREVIOUS);
+      if (prev && prev.length < 16) throw new Error('RAZORPAY_WEBHOOK_SECRET_PREVIOUS must be at least 16 characters');
+      return prev;
+    })(),
     organizationId: optional(env.PAYSCOPE_ORGANIZATION_ID),
     workerId: optional(env.PAYSCOPE_WORKER_ID) ?? `worker-${process.pid}`,
     enrichmentTimeoutMs: positiveInteger(env.PAYSCOPE_ENRICHMENT_TIMEOUT_MS, ENRICHMENT_TIMEOUT_MS, 'PAYSCOPE_ENRICHMENT_TIMEOUT_MS'),

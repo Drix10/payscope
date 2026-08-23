@@ -19,6 +19,9 @@ This project has the following active autonomous-lifecycle migrations before the
 - `202608230007_autonomous_lifecycle_and_metrics.sql`
 - `202608230008_investigation_trigger_idempotency.sql`
 - `202608230009_direct_execution_email.sql` (required before direct email execution)
+- `202608230010_direct_execution_complete.sql` (callback inbox, reconciliation, execution policy, transition graph)
+- `202608230011_direct_only_enforcement.sql` (retire legacy simulation channels)
+- `202608230012_internal_action_finalize.sql` (finalize non-provider actions without a provider receipt)
 
 Create the merchant organization through the canonical migration/RPC workflow, copy its UUID to `PAYSCOPE_ORGANIZATION_ID`, and keep a separate `PAYSCOPE_INTEGRATION_ORGANIZATION_ID` for opt-in integration checks. Do not use an incident-bearing organization for destructive fixture cleanup; audit entries are append-only by design.
 
@@ -91,18 +94,10 @@ accepted webhook → durable event + job → leased worker → enrichment → co
 
 ```bash
 npm run build
-npm run test:contracts
-npm run test:schema
-npm run test:agents
-npm run test:investigation-runner
-npm run test:phase3
-npm run test:direct-agent
-npm run test:execution
-npm run test:mvp-api
-npm run test:cors
+npm run test
 npm audit --omit=dev --audit-level=high
 ```
 
-Run opt-in integration scripts only against the dedicated integration organization. Exercise duplicate webhooks, stale/missing jobs, model timeout or invalid JSON, unavailable enrichment, fraud, dispute, contact limit, partial/full late capture, concurrent worker claims, SMTP rejection, and an execution-worker restart after the durable email-send marker. In every case confirm that the browser remains read-only and an ambiguous email is never sent twice.
+Run opt-in integration checks only against the dedicated integration organization. Exercise duplicate webhooks, stale/missing jobs, model timeout or invalid JSON, unavailable enrichment, fraud, dispute, contact limit, partial/full late capture, concurrent worker claims, SMTP rejection, and an execution-worker restart after the durable email-send marker. In every case confirm that the browser remains read-only and an ambiguous email is never sent twice.
 
-For signed fixture evaluation reports, set a unique 32+ character `PAYSCOPE_FIXTURE_SIGNING_SECRET` and run `PAYSCOPE_RUN_EVALUATION=true npm run run:evaluation`. Run `development` before `held_out`; held-out reports are database-locked per fixture version. The legacy fixture benchmark is not evidence of direct-execution recovery; report direct recovery only from action → receipt → verified Razorpay event evidence.
+Report direct recovery only from action → receipt → verified Razorpay event evidence; the legacy fixture benchmark has been removed.

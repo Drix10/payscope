@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import { AppError } from '../errors';
 import { NormalizedEvent, NormalizedEventSchema } from '../domain/contracts';
 
@@ -46,14 +46,6 @@ function hashCustomer(customerReference: string | undefined, customerHashSecret:
 
 export function rawPayloadHash(rawBody: Buffer): string {
   return createHash('sha256').update(rawBody).digest('hex');
-}
-
-export function verifyRazorpayWebhook(rawBody: Buffer, signature: string | undefined, webhookSecret: string | undefined): void {
-  if (!webhookSecret) throw new AppError('WEBHOOK_NOT_CONFIGURED', 503, 'Razorpay webhook verification is not configured');
-  if (!signature || !/^[a-f0-9]{64}$/i.test(signature)) throw new AppError('INVALID_WEBHOOK_SIGNATURE', 401, 'Razorpay webhook signature is missing or invalid');
-  const calculated = createHmac('sha256', webhookSecret).update(rawBody).digest();
-  const provided = Buffer.from(signature, 'hex');
-  if (provided.length !== calculated.length || !timingSafeEqual(provided, calculated)) throw new AppError('INVALID_WEBHOOK_SIGNATURE', 401, 'Razorpay webhook signature is invalid');
 }
 
 /** Converts only allowlisted Razorpay fields. Raw provider payload never escapes this function. */

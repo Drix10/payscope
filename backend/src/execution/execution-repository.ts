@@ -7,12 +7,20 @@ export type ExecutionAction = {
   id: string;
   organizationId: string;
   incidentId: string;
-  capability: 'deliver_recovery_link_email';
+  capability: 'deliver_recovery_link_email' | 'capture_authorized_payment' | 'refund_payment' | 'submit_dispute_evidence' | 'record_risk_signal' | 'resolve_infrastructure';
   commandPayload: Record<string, unknown>;
-  state: string;
+  commandKey: string;
+  state: 'queued' | 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'retry_scheduled' | 'compensating' | 'failed' | 'cancelled';
   amountPaise: number;
   currency: string;
   emailSendStartedAt: string | null;
+  providerObjectId: string | null;
+  retryCount: number;
+  nextReconciliationAt: string | null;
+  terminalReason: string | null;
+  createdAt: string;
+  dispatchedAt: string | null;
+  completedAt: string | null;
 };
 
 /** A durable command cannot become eligible again through a transport retry. */
@@ -38,8 +46,24 @@ export class ExecutionRepository {
     if (error) throw new Error(`PayScope execution action lookup failed: ${error.message}`);
     if (!data || typeof data !== 'object') throw new Error('PayScope execution action was not found');
     const row = data as Record<string, unknown>;
-    if (row.capability !== 'deliver_recovery_link_email' || typeof row.id !== 'string' || typeof row.organization_id !== 'string' || typeof row.incident_id !== 'string' || !isRecord(row.command_payload) || typeof row.state !== 'string' || !Number.isSafeInteger(Number(row.amount_paise)) || typeof row.currency !== 'string') throw new Error('PayScope execution action row is invalid');
-    return { id: row.id, organizationId: row.organization_id, incidentId: row.incident_id, capability: row.capability, commandPayload: row.command_payload, state: row.state, amountPaise: Number(row.amount_paise), currency: row.currency, emailSendStartedAt: typeof row.email_send_started_at === 'string' ? row.email_send_started_at : null };
+    const capabilitySet = new Set(['deliver_recovery_link_email','capture_authorized_payment','refund_payment','submit_dispute_evidence','record_risk_signal','resolve_infrastructure']);
+    const stateSet = new Set(['queued','dispatching','accepted','unreconciled','confirmed','retry_scheduled','compensating','failed','cancelled']);
+    if (!capabilitySet.has(row.capability as string) || typeof row.id !== 'string' || typeof row.organization_id !== 'string' || typeof row.incident_id !== 'string' || !isRecord(row.command_payload) || typeof row.state !== 'string' || !stateSet.has(row.state as string) || !Number.isSafeInteger(Number(row.amount_paise)) || typeof row.currency !== 'string') throw new Error('PayScope execution action row is invalid');
+    if (typeof row.command_key !== 'string' || !row.command_key) throw new Error('PayScope execution action missing command_key');
+    return {
+      id: row.id, organizationId: row.organization_id, incidentId: row.incident_id,
+      capability: row.capability as ExecutionAction['capability'], commandPayload: row.command_payload,
+      commandKey: row.command_key, state: row.state as ExecutionAction['state'],
+      amountPaise: Number(row.amount_paise), currency: row.currency,
+      emailSendStartedAt: typeof row.email_send_started_at === 'string' ? row.email_send_started_at : null,
+      providerObjectId: typeof row.provider_object_id === 'string' ? row.provider_object_id : null,
+      retryCount: Number.isSafeInteger(Number(row.retry_count)) ? Number(row.retry_count) : 0,
+      nextReconciliationAt: typeof row.next_reconciliation_at === 'string' ? row.next_reconciliation_at : null,
+      terminalReason: typeof row.terminal_reason === 'string' ? row.terminal_reason : null,
+      createdAt: (() => { if (typeof row.created_at !== 'string' || !row.created_at) throw new Error('PayScope execution action missing created_at'); return row.created_at; })(),
+      dispatchedAt: typeof row.dispatched_at === 'string' ? row.dispatched_at : null,
+      completedAt: typeof row.completed_at === 'string' ? row.completed_at : null,
+    };
   }
 
   async recipientEnvelope(organizationId: string, customerHash: string): Promise<EncryptedValue> {
@@ -82,6 +106,17 @@ export class ExecutionRepository {
     if (error) throw new Error(`PayScope execution receipt persistence failed: ${error.message}`);
   }
 
+  /** Finalizes an internal, non-provider action (record_risk_signal / resolve_infrastructure / policy blocks) without a provider receipt. */
+  async finalizeInternalAction(organizationId: string, actionId: string, state: 'confirmed' | 'failed', terminalReason: string): Promise<void> {
+    const { error } = await this.client.rpc('payscope_finalize_internal_action', {
+      p_organization_id: organizationId,
+      p_action_id: actionId,
+      p_state: state,
+      p_terminal_reason: terminalReason,
+    });
+    if (error) throw new Error(`PayScope internal action finalize failed: ${error.message}`);
+  }
+
   async completeOutbox(outbox: ExecutionOutbox, workerId: string): Promise<void> {
     const { data, error } = await this.client.from('payscope_execution_outbox').update({ status: 'complete', updated_at: new Date().toISOString() }).eq('id', outbox.id).eq('status', 'running').eq('locked_by', workerId).select('id').maybeSingle();
     if (error || !data) throw new Error(`PayScope execution outbox completion failed: ${error?.message ?? 'lease lost'}`);
@@ -96,6 +131,12 @@ export class ExecutionRepository {
     if (error || !data) throw new Error(`PayScope execution outbox failure update failed: ${error?.message ?? 'lease lost'}`);
   }
 
+  async requeueForCircuitOpen(outbox: ExecutionOutbox, workerId: string, delayMs: number): Promise<void> {
+    const nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
+    const { data, error } = await this.client.from('payscope_execution_outbox').update({ status: 'pending', next_attempt_at: nextAttemptAt, locked_at: null, locked_by: null, updated_at: new Date().toISOString() }).eq('id', outbox.id).eq('status', 'running').eq('locked_by', workerId).select('id').maybeSingle();
+    if (error || !data) throw new Error(`PayScope execution outbox circuit requeue failed: ${error?.message ?? 'lease lost'}`);
+  }
+
   async appendMemory(organizationId: string, incidentId: string, memoryType: 'execution' | 'customer_message', sourceId: string, content: Record<string, unknown>, importance: number): Promise<void> {
     if (!sourceId || sourceId.length > 160 || !Number.isInteger(importance) || importance < 0 || importance > 100 || Buffer.byteLength(JSON.stringify(content), 'utf8') > 1_200) throw new Error('PayScope incident memory write is outside bounded limits');
     const { error } = await this.client.from('payscope_incident_memory').insert({ organization_id: organizationId, incident_id: incidentId, memory_type: memoryType, source_id: sourceId, content, content_hash: hash(content), importance });
@@ -103,5 +144,18 @@ export class ExecutionRepository {
   }
 }
 
-function hash(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
+function hash(value: unknown): string {
+  // Deterministic: sort keys recursively to avoid JSON.stringify order variance causing hash mismatch across replicas
+  const stable = (v: unknown): unknown => {
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) {
+      if (Array.isArray(v)) return v.map(stable);
+      return v;
+    }
+    const rec = v as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(rec).sort()) out[k] = stable(rec[k]);
+    return out;
+  };
+  return createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
+}
 function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === 'object' && !Array.isArray(value)); }

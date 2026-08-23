@@ -6,7 +6,7 @@ import { runInvestigationSupervisor } from './investigation-supervisor';
 import { evaluatePolicy } from './policy-evaluator';
 import { runRecoveryPlanner } from './recovery-planner';
 import { runRiskAnalyst } from './risk-analyst';
-import { paymentLinkReferenceForProposal } from '../evaluation/attribution';
+import { paymentLinkReferenceForProposalDirect } from '../evaluation/attribution';
 
 const AGENT_PIPELINE_DEADLINE_MS = 9_500;
 
@@ -54,20 +54,14 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       content: {
         rationale: action.rationale,
         estimatedRecoveryPaise: action.estimatedRecoveryPaise,
-        ...(['retry_link_whatsapp', 'retry_link_sms'].includes(action.actionType) ? { paymentLinkReferenceId: paymentLinkReferenceForProposal(id) } : {}),
+        ...(action.actionType === 'deliver_recovery_link_email' ? { paymentLinkReferenceId: paymentLinkReferenceForProposalDirect(id) } : {}),
         ...(action.emailCopyIntent ? { emailCopyIntent: action.emailCopyIntent } : {}),
-        ...(action.scriptContent ? { scriptContent: action.scriptContent } : {}),
       },
     };
   });
   const persistence = [job.organizationId, job.incidentId, job.triggerEventId, output.plan.plan, output.risk.analysis, output.recovery.plan, output.policy, proposals, [output.plan.modelId, output.risk.modelId, output.recovery.modelId].join(','), output.plan.tokensUsed + output.risk.tokensUsed + output.recovery.tokensUsed, Date.now() - started] as const;
-  if (options.directExecution) {
-    await repository.persistDirectInvestigation(...persistence);
-  }
-  else {
-    await repository.persistInvestigation(...persistence);
-    await repository.autonomouslySimulatePendingProposals(job.organizationId, job.incidentId);
-  }
+  // Direct execution is now the single system — legacy simulation path fully removed
+  await repository.persistDirectInvestigation(...persistence);
 }
 
 function providerWithDeadline(provider: ModelProvider, deadlineAt: number): ModelProvider {

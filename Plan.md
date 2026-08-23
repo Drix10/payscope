@@ -167,7 +167,7 @@ Provider-facing action state is independent from incident lifecycle: `queued`, `
 | Recovery email | `nodemailer` over an SMTP relay with a verified merchant sender domain | The only outreach adapter in this MVP. A reusable pooled transporter gives bounded connections, startup health verification, graceful shutdown, and vendor-neutral SMTP configuration. |
 | Recipient/config encryption | Versioned envelope encryption using Node `crypto` AES-256-GCM with a VPS-held master key; move to cloud KMS when the deployment has one | Supports encrypted recipient records and key rotation without adding an unrelated database. |
 | Observability | `pino` redacted JSON logs, `prom-client` metrics, and OpenTelemetry traces | Correlates action ID across webhook, outbox, provider request, callback, and reconciliation. |
-| Validation | Node built-in test runner plus existing contract/fixture scripts; add provider sandbox contract tests | Keeps current test workflow while adding recorded HTTP fixtures and callback replay tests. |
+| Validation | Node built-in test runner with a single end-to-end agent suite (`npm run test`) plus a VPS-only recipient-enrollment command; add provider sandbox contract tests | Exercises the full Supervisor → Risk Analyst → Recovery Planner → deterministic policy → durable investigation path; provider adapter behavior is verified against recorded HTTP fixtures and callback replay tests as capabilities are enabled. |
 
 ## Completion gates
 

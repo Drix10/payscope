@@ -92,7 +92,7 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
   }, [isMobile])
 
   if (isMobile) {
-    return <MobileShowcasePanel eyebrow="02 / Correlated Incidents" title="Related signals become one incident." description="PayScope groups payment, order, subscription, or 15-min customer+method signals — conflicting currencies never group." accentClass="text-[#906aff]" />
+    return <MobileShowcasePanel eyebrow="02 — How events are grouped" title="Related events become one clear case" description="How: Same payment ID, order ID, or subscription? Grouped. Otherwise, same customer + payment method within 15 minutes? Grouped. Different currencies? Never grouped — to avoid wrong amounts." accentClass="text-[#906aff]" />
   }
 
   const card = (
@@ -141,16 +141,16 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
             </span>
             <span className="font-mono text-xs font-bold tracking-widest text-[#D4C4FF]">02 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-300">Spatial Graph AST</span>
+            <span className="text-[11px] font-semibold text-neutral-300">How we match</span>
           </div>
         </motion.div>
 
         <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '52px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '8px' }}>
-          <BlurFadeWords text="Related Signals Become One." baseDelay={0.5} isInView={isInView} />
+          <BlurFadeWords text="Many events, one incident." baseDelay={0.5} isInView={isInView} />
         </h1>
         <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '28px', fontWeight: 300, margin: 0, marginBottom: '16px' }}>
           <BlurFadeWords
-            text="PayScope correlates by payment, order, or subscription."
+            text="We link events that belong together."
             baseDelay={0.8}
             isInView={isInView}
             wordStyle={{
@@ -161,9 +161,9 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
           />
         </p>
         <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '17px', fontWeight: 300, color: 'rgba(255,255,255,0.65)', margin: 0, maxWidth: '400px' }}>
-           <BlurFadeWords text="A 15-min customer+method window catches the rest." baseDelay={1.1} isInView={isInView} />
+           <BlurFadeWords text="How: Same IDs? Grouped. Same customer? Grouped in 15 min." baseDelay={1.1} isInView={isInView} />
            <br />
-           <BlurFadeWords text="Conflicting currencies never group — amount is verified." baseDelay={1.45} isInView={isInView} />
+           <BlurFadeWords text="What you see: One timeline with amount and status." baseDelay={1.45} isInView={isInView} />
         </p>
       </div>
 
@@ -201,26 +201,26 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#906AFF] uppercase tracking-wider">
-                  <Network className="h-3.5 w-3.5" /> Incident Correlation
+                  <Network className="h-3.5 w-3.5" /> How we group
                 </span>
                 <span className="rounded-full border border-[#906AFF]/30 bg-[#906AFF]/10 px-2 py-0.5 text-[9px] font-bold text-[#D4C4FF]">
                   Correlation Engine v1.0
                 </span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-1">Incident Correlation</h3>
+              <h3 className="text-xl font-bold text-white mb-1">One case, not many alerts</h3>
               <p className="text-xs text-neutral-300 leading-relaxed">
-                Payment, order, or subscription match — else a 15-min window. Currency mismatches never mix.
+                If events share a payment, order, or subscription, they become one incident. Otherwise we group by customer + method within 15 minutes. Different currencies are never mixed.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-4">
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">Correlation Key</div>
-                <div className="text-sm font-bold text-white">Payment ID</div>
+                <div className="text-[10px] text-neutral-400 font-mono">What we check</div>
+                <div className="text-sm font-bold text-white">Same IDs first</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">Recovery Check</div>
-                <div className="text-sm font-bold text-[#906AFF]">Currency checked</div>
+                <div className="text-[10px] text-neutral-400 font-mono">Why safe</div>
+                <div className="text-sm font-bold text-[#906AFF]">Currency never mixed</div>
               </div>
             </div>
 
@@ -240,31 +240,31 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#906AFF] uppercase tracking-wider">
-                  <Sparkles className="h-3.5 w-3.5" /> Multi-Modal Stream
+                  <Sparkles className="h-3.5 w-3.5" /> What about recovery?
                 </span>
                  <span className="font-mono text-[10px] text-neutral-400">Structured reasoning model</span>
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Recovery Verification</h3>
+              <h3 className="text-lg font-bold text-white mb-2">How recovery is tracked</h3>
               
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
                   <span className="flex items-center gap-2 text-neutral-200">
-                     <CheckCircle2 className="h-3.5 w-3.5 text-[#906AFF]" /> Partial → monitoring
+                     <CheckCircle2 className="h-3.5 w-3.5 text-[#906AFF]" /> Some amount recovered? → Still open
                    </span>
-                   <span className="font-mono font-bold text-[#D4C4FF]">Amount checked</span>
+                   <span className="font-mono font-bold text-[#D4C4FF]">We track it</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
                   <span className="flex items-center gap-2 text-neutral-200">
-                     <CheckCircle2 className="h-3.5 w-3.5 text-[#906AFF]" /> Full → recovered
+                     <CheckCircle2 className="h-3.5 w-3.5 text-[#906AFF]" /> All amount recovered? → Closed
                   </span>
-                  <span className="font-mono text-purple-300">Timestamp verified</span>
+                  <span className="font-mono text-purple-300">Verified</span>
                 </div>
               </div>
             </div>
 
             <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-              <span className="text-[11px] text-neutral-400">Context Status:</span>
-               <span className="text-xs font-bold text-[#906AFF]">Ready to connect</span>
+              <span className="text-[11px] text-neutral-400">Result:</span>
+               <span className="text-xs font-bold text-[#906AFF]">One timeline to review</span>
             </div>
 
             <MagicBorder color={MAGIC_BORDER_PURPLE} radius="24px" reverse isInView={isInView} />

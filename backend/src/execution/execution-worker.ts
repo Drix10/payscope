@@ -4,17 +4,38 @@ import { decryptEmail } from '../security/encryption';
 import { RecoveryEmailAdapter } from '../providers/execution/email-adapter';
 import { RazorpayExecutionClient } from '../providers/execution/razorpay-execution-client';
 import { ExecutionOutbox, ExecutionPreconditionError, ExecutionRepository } from './execution-repository';
+import { CircuitBreaker, BoundedConcurrency } from '../providers/execution/circuit-breaker';
 
-/** Sequential outbox worker: one email can never be sent concurrently twice. */
+/** Sequential outbox worker: one email can never be sent concurrently twice. Bounded concurrency + circuit breaker per provider. */
 export class ExecutionWorker {
   private timer: ReturnType<typeof setInterval> | undefined;
   private processing = false;
   private accepting = false;
+  private readonly razorpayBreaker = new CircuitBreaker('razorpay', 5, 30_000);
+  private readonly emailBreaker = new CircuitBreaker('smtp', 5, 30_000);
+  private readonly razorpayConcurrency = new BoundedConcurrency(2); // per organization/capability bound; 2 Razorpay concurrent max
+  private readonly emailConcurrency = new BoundedConcurrency(3); // 3 SMTP concurrent max
 
   constructor(private readonly repository: ExecutionRepository, private readonly razorpay: RazorpayExecutionClient, private readonly email: RecoveryEmailAdapter, private readonly encryptionKey: string, private readonly workerId = `execution-${process.pid}-${randomUUID()}`, private readonly pollIntervalMs = 2_000) {}
 
-  start(): void { if (this.timer) return; this.accepting = true; this.timer = setInterval(() => void this.drain(), this.pollIntervalMs); this.timer.unref(); void this.drain(); }
-  async stopAndDrain(): Promise<void> { this.accepting = false; if (this.timer) clearInterval(this.timer); this.timer = undefined; while (this.processing) await new Promise(resolve => setTimeout(resolve, 20)); await this.email.close(); }
+  start(): void {
+    if (this.timer) return;
+    if (this.pollIntervalMs < 500) throw new Error('pollIntervalMs too low');
+    this.accepting = true;
+    this.timer = setInterval(() => { void this.drain().catch(err => logger.warn({ errorClass: err instanceof Error ? err.name : 'unknown' }, 'PayScope drain interval error')); }, this.pollIntervalMs);
+    this.timer.unref();
+    void this.drain().catch(err => logger.warn({ errorClass: err instanceof Error ? err.name : 'unknown' }, 'PayScope initial drain error'));
+  }
+  async stopAndDrain(): Promise<void> {
+    this.accepting = false;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    // bounded wait for in-flight job to settle; don't spin forever
+    const deadline = Date.now() + 5000;
+    while (this.processing && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    if (this.processing) logger.warn('PayScope execution worker still processing after 5s drain deadline');
+    try { await this.email.close(); } catch (error) { logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope SMTP close during shutdown failed'); }
+  }
 
   async processOne(): Promise<boolean> {
     if (!this.accepting || this.processing) return false;
@@ -40,13 +61,31 @@ export class ExecutionWorker {
   }
 
   private async drain(): Promise<void> {
-    if (await this.processOne() && this.accepting) queueMicrotask(() => void this.drain());
+    // Bounded concurrency: sequential only. Use setImmediate instead of queueMicrotask to avoid starving I/O.
+    try {
+      const didWork = await this.processOne();
+      if (didWork && this.accepting) setImmediate(() => { void this.drain().catch(err => logger.warn({ errorClass: err instanceof Error ? err.name : 'unknown' }, 'PayScope drain error')); });
+    } catch (error) {
+      logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope drain outer error');
+    }
   }
 
   private async process(outbox: ExecutionOutbox): Promise<void> {
     try {
       const action = await this.repository.action(outbox.organizationId, outbox.actionId);
-      if (['confirmed', 'failed', 'cancelled', 'unreconciled'].includes(action.state)) return this.repository.completeOutbox(outbox, this.workerId);
+      // Terminal states are monotonic and must not be reprocessed; 'unreconciled' is also terminal for this MVP (never blindly resend)
+      if ((['confirmed', 'failed', 'cancelled', 'unreconciled'] as const).includes(action.state as 'confirmed' | 'failed' | 'cancelled' | 'unreconciled')) return this.repository.completeOutbox(outbox, this.workerId);
+      // Capability-specific handling for non-email internal commands — prod-ready but disabled by default policy (Phase-A email only)
+      if (action.capability === 'record_risk_signal' || action.capability === 'resolve_infrastructure') {
+        await this.repository.finalizeInternalAction(action.organizationId, action.id, 'confirmed', action.capability.toUpperCase() + '_RECORDED');
+        executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
+        return this.repository.completeOutbox(outbox, this.workerId);
+      }
+      if (action.capability === 'capture_authorized_payment' || action.capability === 'refund_payment' || action.capability === 'submit_dispute_evidence') {
+        await this.repository.finalizeInternalAction(action.organizationId, action.id, 'failed', 'CAPABILITY_NOT_ENABLED');
+        executionAttempts.inc({ capability: action.capability, outcome: 'blocked' });
+        return this.repository.completeOutbox(outbox, this.workerId);
+      }
       if (action.emailSendStartedAt) {
         await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'unreconciled', payload: { reason: 'worker_reclaimed_after_email_send_started' }, state: 'unreconciled', terminalReason: 'SMTP_RESULT_AMBIGUOUS_NO_RESEND' });
         executionAttempts.inc({ capability: action.capability, outcome: 'unreconciled' });
@@ -63,14 +102,22 @@ export class ExecutionWorker {
       let recipient: string;
       try { recipient = decryptEmail(envelope, this.encryptionKey); }
       catch { throw new ExecutionPreconditionError('invalid_recipient'); }
+      // Circuit breaker + bounded concurrency for Razorpay
+      if (!this.razorpayBreaker.canExecute()) {
+        logger.warn({ actionId: action.id }, 'PayScope Razorpay circuit open; requeue without dispatch');
+        return this.repository.requeueForCircuitOpen(outbox, this.workerId, 30_000);
+      }
       let link = await this.repository.paymentLinkReceipt(action.organizationId, action.id);
       if (!link) {
         try {
-          const created = await this.razorpay.createPaymentLink({ referenceId, amountPaise: action.amountPaise, currency: action.currency, description: 'Complete your pending payment securely.' });
+          const created = await this.razorpayConcurrency.run(() => this.razorpay.createPaymentLink({ referenceId, amountPaise: action.amountPaise, currency: action.currency, description: 'Complete your pending payment securely.' }));
+          this.razorpayBreaker.onSuccess();
           link = { id: created.id, url: created.shortUrl };
         } catch (error) {
-          const recovered = await this.razorpay.paymentLinkByReference(referenceId).catch(() => null);
+          this.razorpayBreaker.onFailure();
+          const recovered = await this.razorpayConcurrency.run(() => this.razorpay.paymentLinkByReference(referenceId).catch(() => null));
           if (!recovered) throw error;
+          this.razorpayBreaker.onSuccess();
           link = { id: recovered.id, url: recovered.shortUrl };
         }
         await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'razorpay', kind: 'payment_link_created', providerOperationId: link.id, payload: { referenceId, paymentLinkId: link.id, shortUrl: link.url }, state: 'dispatching' });
@@ -88,8 +135,13 @@ export class ExecutionWorker {
         }
         return this.repository.completeOutbox(outbox, this.workerId);
       }
+      if (!this.emailBreaker.canExecute()) {
+        logger.warn({ actionId: action.id }, 'PayScope SMTP circuit open; requeue without dispatch');
+        return this.repository.requeueForCircuitOpen(outbox, this.workerId, 30_000);
+      }
       try {
-        const result = await this.email.send({ to: recipient, paymentLinkUrl: link.url, incidentId: action.incidentId, subject: 'Complete your pending payment', copyIntent });
+        const result = await this.emailConcurrency.run(() => this.email.send({ to: recipient, paymentLinkUrl: link.url, incidentId: action.incidentId, subject: 'Complete your pending payment', copyIntent }));
+        this.emailBreaker.onSuccess();
         if (result.kind === 'accepted') {
           await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'smtp_accepted', payload: { messageId: result.messageId, acceptedCount: result.acceptedCount, rejectedCount: result.rejectedCount, response: result.response }, state: 'accepted' });
           await this.repository.appendMemory(action.organizationId, action.incidentId, 'customer_message', action.id, { actionId: action.id, channel: 'email', status: 'smtp_accepted', referenceId }, 70);
@@ -99,6 +151,7 @@ export class ExecutionWorker {
           executionAttempts.inc({ capability: action.capability, outcome: 'rejected' });
         }
       } catch (error) {
+        this.emailBreaker.onFailure();
         await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'unreconciled', payload: { reason: redactedErrorReason(error) }, state: 'unreconciled', terminalReason: 'SMTP_RESULT_AMBIGUOUS_NO_RESEND' });
         executionAttempts.inc({ capability: action.capability, outcome: 'unreconciled' });
       }

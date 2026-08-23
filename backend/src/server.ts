@@ -18,6 +18,7 @@ import { ExecutionRepository } from './execution/execution-repository';
 import { ExecutionWorker } from './execution/execution-worker';
 import { RecoveryEmailAdapter } from './providers/execution/email-adapter';
 import { RazorpayExecutionClient } from './providers/execution/razorpay-execution-client';
+import { ExecutionWatchdog } from './providers/execution/watchdog';
 import { logger, metrics } from './observability';
 
 const app = express();
@@ -75,6 +76,7 @@ function portFrom(value: string | undefined): number { const parsed = Number(val
 async function start(): Promise<void> {
   let worker: QueueWorker | undefined;
   let executionWorker: ExecutionWorker | undefined;
+  let watchdog: ExecutionWatchdog | undefined;
   if (pipeline) {
     const keyId = process.env.RAZORPAY_KEY_ID?.trim(); const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
     const modelKey = process.env.MESH_API_KEY?.trim();
@@ -93,6 +95,8 @@ async function start(): Promise<void> {
         await email.verify();
         executionWorker = new ExecutionWorker(new ExecutionRepository(pipeline.client), new RazorpayExecutionClient(keyId, keySecret), email, pipeline.config.emailEncryptionKey, `${pipeline.config.workerId}-execution`, pipeline.config.executionPollIntervalMs);
         executionWorker.start();
+        watchdog = new ExecutionWatchdog(pipeline.client, 30_000);
+        watchdog.start();
         directExecutionReady = true;
       } catch (error) {
         await email.close().catch(() => undefined);
@@ -110,6 +114,7 @@ async function start(): Promise<void> {
     // socket from leaving a VPS process alive forever during replacement.
     const forceExit = setTimeout(() => process.exit(1), 20_000);
     forceExit.unref();
+    watchdog?.stop();
     Promise.all([worker?.stopAndDrain(), executionWorker?.stopAndDrain()]).catch(() => {}).finally(() => server.close(() => { clearTimeout(forceExit); process.exit(0); }));
   };
   process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);

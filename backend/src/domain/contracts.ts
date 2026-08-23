@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const EnrichmentSourceSchema = z.enum(['razorpay_fields_heuristic', 'fixture_signed', 'vulcan_direct', 'unavailable']);
 export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'DISPUTE_OPENED', 'RESOLVED', 'DISMISSED']);
 export const RiskTierSchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'MONITOR']);
+export const ExecutionStateSchema = z.enum(['queued', 'dispatching', 'accepted', 'unreconciled', 'confirmed', 'retry_scheduled', 'compensating', 'failed', 'cancelled']);
 export const ProposalStatusSchema = z.enum(['pending', 'simulated', 'cancelled_by_dispute', 'cancelled_by_recovery', 'failed']);
 export const ActionTypeSchema = z.enum([
   'deliver_recovery_link_email',
@@ -11,16 +12,6 @@ export const ActionTypeSchema = z.enum([
   'capture_authorized_payment',
   'refund_payment',
   'resolve_infrastructure',
-  // Compatibility-only values remain readable until the direct-execution
-  // migration projection has replaced historical proposal rows.
-  'retry_link_whatsapp',
-  'retry_link_sms',
-  'hinglish_voice_script',
-  'merchant_email_notification',
-  'merchant_webhook_notification',
-  'flag_for_review',
-  'prepare_chargeback_evidence',
-  'auto_resolve_infrastructure',
 ]);
 
 const isoDateTime = z.string().datetime({ offset: true });
@@ -117,7 +108,7 @@ export const RiskAnalysisSchema = z.object({
   missingEvidence: z.array(z.string().min(1).max(160)).max(12),
   chargebackEvidenceReady: z.boolean(),
   evidenceItems: z.array(z.string().min(1).max(200)).max(30),
-  recommendedActionCategory: z.enum(['auto_resolve_no_action', 'prepare_chargeback_evidence', 'flag_for_review', 'propose_recovery', 'escalate_fraud']),
+  recommendedActionCategory: z.enum(['auto_resolve_no_action', 'submit_dispute_evidence', 'record_risk_signal', 'propose_recovery', 'escalate_fraud']),
   toolResults: RiskToolResultsSchema,
 }).strict();
 
@@ -136,7 +127,7 @@ export const PolicyDecisionSchema = z.object({
   permittedActions: z.array(RecoveryPlanSchema.shape.proposedActions.element).max(8),
   noActionReason: z.string().min(1).max(120).nullable(),
   matchedPolicyId: z.string().uuid().nullable(),
-  gates: z.array(z.object({ name: z.enum(['fraud', 'dispute', 'auto_resolve_ceiling', 'critical_tier', 'contact_limits', 'merchant_policy']), result: z.enum(['passed', 'blocked', 'restricted', 'skipped']), rationale: z.string().min(1).max(160) }).strict()).length(6).default([]),
+  gates: z.array(z.object({ name: z.enum(['fraud', 'dispute', 'auto_resolve_ceiling', 'critical_tier', 'contact_limits', 'merchant_policy', 'execution_capability', 'provider_health', 'amount_currency', 'consent_quiet_hours', 'emergency_pause', 'idempotency', 'retry_budget']), result: z.enum(['passed', 'blocked', 'restricted', 'skipped']), rationale: z.string().min(1).max(160) }).strict()).min(6).max(13).default([]),
 }).strict();
 
 export const InvestigationStatusSchema = z.enum(['PENDING', 'RUNNING', 'COMPLETE', 'FAILED']);
@@ -166,6 +157,42 @@ export const ActionProposalSchema = z.object({
   proposedAt: isoDateTime,
   simulatedAt: isoDateTime.nullable(),
   deliveryResult: z.record(z.unknown()).nullable(),
+}).strict();
+
+export const ExecutionActionSchema = z.object({
+  id: uuid,
+  organizationId: uuid,
+  incidentId: uuid,
+  proposalId: uuid.nullable(),
+  capability: ActionTypeSchema,
+  commandKey: z.string().min(1).max(240),
+  commandPayload: z.record(z.unknown()),
+  commandPayloadHash: z.string().regex(/^[a-f0-9]{64}$/),
+  canonicalPaymentId: z.string().max(160).nullable(),
+  canonicalOrderId: z.string().max(160).nullable(),
+  amountPaise: paise.nullable(),
+  currency: z.string().regex(/^[A-Z]{3}$/).nullable(),
+  state: ExecutionStateSchema,
+  retryCount: z.number().int().min(0).max(5),
+  nextReconciliationAt: isoDateTime.nullable(),
+  terminalReason: z.string().max(320).nullable(),
+  providerObjectId: z.string().max(320).nullable(),
+  emailSendStartedAt: isoDateTime.nullable(),
+  createdAt: isoDateTime,
+  dispatchedAt: isoDateTime.nullable(),
+  completedAt: isoDateTime.nullable(),
+}).strict();
+
+export const ExecutionReceiptSchema = z.object({
+  id: uuid,
+  organizationId: uuid,
+  actionId: uuid,
+  provider: z.enum(['razorpay', 'smtp']),
+  receiptKind: z.enum(['payment_link_created', 'smtp_accepted', 'smtp_rejected', 'unreconciled', 'payment_link_paid', 'failed', 'refund_created', 'refund_reconciled', 'capture_confirmed', 'dispute_submitted']),
+  providerOperationId: z.string().max(320).nullable(),
+  receiptHash: z.string().regex(/^[a-f0-9]{64}$/),
+  redactedPayload: z.record(z.unknown()),
+  createdAt: isoDateTime,
 }).strict();
 
 export const AuditEntrySchema = z.object({
@@ -224,12 +251,16 @@ export const DashboardQueryResponseSchema = z.object({
 export const DashboardMetricsSchema = z.object({
   operations: z.object({
     totalAtRiskPaise: paise.nullable(),
-    proposalsGenerated: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
-    proposalsSimulated: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
-    attributedRecoveries: z.number().int().nonnegative().nullable(),
-    recoveredPaise: paise.nullable(),
-    recoveryRate: z.number().min(0).max(1).nullable(),
-    contactToRecoveryRatio: z.number().nonnegative().nullable(),
+    actionsDispatched: z.number().int().nonnegative(),
+    smtpAccepted: z.number().int().nonnegative(),
+    smtpRejected: z.number().int().nonnegative(),
+    unreconciledEmails: z.number().int().nonnegative(),
+    confirmedRecoveries: z.number().int().nonnegative(),
+    refunded: z.number().int().nonnegative(),
+    failedActions: z.number().int().nonnegative(),
+    retried: z.number().int().nonnegative(),
+    compensated: z.number().int().nonnegative(),
+    unresolvedReceipts: z.number().int().nonnegative(),
   }).strict(),
   evaluation: z.object({
     status: z.enum(['not_run', 'available']),
@@ -260,6 +291,23 @@ export const DashboardMetricsSchema = z.object({
   }
 });
 
+/** Read-only, redacted execution action projection for the dashboard. Excludes command payload (customer hash, reference, copy) and raw receipts. */
+export const ExecutionActionSummarySchema = z.object({
+  id: uuid,
+  capability: ActionTypeSchema,
+  state: ExecutionStateSchema,
+  amountPaise: paise.nullable(),
+  currency: z.string().regex(/^[A-Z]{3}$/).nullable(),
+  terminalReason: z.string().max(320).nullable(),
+  providerObjectId: z.string().max(320).nullable(),
+  retryCount: z.number().int().min(0).max(5),
+  policyVersion: z.string().max(160),
+  capabilityVersion: z.string().max(160),
+  createdAt: isoDateTime,
+  dispatchedAt: isoDateTime.nullable(),
+  completedAt: isoDateTime.nullable(),
+}).strict();
+
 export type EnrichmentSource = z.infer<typeof EnrichmentSourceSchema>;
 export type IncidentStatus = z.infer<typeof IncidentStatusSchema>;
 export type RiskTier = z.infer<typeof RiskTierSchema>;
@@ -278,3 +326,4 @@ export type AuditEntry = z.infer<typeof AuditEntrySchema>;
 export type QueueJob = z.infer<typeof QueueJobSchema>;
 export type DashboardQueryResponse = z.infer<typeof DashboardQueryResponseSchema>;
 export type DashboardMetrics = z.infer<typeof DashboardMetricsSchema>;
+export type ExecutionActionSummary = z.infer<typeof ExecutionActionSummarySchema>;

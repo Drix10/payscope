@@ -89,7 +89,7 @@ export class QueueWorker {
   private async processAvailable(): Promise<void> {
     try {
       const claimed = await this.processOne();
-      if (claimed && this.acceptingWork) queueMicrotask(() => this.kick());
+      if (claimed && this.acceptingWork) setImmediate(() => this.kick());
     } catch (error) {
       // A later interval retries a transient claim failure. `processOne` has
       // already released its in-flight/processing state in its finally block.

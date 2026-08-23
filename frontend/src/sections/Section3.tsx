@@ -92,7 +92,7 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
   }, [isMobile])
 
   if (isMobile) {
-    return <MobileShowcasePanel eyebrow="03 / Bounded Investigation" title="Evidence, not guesswork." description="Every intent becomes clear steps with named capabilities. If the request is ambiguous, the system asks a focused question before it runs." accentClass="text-[#4c6dff]" />
+    return <MobileShowcasePanel eyebrow="03 — How we decide what happened" title="Evidence first, guess second" description="How: AI looks at only the last 12 facts, checks what is missing, and explains why. It never invents amounts or contacts a customer without a clear rule." accentClass="text-[#4c6dff]" />
   }
 
   const card = (
@@ -142,16 +142,16 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
             </span>
             <span className="font-mono text-xs font-bold tracking-widest text-[#A8C4FF]">03 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-300">Inspectable DAG Plan</span>
+            <span className="text-[11px] font-semibold text-neutral-300">How AI helps</span>
           </div>
         </motion.div>
 
         <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '52px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '8px' }}>
-          <BlurFadeWords text="Investigate With Evidence." baseDelay={0.5} isInView={isInView} />
+          <BlurFadeWords text="How we find the cause." baseDelay={0.5} isInView={isInView} />
         </h1>
         <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '28px', fontWeight: 300, margin: 0, marginBottom: '16px' }}>
           <BlurFadeWords
-             text="Every incident is explained, not guessed — with capped facts."
+             text="We use only verified facts — at most 12."
             baseDelay={0.8}
             isInView={isInView}
             wordStyle={{
@@ -162,9 +162,9 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
           />
         </p>
         <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '17px', fontWeight: 300, color: 'rgba(255,255,255,0.65)', margin: 0, maxWidth: '400px' }}>
-          <BlurFadeWords text="Deterministic rules first, optional model second." baseDelay={1.1} isInView={isInView} />
+          <BlurFadeWords text="How: Rules check amount, history, and downtime first." baseDelay={1.1} isInView={isInView} />
           <br />
-          <BlurFadeWords text="30 evidence IDs max — no invented money or events." baseDelay={1.45} isInView={isInView} />
+          <BlurFadeWords text="What you get: A clear cause + what is still missing." baseDelay={1.45} isInView={isInView} />
         </p>
       </div>
 
@@ -202,26 +202,26 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#4C6DFF] uppercase tracking-wider">
-                  <Workflow className="h-3.5 w-3.5" /> Deterministic DAG Inspector
+                  <Workflow className="h-3.5 w-3.5" /> How the check works
                 </span>
                 <span className="rounded-full border border-[#4C6DFF]/30 bg-[#4C6DFF]/10 px-2 py-0.5 text-[9px] font-bold text-[#A8C4FF]">
                   Verified Plan v2.0
                 </span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-1">Deterministic Investigation</h3>
+              <h3 className="text-xl font-bold text-white mb-1">Step 1: Rules check the facts</h3>
               <p className="text-xs text-neutral-300 leading-relaxed">
-                Rules compute amount-at-risk, recovery, and severity; an optional model only explains the bounded facts.
+                We calculate how much is at risk, what is already recovered, and how risky this case is. The AI only explains the facts — it cannot change the rules.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-4">
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">Plan Structure</div>
-                <div className="text-sm font-bold text-white">Explicit steps</div>
+                <div className="text-[10px] text-neutral-400 font-mono">What AI sees</div>
+                <div className="text-sm font-bold text-white">At most 12 facts</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">Execution Boundary</div>
-                <div className="text-sm font-bold text-[#4C6DFF]">User reviewed</div>
+                <div className="text-[10px] text-neutral-400 font-mono">What AI cannot do</div>
+                <div className="text-sm font-bold text-[#4C6DFF]">Invent data</div>
               </div>
             </div>
 
@@ -241,31 +241,31 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#4C6DFF] uppercase tracking-wider">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Autonomous Safety Gate
+                  <ShieldCheck className="h-3.5 w-3.5" /> How we stay safe
                 </span>
                 <span className="font-mono text-[10px] text-neutral-400">Policy-Enforced</span>
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Automatically Simulated Actions</h3>
+              <h3 className="text-lg font-bold text-white mb-2">Step 2: What the user sees</h3>
               
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
                   <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#4C6DFF]" /> Monitor — triage only
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#4C6DFF]" /> If not enough proof? No action.
                   </span>
-                  <span className="font-mono font-bold text-emerald-400">Evidence-gated</span>
+                  <span className="font-mono font-bold text-emerald-400">Safe stop</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
                   <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#4C6DFF]" /> Policy-permitted action — simulated
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#4C6DFF]" /> If proof is good? Suggest recovery link.
                   </span>
-                  <span className="font-mono text-sky-300">Recorded by AI</span>
+                  <span className="font-mono text-sky-300">You review</span>
                 </div>
               </div>
             </div>
 
             <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-              <span className="text-[11px] text-neutral-400">Safeguard Level:</span>
-              <span className="text-xs font-bold text-[#4C6DFF]">Zero Black-Box Actions</span>
+              <span className="text-[11px] text-neutral-400">What you get:</span>
+              <span className="text-xs font-bold text-[#4C6DFF]">Clear reason + next step</span>
             </div>
 
             <MagicBorder color={MAGIC_BORDER_BLUE} radius="24px" reverse isInView={isInView} />
