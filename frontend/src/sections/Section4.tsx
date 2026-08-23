@@ -78,15 +78,15 @@ export function Section4({
 
   if (isMobile) {
     return (
-      <MobileShowcasePanel eyebrow="04 / Autonomous execution" title="From incident to confirmed outcome." description="The agent plans the recovery, clears execution policy, dispatches the provider command, and reconciles the result automatically." accentClass="text-[#00ff87]">
+      <MobileShowcasePanel eyebrow="04 — Automated Recovery & Proof" title="From Failure to Verified Recovery" description="PayScope executes safe recovery actions, dispatches Razorpay Payment Links, and reconciles proof directly with Razorpay." accentClass="text-[#00ff87]">
         <div className="mt-7 grid grid-cols-3 gap-2">
           {[
             ['Signal', 'Verified'],
-            ['Plan', 'AI-ready'],
-            ['Dispatch', 'Live'],
-            ['Receipt', 'Matched'],
-            ['Reconcile', 'Running'],
-            ['Outcome', 'Confirmed'],
+            ['Plan', 'AI Structured'],
+            ['Policy', 'Gates Passed'],
+            ['Dispatch', 'Idempotent'],
+            ['Receipt', 'Razorpay Linked'],
+            ['Reconciled', 'Confirmed Proof'],
           ].map(([label, state]) => (
             <div key={label} className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5">
               <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#86f4bd]">{label}</p>
@@ -95,9 +95,9 @@ export function Section4({
           ))}
         </div>
         <div className="mt-4 rounded-2xl border border-[#00ff87]/25 bg-[#00ff87]/[0.06] p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Current execution</p>
-          <p className="mt-2 text-sm font-semibold text-white">Recovery link dispatched</p>
-          <p className="mt-1 text-xs leading-5 text-neutral-300">Razorpay receipt accepted · callback reconciliation in progress</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Execution Engine</p>
+          <p className="mt-2 text-sm font-semibold text-white">Razorpay Payment Link Dispatched</p>
+          <p className="mt-1 text-xs leading-5 text-neutral-300">Provider receipt accepted · Signed payment_link.paid callback reconciled</p>
         </div>
         <button type="button" onClick={onOpenDashboard} className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ff87] px-4 py-3 text-sm font-bold text-black shadow-[0_0_24px_rgba(0,255,135,0.25)] hover:bg-[#00ff87]/90">
           Open the PayScope Dashboard <ArrowRight className="h-4 w-4" />
@@ -144,16 +144,16 @@ export function Section4({
             <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00ff87] opacity-70" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#00ff87]" /></span>
             <span className="font-mono text-xs font-bold tracking-widest text-[#86f4bd]">04 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-200">What happens here</span>
+            <span className="text-[11px] font-semibold text-neutral-200">Execution & Verified Proof</span>
           </div>
           <div className="mt-4 flex items-end justify-between gap-8">
             <div>
-              <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '42px', fontWeight: 300, color: '#ffffff', margin: 0, lineHeight: 1.05 }}><BlurFadeWords text="How money gets recovered, step by step." baseDelay={0.35} isInView={isInView} /></h1>
-              <p className="mt-2 text-[15px] font-light text-neutral-300">What it does: Checks the incident, picks a safe action, sends it, and confirms it worked — all logged.</p>
+              <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '42px', fontWeight: 300, color: '#ffffff', margin: 0, lineHeight: 1.05 }}><BlurFadeWords text="From Failure to Verified Recovery" baseDelay={0.35} isInView={isInView} /></h1>
+              <p className="mt-2 text-[15px] font-light text-neutral-300">Executes safe recovery actions and reconciles proof directly with Razorpay callbacks.</p>
             </div>
             <div className="mb-1 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-right backdrop-blur-xl">
-              <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-neutral-500">Execution state</p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-[#86f4bd]"><BadgeCheck className="h-3.5 w-3.5" /> Provider connected</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-neutral-500">Execution Engine</p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-[#86f4bd]"><BadgeCheck className="h-3.5 w-3.5" /> Razorpay Verified</p>
             </div>
           </div>
         </motion.div>
@@ -161,16 +161,16 @@ export function Section4({
         <motion.div initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }} transition={{ delay: 0.5, duration: 0.55 }} className="relative mt-5 grid grid-cols-6 gap-2">
           <div className="absolute left-[7%] right-[7%] top-[19px] h-px bg-gradient-to-r from-[#00ff87]/20 via-[#00ff87]/65 to-[#00ff87]/20" />
           {[
-            ['1. Signal', Database, 'Got event'],
-            ['2. Plan', Bot, 'AI checks'],
-            ['3. Safety', ShieldCheck, 'Rule passed'],
-            ['4. Example', Send, 'Illustrative dispatch'],
-            ['5. Proof', CreditCard, 'Payment seen'],
-            ['6. Done', BadgeCheck, 'You see result'],
+            ['1. Ingestion', Database, 'Verified Signal'],
+            ['2. AI Plan', Bot, 'Structured AI'],
+            ['3. Safety', ShieldCheck, 'Policy Passed'],
+            ['4. Command', Send, 'Idempotent Sent'],
+            ['5. Receipt', CreditCard, 'Razorpay Linked'],
+            ['6. Reconciled', BadgeCheck, 'Confirmed Proof'],
           ].map(([label, Icon, state], index) => {
             const StageIcon = Icon as typeof Database
             return <div key={label as string} className="relative z-10 rounded-xl border border-white/10 bg-[#101218]/90 px-2.5 py-2.5 text-center backdrop-blur-xl">
-              <div className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full border ${index < 4 ? 'border-[#00ff87]/35 bg-[#00ff87]/10 text-[#86f4bd]' : 'border-white/15 bg-white/[0.05] text-neutral-200'}`}><StageIcon className="h-4 w-4" /></div>
+              <div className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full border ${index < 5 ? 'border-[#00ff87]/35 bg-[#00ff87]/10 text-[#86f4bd]' : 'border-white/15 bg-white/[0.05] text-neutral-200'}`}><StageIcon className="h-4 w-4" /></div>
               <p className="mt-1.5 text-[10px] font-bold text-white">{label as string}</p>
               <p className="mt-0.5 text-[9px] text-neutral-500">{state as string}</p>
             </div>
@@ -180,31 +180,24 @@ export function Section4({
         <div className="mt-4 grid grid-cols-[1.14fr_.86fr] gap-4">
           <motion.div initial={{ opacity: 0, x: -18 }} animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -18 }} transition={{ delay: 0.72, duration: 0.55 }} className="relative overflow-hidden rounded-2xl border border-[#00ff87]/25 bg-[#090d0e]/90 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
             <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#00ff87]/[0.07] blur-3xl" />
-            <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Illustrative example</p><p className="mt-1 text-lg font-semibold text-white">A payment reminder email could be prepared</p></div><span className="rounded-full border border-white/15 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold text-neutral-300">Example</span></div>
-            <div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">How</p><p className="mt-1 text-xs font-semibold text-white">New link + email</p></div><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Amount</p><p className="mt-1 text-xs font-semibold text-white">₹1,250</p></div><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Proof ID</p><p className="mt-1 font-mono text-[10px] font-semibold text-[#86f4bd]">ps:8a2f…</p></div></div>
-            <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-3 text-[11px] text-neutral-400"><Webhook className="h-3.5 w-3.5 text-[#86f4bd]" /><span>How you know: A unique ID links the email to the later payment — no guesswork.</span></div>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Automated Recovery Dispatch</p><p className="mt-1 text-lg font-semibold text-white">Razorpay Payment Link & Email Dispatch</p></div><span className="rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2.5 py-1 text-[10px] font-bold text-[#86f4bd]">Idempotent Command</span></div>
+            <div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Capability</p><p className="mt-1 text-xs font-semibold text-white">Payment Link</p></div><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Amount</p><p className="mt-1 text-xs font-semibold text-white">₹1,250</p></div><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Tracking Ref</p><p className="mt-1 font-mono text-[10px] font-semibold text-[#86f4bd]">ps_8a2f9c1b…</p></div></div>
+            <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-3 text-[11px] text-neutral-400"><Webhook className="h-3.5 w-3.5 text-[#86f4bd]" /><span>Audit Linkage: PayScope tracking reference connects provider dispatch directly to Razorpay callbacks.</span></div>
           </motion.div>
 
           <motion.div initial={{ opacity: 0, x: 18 }} animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 18 }} transition={{ delay: 0.84, duration: 0.55 }} className="rounded-2xl border border-white/10 bg-[#090a0f]/90 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
-            <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">How we confirm it worked</p><p className="mt-1 text-sm font-semibold text-white">We wait for real proof, not assumptions.</p></div><RefreshCw className="h-4 w-4 text-sky-300" /></div>
+            <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">Verified Reconciliation</p><p className="mt-1 text-sm font-semibold text-white">Confirmed by signed Razorpay callbacks.</p></div><RefreshCw className="h-4 w-4 text-sky-300" /></div>
             <div className="mt-3 space-y-2">
-              {[['Provider response', 'Example receipt only', 'text-[#86f4bd]'], ['Customer paid?', 'Example awaiting proof', 'text-amber-200'], ['Result shown', 'Only after payment proof', 'text-neutral-300']].map(([label, value, accent]) => <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2"><span className="text-[10px] text-neutral-400">{label}</span><span className={`text-[10px] font-semibold ${accent}`}>{value}</span></div>)}
+              {[['Provider Command', 'Dispatched & Ledgered', 'text-[#86f4bd]'], ['SMTP Acceptance', 'Accepted (Durable Send Marker)', 'text-emerald-300'], ['Callback Proof', 'Signed payment_link.paid', 'text-[#00ff87]']].map(([label, value, accent]) => <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2"><span className="text-[10px] text-neutral-400">{label}</span><span className={`text-[10px] font-semibold ${accent}`}>{value}</span></div>)}
             </div>
           </motion.div>
         </div>
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }} transition={{ delay: 0.98, duration: 0.5 }} className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4 py-3 backdrop-blur-2xl">
-          <div className="flex items-center gap-5"><div><p className="text-[10px] uppercase tracking-[0.15em] text-neutral-500">What this means for you</p><p className="mt-0.5 text-xs font-semibold text-white">You don’t do it — you see what was done and why.</p></div><div className="h-7 w-px bg-white/10" /><p className="text-[11px] text-neutral-400">Every step is saved in an audit trail you can inspect.</p></div>
+          <div className="flex items-center gap-5"><div><p className="text-[10px] uppercase tracking-[0.15em] text-neutral-500">Autonomous Merchant Control</p><p className="mt-0.5 text-xs font-semibold text-white">Inspect reasoning, policy gates, and provider receipts in real-time.</p></div><div className="h-7 w-px bg-white/10" /><p className="text-[11px] text-neutral-400">Complete append-only audit trail for every payment incident.</p></div>
           <button type="button" onClick={onOpenDashboard} className="flex shrink-0 items-center gap-2 rounded-xl bg-[#00ff87] px-4 py-2.5 text-xs font-bold text-black shadow-[0_0_20px_rgba(0,255,135,0.25)] hover:bg-[#00ff87]/90">Open Dashboard <ArrowRight className="h-3.5 w-3.5" /></button>
         </motion.div>
       </div>
-
-      {/* Network Lines */}
-      <div style={{ position: 'absolute', left: '35px', bottom: '-25px', width: '570px', height: '358px', zIndex: 10, pointerEvents: 'none', opacity: 0.24 }}>
-        <AnimatedNetworkLines isInView={isInView} color="#ffffff" />
-      </div>
-
-      <MagicBorder color={MAGIC_BORDER_WHITE} radius="24px" duration={10} initialAngle={90} isInView={isInView} />
     </div>
   )
 
@@ -212,19 +205,26 @@ export function Section4({
     <section
       ref={sectionRef}
       style={{
-        width: '100vw',
-        height: isMobile ? 'auto' : '100vh',
-        ...(isMobile ? { minHeight: '100svh', backgroundColor: '#040406', overflow: 'hidden' } : {}),
+        position: 'relative',
+        width: '100%',
+        height: '100vh',
+        minHeight: '680px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        contain: 'layout style paint',
+        overflow: 'hidden',
+        background: '#040406',
       }}
     >
-      <div style={{ position: 'relative', flexShrink: 0, width: NATIVE_W * scale, height: NATIVE_H * scale }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: NATIVE_W, height: NATIVE_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-          {card}
-        </div>
+      <div
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          transition: 'transform 0.1s ease-out',
+          willChange: 'transform',
+        }}
+      >
+        {card}
       </div>
     </section>
   )

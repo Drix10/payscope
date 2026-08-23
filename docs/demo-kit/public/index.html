@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PAYSCOPE // OPERATOR TERMINAL</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background-color: #000000;
+      color: #ffffff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1020px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    a { color: #ffffff; text-decoration: underline; }
+    a:hover { background-color: #ffffff; color: #000000; text-decoration: none; }
+
+    header {
+      border: 1px solid #ffffff;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .title-block h1 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+    }
+
+    .status-badge {
+      border: 1px solid #ffffff;
+      padding: 4px 10px;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+
+    .status-badge.error {
+      background-color: #ffffff;
+      color: #000000;
+      font-weight: bold;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 310px 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 820px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      border: 1px solid #333333;
+      padding: 12px;
+    }
+
+    .panel-header {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      border-bottom: 1px solid #333333;
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .field-group {
+      margin-bottom: 8px;
+    }
+
+    label {
+      display: block;
+      color: #888888;
+      font-size: 10px;
+      margin-bottom: 3px;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      background-color: #050505;
+      border: 1px solid #333333;
+      color: #ffffff;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 8px;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: #ffffff;
+    }
+
+    button {
+      background-color: #000000;
+      color: #ffffff;
+      border: 1px solid #ffffff;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 10px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: background-color 0.1s, color 0.1s;
+      width: 100%;
+      text-align: center;
+    }
+
+    button:hover {
+      background-color: #ffffff;
+      color: #000000;
+    }
+
+    button:disabled {
+      border-color: #333333;
+      color: #444444;
+      cursor: not-allowed;
+      background-color: #000000;
+    }
+
+    .scenarios-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .card {
+      border: 1px solid #222222;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card:hover {
+      border-color: #ffffff;
+    }
+
+    .card-num {
+      font-size: 10px;
+      color: #666666;
+      margin-bottom: 3px;
+    }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .card-desc {
+      font-size: 10px;
+      color: #888888;
+      margin-bottom: 10px;
+      line-height: 1.35;
+    }
+
+    .terminal-window {
+      border: 1px solid #ffffff;
+      background-color: #000000;
+      padding: 10px;
+      height: 210px;
+      overflow-y: auto;
+    }
+
+    .terminal-line {
+      margin-bottom: 5px;
+      word-break: break-all;
+      font-size: 11px;
+    }
+
+    .text-dim { color: #666666; }
+    .text-bright { color: #ffffff; font-weight: bold; }
+    .text-muted { color: #aaaaaa; }
+    .text-invert { background-color: #ffffff; color: #000000; padding: 0 4px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- Compact Monochrome Header -->
+    <header>
+      <div class="title-block">
+        <h1>PAYSCOPE // OPERATOR TERMINAL</h1>
+      </div>
+      
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <a id="link-dash" href="https://temp.coslynx.com" target="_blank" rel="noopener noreferrer" style="font-size: 11px;">[ OPEN DASHBOARD ↗ ]</a>
+        <div id="preflight-status" class="status-badge">[ PREFLIGHT: CHECKING... ]</div>
+      </div>
+    </header>
+
+    <div class="main-grid">
+
+      <!-- Left Column: Controls & Setup -->
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+
+        <!-- Environment Setup -->
+        <div class="panel">
+          <div class="panel-header">
+            <span>// CONFIG</span>
+            <span style="color: #666666;">SYS</span>
+          </div>
+
+          <div class="field-group">
+            <label>API URL</label>
+            <input type="text" id="cfg-api-url" placeholder="https://temp.coslynx.com" />
+          </div>
+
+          <div class="field-group">
+            <label>ORGANIZATION ID</label>
+            <input type="text" id="cfg-org-id" placeholder="UUID" />
+          </div>
+        </div>
+
+        <!-- Real Razorpay Credentials Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <span>// RAZORPAY TEST IDS</span>
+            <span style="color: #666666;">TEST MODE</span>
+          </div>
+
+          <div class="field-group">
+            <label>FAILED PAYMENT ID (pay_...)</label>
+            <input type="text" id="cfg-failed-payment-id" placeholder="pay_failed_test_..." />
+          </div>
+
+          <div class="field-group">
+            <label>CAPTURED PAYMENT ID (pay_...)</label>
+            <input type="text" id="cfg-captured-payment-id" placeholder="pay_captured_test_..." />
+          </div>
+
+          <div class="field-group">
+            <label>LINK REF (ps_...)</label>
+            <input type="text" id="cfg-link-ref" placeholder="ps_reference" />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+            <div class="field-group">
+              <label>KEY ID</label>
+              <input type="text" id="cfg-key-id" placeholder="rzp_test_..." />
+            </div>
+            <div class="field-group">
+              <label>SECRET</label>
+              <input type="password" id="cfg-key-secret" placeholder="••••" />
+            </div>
+          </div>
+
+          <button id="btn-save" onclick="saveConfig()">[ SAVE CONFIG ]</button>
+        </div>
+
+        <!-- Automated Runner -->
+        <div class="panel">
+          <div class="panel-header">
+            <span>// AUTOMATED SEQUENCE</span>
+          </div>
+
+          <div class="field-group">
+            <label>PAUSE DELAY</label>
+            <select id="seq-pause">
+              <option value="2000">2 SECONDS</option>
+              <option value="4000" selected>4 SECONDS (RECOMMENDED)</option>
+              <option value="6000">6 SECONDS</option>
+            </select>
+          </div>
+
+          <button id="btn-run-seq" onclick="runSequence()">[ > EXECUTE FULL DEMO ]</button>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Scenarios & Output Stream -->
+      <div>
+
+        <div class="panel-header" style="border: none; padding: 0; margin-bottom: 8px;">
+          <span>// DISPATCH SCENARIO</span>
+          <a href="javascript:void(0)" onclick="verifyIncidents()" style="font-size: 10px; text-decoration: none;">[ VERIFY PROJECTIONS ]</a>
+        </div>
+
+        <div class="scenarios-grid">
+
+          <!-- Scenario 1 -->
+          <div class="card">
+            <div>
+              <div class="card-num">[ SCENARIO 01 ]</div>
+              <div class="card-title">Authentic Failure</div>
+              <div class="card-desc">Sends signed payment.failed webhook with Razorpay lookup.</div>
+            </div>
+            <button id="btn-scen-1" onclick="triggerScenario('failed-payment', null, 'btn-scen-1')">[ > DISPATCH FAILURE ]</button>
+          </div>
+
+          <!-- Scenario 2 -->
+          <div class="card">
+            <div>
+              <div class="card-num">[ SCENARIO 02 ]</div>
+              <div class="card-title">Duplicate Delivery</div>
+              <div class="card-desc">Re-sends event ID to test HMAC duplicate gate.</div>
+            </div>
+            <button id="btn-scen-2" onclick="triggerDuplicateScenario('btn-scen-2')">[ > RE-SEND DUPLICATE ]</button>
+          </div>
+
+          <!-- Scenario 3 -->
+          <div class="card">
+            <div>
+              <div class="card-num">[ SCENARIO 03 ]</div>
+              <div class="card-title">Dispute Hard Stop</div>
+              <div class="card-desc">Dispatches dispute created event to block outreach.</div>
+            </div>
+            <button id="btn-scen-3" onclick="triggerScenario('dispute', null, 'btn-scen-3')">[ > DISPATCH DISPUTE ]</button>
+          </div>
+
+          <!-- Scenario 4 -->
+          <div class="card">
+            <div>
+              <div class="card-num">[ SCENARIO 04 ]</div>
+              <div class="card-title">Reconciliation</div>
+              <div class="card-desc">Sends payment_link.paid callback for PayScope reference.</div>
+            </div>
+            <button id="btn-scen-4" onclick="triggerScenario('payment-link-paid', null, 'btn-scen-4')">[ > DISPATCH RECON ]</button>
+          </div>
+
+        </div>
+
+        <!-- Terminal Output Window -->
+        <div class="panel-header" style="border: none; padding: 0; margin-bottom: 6px;">
+          <span>// LIVE LOG STREAM</span>
+          <a href="javascript:void(0)" onclick="clearTerminal()" style="font-size: 10px; text-decoration: none; color: #666666;">[ CLEAR STREAM ]</a>
+        </div>
+
+        <div id="terminal" class="terminal-window">
+          <div class="terminal-line text-dim">// TERMINAL READY. DISPATCH SCENARIOS ABOVE.</div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    let lastEventId = null;
+    let lastScenario = null;
+    let lineCount = 0;
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        document.getElementById('cfg-api-url').value = data.apiUrl || '';
+        document.getElementById('cfg-org-id').value = data.orgId || '';
+        document.getElementById('cfg-failed-payment-id').value = data.failedPaymentId || '';
+        document.getElementById('cfg-captured-payment-id').value = data.capturedPaymentId || '';
+        document.getElementById('cfg-link-ref').value = data.paymentLinkReference || '';
+        document.getElementById('cfg-key-id').value = data.keyId || '';
+        
+        if (data.apiUrl) {
+          document.getElementById('link-dash').href = data.apiUrl.replace(/\/$/, '');
+        }
+      } catch (err) {
+        log('CONFIG_LOAD_ERR: ' + err.message, 'err');
+      }
+    }
+
+    async function saveConfig() {
+      const btn = document.getElementById('btn-save');
+      btn.disabled = true;
+      try {
+        const body = {
+          apiUrl: document.getElementById('cfg-api-url').value.trim(),
+          orgId: document.getElementById('cfg-org-id').value.trim(),
+          failedPaymentId: document.getElementById('cfg-failed-payment-id').value.trim(),
+          capturedPaymentId: document.getElementById('cfg-captured-payment-id').value.trim(),
+          paymentLinkReference: document.getElementById('cfg-link-ref').value.trim(),
+          keyId: document.getElementById('cfg-key-id').value.trim(),
+          keySecret: document.getElementById('cfg-key-secret').value.trim(),
+        };
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const result = await res.json();
+        if (result.ok) {
+          log('[OK] CONFIG_SAVED_TO_ENV', 'ok');
+          checkPreflight();
+        } else {
+          log('CONFIG_SAVE_ERR: ' + result.error, 'err');
+        }
+      } catch (err) {
+        log('CONFIG_SAVE_ERR: ' + err.message, 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function checkPreflight() {
+      const badge = document.getElementById('preflight-status');
+      badge.className = 'status-badge';
+      badge.textContent = '[ PREFLIGHT: CHECKING... ]';
+
+      try {
+        const res = await fetch('/api/preflight');
+        const data = await res.json();
+        if (data.ok) {
+          badge.textContent = `[ PREFLIGHT: READY (${data.environment.toUpperCase()}) ]`;
+          log(`[OK] PREFLIGHT PASSED | TARGET: ${data.apiUrl}`, 'ok');
+        } else {
+          badge.className = 'status-badge error';
+          badge.textContent = '[ PREFLIGHT: FAILED ]';
+          log(`[ERR] PREFLIGHT FAILED: ${data.error}`, 'err');
+        }
+      } catch (err) {
+        badge.className = 'status-badge error';
+        badge.textContent = '[ PREFLIGHT: ERROR ]';
+        log(`[ERR] PREFLIGHT ERROR: ${err.message}`, 'err');
+      }
+    }
+
+    async function triggerScenario(scenario, eventIdOverride = null, btnId = null) {
+      const btn = btnId ? document.getElementById(btnId) : null;
+      if (btn) btn.disabled = true;
+
+      const eventId = eventIdOverride || `term-${scenario}-${Date.now().toString().slice(-6)}`;
+      lastEventId = eventId;
+      lastScenario = scenario;
+
+      log(`> DISPATCHING [${scenario}] [ID: ${eventId}]...`, 'info');
+
+      try {
+        const res = await fetch('/api/trigger', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ scenario, eventId })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          const dupText = data.duplicate ? ' [DUPLICATE: TRUE]' : '';
+          log(`[OK] ACCEPTED (200)${dupText} | EVENT: ${data.eventIdReturned}`, 'ok');
+        } else {
+          log(`[ERR] REJECTED (${data.httpStatus || 400}): ${data.error || JSON.stringify(data)}`, 'err');
+        }
+      } catch (err) {
+        log(`[ERR] DISPATCH_FAILED: ${err.message}`, 'err');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function triggerDuplicateScenario(btnId = null) {
+      if (!lastEventId) {
+        log('> DISPATCHING BASELINE FAILURE FIRST...', 'info');
+        await triggerScenario('failed-payment', null, btnId);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      log(`> RE-SENDING EVENT ID: ${lastEventId}...`, 'info');
+      await triggerScenario(lastScenario || 'failed-payment', lastEventId, btnId);
+    }
+
+    async function runSequence() {
+      const pauseMs = Number(document.getElementById('seq-pause').value);
+      const btn = document.getElementById('btn-run-seq');
+      btn.disabled = true;
+
+      log(`> STARTING AUTOMATED SEQUENCE (${pauseMs / 1000}s DELAYS)...`, 'info');
+
+      const runId = `demo-${Date.now().toString().slice(-6)}`;
+      const steps = [
+        { title: '01: FAILED PAYMENT', scenario: 'failed-payment', id: `${runId}-failed-001` },
+        { title: '02: DUPLICATE REPLAY', scenario: 'failed-payment', id: `${runId}-failed-001` },
+        { title: '03: CORRELATION FAILURE', scenario: 'failed-payment', id: `${runId}-failed-002` },
+        { title: '04: DISPUTE HARD STOP', scenario: 'dispute', id: `${runId}-dispute-001` },
+        { title: '05: RECONCILIATION', scenario: 'payment-link-paid', id: `${runId}-paid-001` },
+      ];
+
+      for (const step of steps) {
+        log(`\n=== STEP ${step.title} ===`, 'info');
+        await triggerScenario(step.scenario, step.id);
+        log(`WAITING ${pauseMs / 1000}s...`, 'dim');
+        await new Promise(r => setTimeout(r, pauseMs));
+      }
+
+      log('\n[OK] SEQUENCE COMPLETE.', 'ok');
+      btn.disabled = false;
+    }
+
+    async function verifyIncidents() {
+      log('> QUERYING PROJECTIONS...', 'info');
+      try {
+        const res = await fetch('/api/verify');
+        const data = await res.json();
+        if (data.ok) {
+          log(`[OK] VERIFIED | INCIDENTS: ${data.incidentCount} | LATEST: ${data.firstIncident?.id || 'NONE'} (${data.firstIncident?.status || 'N/A'})`, 'ok');
+        } else {
+          log(`[ERR] VERIFY_FAILED: ${data.error}`, 'err');
+        }
+      } catch (err) {
+        log(`[ERR] VERIFY_ERR: ${err.message}`, 'err');
+      }
+    }
+
+    function log(msg, type = 'info') {
+      const term = document.getElementById('terminal');
+      const time = new Date().toISOString().slice(11, 19);
+      const line = document.createElement('div');
+      line.className = 'terminal-line';
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'text-dim';
+      timeSpan.textContent = `[${time}] `;
+      line.appendChild(timeSpan);
+
+      const msgSpan = document.createElement('span');
+      if (type === 'ok') {
+        msgSpan.className = 'text-bright';
+        msgSpan.textContent = msg;
+      } else if (type === 'err') {
+        msgSpan.className = 'text-invert';
+        msgSpan.textContent = ` ${msg} `;
+      } else if (type === 'dim') {
+        msgSpan.className = 'text-dim';
+        msgSpan.textContent = msg;
+      } else {
+        msgSpan.className = 'text-muted';
+        msgSpan.textContent = msg;
+      }
+      line.appendChild(msgSpan);
+
+      term.appendChild(line);
+      lineCount += 1;
+
+      if (lineCount > 100 && term.firstChild) {
+        term.removeChild(term.firstChild);
+      }
+
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function clearTerminal() {
+      document.getElementById('terminal').innerHTML = '<div class="terminal-line text-dim">// TERMINAL CLEARED.</div>';
+      lineCount = 0;
+    }
+
+    loadConfig();
+    setTimeout(checkPreflight, 400);
+  </script>
+</body>
+</html>

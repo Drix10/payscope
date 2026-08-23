@@ -4,7 +4,7 @@ import { AnimatedNetworkLines } from './AnimatedNetworkLines'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { MobileShowcasePanel } from '../components/showcase/MobileShowcasePanel'
 import { BlurFadeWords } from '../BlurFadeWords'
-import { Workflow, ShieldCheck, Sparkles, CheckCircle2, GitFork, Eye } from 'lucide-react'
+import { Workflow, ShieldCheck, Sparkles, CheckCircle2, GitFork, Eye, Bot } from 'lucide-react'
 
 function AnimatedWords({ text, baseDelay = 0, isInView }: {
   text: string
@@ -92,7 +92,7 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
   }, [isMobile])
 
   if (isMobile) {
-    return <MobileShowcasePanel eyebrow="03 — How we decide what happened" title="Evidence first, guess second" description="How: AI looks at only the last 12 facts, checks what is missing, and explains why. It never invents amounts or contacts a customer without a clear rule." accentClass="text-[#4c6dff]" />
+    return <MobileShowcasePanel eyebrow="03 — Bounded AI & Policy" title="Smart AI. Zero Risk." description="Specialized AI agents investigate root causes while strict policy gates ensure zero unauthorized actions or hallucinations." accentClass="text-[#4c6dff]" />
   }
 
   const card = (
@@ -142,16 +142,16 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
             </span>
             <span className="font-mono text-xs font-bold tracking-widest text-[#A8C4FF]">03 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-300">How AI helps</span>
+            <span className="text-[11px] font-semibold text-neutral-300">AI Reasoning & Policy Safety</span>
           </div>
         </motion.div>
 
-        <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '52px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '8px' }}>
-          <BlurFadeWords text="How we find the cause." baseDelay={0.5} isInView={isInView} />
+        <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '48px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '8px' }}>
+          <BlurFadeWords text="Smart AI. Zero Risk." baseDelay={0.5} isInView={isInView} />
         </h1>
-        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '28px', fontWeight: 300, margin: 0, marginBottom: '16px' }}>
+        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '24px', fontWeight: 300, margin: 0, marginBottom: '16px' }}>
           <BlurFadeWords
-             text="We use only verified facts — at most 12."
+             text="Multi-agent AI investigates causes under strict safety guardrails."
             baseDelay={0.8}
             isInView={isInView}
             wordStyle={{
@@ -161,10 +161,10 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
             }}
           />
         </p>
-        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '17px', fontWeight: 300, color: 'rgba(255,255,255,0.65)', margin: 0, maxWidth: '400px' }}>
-          <BlurFadeWords text="How: Rules check amount, history, and downtime first." baseDelay={1.1} isInView={isInView} />
+        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '15px', fontWeight: 300, color: 'rgba(255,255,255,0.68)', margin: 0, maxWidth: '420px', lineHeight: 1.45 }}>
+          <BlurFadeWords text="Multi-Agent Hierarchy: Supervisor, Analyst & Planner diagnose gateway downtime vs customer drops." baseDelay={1.1} isInView={isInView} />
           <br />
-          <BlurFadeWords text="What you get: A clear cause + what is still missing." baseDelay={1.45} isInView={isInView} />
+          <BlurFadeWords text="Deterministic Policy: Enforces customer consent, contact limits & dispute blocks before any action." baseDelay={1.45} isInView={isInView} />
         </p>
       </div>
 
@@ -173,7 +173,7 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
         <AnimatedNetworkLines isInView={isInView} color="#4C6DFF" />
       </div>
 
-      {/* ── Right Half Snappy Lightweight Cards (Matching Section 1) ── */}
+      {/* ── Right Half Snappy Lightweight Cards ── */}
       <div
         style={{
           position: 'absolute',
@@ -190,7 +190,7 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
           zIndex: 15,
         }}
       >
-        {/* Top Card: Deterministic Execution Plan */}
+        {/* Top Card: Agent Stack */}
         <div style={{ flex: 0.93, position: 'relative', overflow: 'hidden' }}>
           <motion.div
             initial={{ opacity: 0, x: -60, scale: 0.95 }}
@@ -201,79 +201,67 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
           >
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#4C6DFF] uppercase tracking-wider">
-                  <Workflow className="h-3.5 w-3.5" /> How the check works
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#A8C4FF] uppercase tracking-wider">
+                  <Bot className="h-3.5 w-3.5 text-[#4C6DFF]" /> Multi-Agent AI Hierarchy
                 </span>
                 <span className="rounded-full border border-[#4C6DFF]/30 bg-[#4C6DFF]/10 px-2 py-0.5 text-[9px] font-bold text-[#A8C4FF]">
-                  Verified Plan v2.0
+                  Structured AI
                 </span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-1">Step 1: Rules check the facts</h3>
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                We calculate how much is at risk, what is already recovered, and how risky this case is. The AI only explains the facts — it cannot change the rules.
+              <p className="text-sm font-semibold text-white">Supervisor → Analyst → Planner</p>
+              <p className="mt-1 text-xs leading-5 text-neutral-400">
+                Specialized sub-agents return structured JSON outputs detailing evidence gaps, confidence rationale, and alternative hypotheses.
               </p>
             </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">What AI sees</div>
-                <div className="text-sm font-bold text-white">At most 12 facts</div>
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-3 space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-neutral-400">Root Cause Diagnosis</span>
+                <span className="font-mono text-[#A8C4FF]">Gateway Degraded / Timeout</span>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">What AI cannot do</div>
-                <div className="text-sm font-bold text-[#4C6DFF]">Invent data</div>
+              <div className="flex justify-between text-xs">
+                <span className="text-neutral-400">Zero Hallucination</span>
+                <span className="font-mono text-neutral-300">Terminal Schema Contracts</span>
               </div>
             </div>
-
-            <MagicBorder color={MAGIC_BORDER_BLUE} radius="24px" isInView={isInView} />
           </motion.div>
         </div>
 
-        {/* Bottom Card: Interactive Disambiguation System */}
-        <div style={{ flex: 1.07, overflow: 'hidden' }}>
+        {/* Bottom Card: Policy Gates */}
+        <div style={{ flex: 1.07, position: 'relative', overflow: 'hidden' }}>
           <motion.div
-            initial={{ opacity: 0, x: 60, scale: 0.95 }}
-            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 60, scale: 0.95 }}
-            transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9, delay: 0.1 } : { duration: 0 }}
+            initial={{ opacity: 0, x: -60, scale: 0.95 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: -60, scale: 0.95 }}
+            transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9, delay: 0.15 } : { duration: 0 }}
             style={{ willChange: 'transform, opacity' }}
-            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-[#4C6DFF]/30 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
+            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-white/10 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
           >
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#4C6DFF] uppercase tracking-wider">
-                  <ShieldCheck className="h-3.5 w-3.5" /> How we stay safe
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-neutral-300 uppercase tracking-wider">
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#4C6DFF]" /> Deterministic Policy Engine
                 </span>
-                <span className="font-mono text-[10px] text-neutral-400">Policy-Enforced</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-neutral-400">
+                  Strict Safety
+                </span>
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Step 2: What the user sees</h3>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
-                  <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#4C6DFF]" /> If not enough proof? No action.
-                  </span>
-                  <span className="font-mono font-bold text-emerald-400">Safe stop</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
-                  <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#4C6DFF]" /> If proof is good? Suggest recovery link.
-                  </span>
-                  <span className="font-mono text-sky-300">You review</span>
-                </div>
+              <p className="text-sm font-semibold text-white">Execution Safety Gatekeeper</p>
+              <p className="mt-1 text-xs leading-5 text-neutral-400">
+                A hard-coded non-LLM policy engine validates payment status, dispute blocks, consent, and contact limits before any action executes.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs">
+                <span className="text-neutral-400">Dispute & Fraud Check</span>
+                <span className="font-bold text-[#00ff87]">PASSED (Unblocked)</span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-[#4C6DFF]/20 bg-[#4C6DFF]/[0.05] p-2.5 text-xs">
+                <span className="text-neutral-300">Authorized Action</span>
+                <span className="font-semibold text-[#A8C4FF]">deliver_recovery_link_email</span>
               </div>
             </div>
-
-            <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-              <span className="text-[11px] text-neutral-400">What you get:</span>
-              <span className="text-xs font-bold text-[#4C6DFF]">Clear reason + next step</span>
-            </div>
-
-            <MagicBorder color={MAGIC_BORDER_BLUE} radius="24px" reverse isInView={isInView} />
           </motion.div>
         </div>
       </div>
-
-      <MagicBorder color={MAGIC_BORDER_BLUE} radius="24px" duration={10} initialAngle={0} isInView={isInView} />
     </div>
   )
 
@@ -281,19 +269,26 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
     <section
       ref={sectionRef}
       style={{
-        width: '100vw',
-        height: isMobile ? 'auto' : '100vh',
-        ...(isMobile ? { minHeight: '100svh', backgroundColor: '#040406', overflow: 'hidden' } : {}),
+        position: 'relative',
+        width: '100%',
+        height: '100vh',
+        minHeight: '680px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        contain: 'layout style paint',
+        overflow: 'hidden',
+        background: '#040406',
       }}
     >
-      <div style={{ position: 'relative', flexShrink: 0, width: NATIVE_W * scale, height: NATIVE_H * scale }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: NATIVE_W, height: NATIVE_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-          {card}
-        </div>
+      <div
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          transition: 'transform 0.1s ease-out',
+          willChange: 'transform',
+        }}
+      >
+        {card}
       </div>
     </section>
   )

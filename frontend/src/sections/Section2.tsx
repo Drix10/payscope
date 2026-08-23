@@ -92,7 +92,7 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
   }, [isMobile])
 
   if (isMobile) {
-    return <MobileShowcasePanel eyebrow="02 — How events are grouped" title="Related events become one clear case" description="How: Same payment ID, order ID, or subscription? Grouped. Otherwise, same customer + payment method within 15 minutes? Grouped. Different currencies? Never grouped — to avoid wrong amounts." accentClass="text-[#906aff]" />
+    return <MobileShowcasePanel eyebrow="02 — Smart Correlation" title="No Noise. Just Clear Incidents." description="Instead of 50 confusing alert emails, PayScope links scattered Razorpay events into a single unified incident timeline." accentClass="text-[#906aff]" />
   }
 
   const card = (
@@ -141,16 +141,16 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
             </span>
             <span className="font-mono text-xs font-bold tracking-widest text-[#D4C4FF]">02 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-300">How we match</span>
+            <span className="text-[11px] font-semibold text-neutral-300">Smart Event Correlation</span>
           </div>
         </motion.div>
 
-        <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '52px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '8px' }}>
-          <BlurFadeWords text="Many events, one incident." baseDelay={0.5} isInView={isInView} />
+        <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '48px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '8px' }}>
+          <BlurFadeWords text="No Noise. Just Clear Incidents." baseDelay={0.5} isInView={isInView} />
         </h1>
-        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '28px', fontWeight: 300, margin: 0, marginBottom: '16px' }}>
+        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '24px', fontWeight: 300, margin: 0, marginBottom: '16px' }}>
           <BlurFadeWords
-            text="We link events that belong together."
+            text="Links scattered payment signals into one unified timeline."
             baseDelay={0.8}
             isInView={isInView}
             wordStyle={{
@@ -160,10 +160,10 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
             }}
           />
         </p>
-        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '17px', fontWeight: 300, color: 'rgba(255,255,255,0.65)', margin: 0, maxWidth: '400px' }}>
-           <BlurFadeWords text="How: Same IDs? Grouped. Same customer? Grouped in 15 min." baseDelay={1.1} isInView={isInView} />
+        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '15px', fontWeight: 300, color: 'rgba(255,255,255,0.68)', margin: 0, maxWidth: '420px', lineHeight: 1.45 }}>
+           <BlurFadeWords text="Smart Association: Groups retries by Order ID, Customer ID, or 15-min window." baseDelay={1.1} isInView={isInView} />
            <br />
-           <BlurFadeWords text="What you see: One timeline with amount and status." baseDelay={1.45} isInView={isInView} />
+           <BlurFadeWords text="Clear Prioritization: Categorizes risk (Critical, High, Medium) so you focus on what matters." baseDelay={1.45} isInView={isInView} />
         </p>
       </div>
 
@@ -172,7 +172,7 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
         <AnimatedNetworkLines isInView={isInView} color="#906AFF" />
       </div>
 
-      {/* ── Right Half Snappy Lightweight Cards (Matching Section 1) ── */}
+      {/* ── Right Half Snappy Lightweight Cards ── */}
       <div
         style={{
           position: 'absolute',
@@ -189,7 +189,7 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
           zIndex: 15,
         }}
       >
-        {/* Top Card: Spatial Layout ➔ Context Compiler */}
+        {/* Top Card: Context Compiler */}
         <div style={{ flex: 0.93, position: 'relative', overflow: 'hidden' }}>
           <motion.div
             initial={{ opacity: 0, x: -60, scale: 0.95 }}
@@ -200,79 +200,67 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
           >
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#906AFF] uppercase tracking-wider">
-                  <Network className="h-3.5 w-3.5" /> How we group
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#D4C4FF] uppercase tracking-wider">
+                  <Network className="h-3.5 w-3.5 text-[#906AFF]" /> Intelligent Signal Correlation
                 </span>
                 <span className="rounded-full border border-[#906AFF]/30 bg-[#906AFF]/10 px-2 py-0.5 text-[9px] font-bold text-[#D4C4FF]">
-                  Correlation Engine v1.0
+                  Multi-Signal
                 </span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-1">One case, not many alerts</h3>
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                If events share a payment, order, or subscription, they become one incident. Otherwise we group by customer + method within 15 minutes. Different currencies are never mixed.
+              <p className="text-sm font-semibold text-white">Order & Customer Linkage Engine</p>
+              <p className="mt-1 text-xs leading-5 text-neutral-400">
+                Automatically links initial payment drops, customer retries, and gateway timeouts into a single coherent incident.
               </p>
             </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">What we check</div>
-                <div className="text-sm font-bold text-white">Same IDs first</div>
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-3 space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-neutral-400">Correlation Logic</span>
+                <span className="font-mono text-[#D4C4FF]">Order ID + Temporal Window</span>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">Why safe</div>
-                <div className="text-sm font-bold text-[#906AFF]">Currency never mixed</div>
+              <div className="flex justify-between text-xs">
+                <span className="text-neutral-400">Safety Guard</span>
+                <span className="font-mono text-neutral-300">Strict Currency Boundaries</span>
               </div>
             </div>
-
-            <MagicBorder color={MAGIC_BORDER_PURPLE} radius="24px" isInView={isInView} />
           </motion.div>
         </div>
 
-        {/* Bottom Card: Multi-Modal Reasoning Stream */}
-        <div style={{ flex: 1.07, overflow: 'hidden' }}>
+        {/* Bottom Card: Incident Timeline */}
+        <div style={{ flex: 1.07, position: 'relative', overflow: 'hidden' }}>
           <motion.div
-            initial={{ opacity: 0, x: 60, scale: 0.95 }}
-            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 60, scale: 0.95 }}
-            transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9, delay: 0.1 } : { duration: 0 }}
+            initial={{ opacity: 0, x: -60, scale: 0.95 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: -60, scale: 0.95 }}
+            transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9, delay: 0.15 } : { duration: 0 }}
             style={{ willChange: 'transform, opacity' }}
-            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-[#906AFF]/30 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
+            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-white/10 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
           >
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#906AFF] uppercase tracking-wider">
-                  <Sparkles className="h-3.5 w-3.5" /> What about recovery?
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-neutral-300 uppercase tracking-wider">
+                  <Layers className="h-3.5 w-3.5 text-[#906AFF]" /> Unified Incident Timeline
                 </span>
-                 <span className="font-mono text-[10px] text-neutral-400">Structured reasoning model</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-neutral-400">
+                  Live Status
+                </span>
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">How recovery is tracked</h3>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
-                  <span className="flex items-center gap-2 text-neutral-200">
-                     <CheckCircle2 className="h-3.5 w-3.5 text-[#906AFF]" /> Some amount recovered? → Still open
-                   </span>
-                   <span className="font-mono font-bold text-[#D4C4FF]">We track it</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
-                  <span className="flex items-center gap-2 text-neutral-200">
-                     <CheckCircle2 className="h-3.5 w-3.5 text-[#906AFF]" /> All amount recovered? → Closed
-                  </span>
-                  <span className="font-mono text-purple-300">Verified</span>
-                </div>
+              <p className="text-sm font-semibold text-white">One Consolidated Dashboard View</p>
+              <p className="mt-1 text-xs leading-5 text-neutral-400">
+                Merchants see the exact story of what happened, verified event count, and live at-risk financial amounts.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs">
+                <span className="text-neutral-400">Incident Priority</span>
+                <span className="font-bold text-amber-300">MEDIUM PRIORITY</span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-[#906AFF]/20 bg-[#906AFF]/[0.05] p-2.5 text-xs">
+                <span className="text-neutral-300">Linked Event History</span>
+                <span className="font-semibold text-[#D4C4FF]">3 Verified Signals</span>
               </div>
             </div>
-
-            <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-              <span className="text-[11px] text-neutral-400">Result:</span>
-               <span className="text-xs font-bold text-[#906AFF]">One timeline to review</span>
-            </div>
-
-            <MagicBorder color={MAGIC_BORDER_PURPLE} radius="24px" reverse isInView={isInView} />
           </motion.div>
         </div>
       </div>
-
-      <MagicBorder color={MAGIC_BORDER_PURPLE} radius="24px" duration={10} initialAngle={270} isInView={isInView} />
     </div>
   )
 
@@ -280,19 +268,26 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
     <section
       ref={sectionRef}
       style={{
-        width: '100vw',
-        height: isMobile ? 'auto' : '100vh',
-        ...(isMobile ? { minHeight: '100svh', backgroundColor: '#040406', overflow: 'hidden' } : {}),
+        position: 'relative',
+        width: '100%',
+        height: '100vh',
+        minHeight: '680px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        contain: 'layout style paint',
+        overflow: 'hidden',
+        background: '#040406',
       }}
     >
-      <div style={{ position: 'relative', flexShrink: 0, width: NATIVE_W * scale, height: NATIVE_H * scale }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: NATIVE_W, height: NATIVE_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-          {card}
-        </div>
+      <div
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          transition: 'transform 0.1s ease-out',
+          willChange: 'transform',
+        }}
+      >
+        {card}
       </div>
     </section>
   )

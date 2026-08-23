@@ -23,6 +23,7 @@ const scenarios = {
             }
         };
     },
+    'synthetic-payment-link-paid': ({ referenceId, ...input }) => scenarios['payment-link-paid']({ ...input, referenceId: (referenceId && /^ps_[a-f0-9]{32}$/.test(referenceId)) ? referenceId : `ps_${crypto.randomBytes(16).toString('hex')}` }),
 };
 
 function args(argv) {
@@ -49,7 +50,7 @@ async function fetchTestPayment(paymentId, keyId, keySecret) {
 
 export async function sendWebhook({ apiUrl, secret, scenario, eventId, referenceId, customerId, orderId, paymentId, razorpayKeyId, razorpayKeySecret }) {
     const makePayload = scenarios[scenario];
-    if (!makePayload) throw new Error(`Unknown scenario: ${scenario}. Use failed-payment, eligible-failure, dispute, or payment-link-paid.`);
+    if (!makePayload) throw new Error(`Unknown scenario: ${scenario}. Use failed-payment, eligible-failure, dispute, payment-link-paid, or synthetic-payment-link-paid.`);
     if (!eventId || !/^[A-Za-z0-9._-]{1,160}$/.test(eventId)) throw new Error('event-id must contain 1-160 letters, numbers, dots, underscores, or hyphens');
     const healthResponse = await fetch(`${apiUrl.replace(/\/$/, '')}/health`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
     const health = await healthResponse.json().catch(() => null);

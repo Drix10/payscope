@@ -4,8 +4,7 @@ import { AnimatedNetworkLines } from './AnimatedNetworkLines'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { MobileShowcasePanel } from '../components/showcase/MobileShowcasePanel'
 import { BlurFadeWords } from '../BlurFadeWords'
-import { Sparkles, Cpu, CheckCircle2 } from 'lucide-react'
-
+import { Sparkles, Cpu, CheckCircle2, ShieldCheck, Zap } from 'lucide-react'
 
 function AnimatedWords({ text, baseDelay = 0, isInView }: {
   text: string
@@ -93,7 +92,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
   }, [isMobile])
 
   if (isMobile) {
-    return <MobileShowcasePanel eyebrow="01 — What happens first" title="We turn noisy payment events into clear incidents" description="PayScope checks every Razorpay webhook is real, removes duplicates, and groups related events — so you see one incident with evidence, not 50 confusing alerts." accentClass="text-[#24ff95]" />
+    return <MobileShowcasePanel eyebrow="01 — Autonomous Revenue Recovery" title="Never Lose Revenue to Failed Payments" description="PayScope automatically detects, investigates, and recovers failed Razorpay payments using AI — with zero manual effort." accentClass="text-[#24ff95]" />
   }
 
   const card = (
@@ -154,14 +153,14 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             </span>
             <span className="font-mono text-xs font-bold tracking-widest text-[#b8ffd9]">01 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-300">How we verify</span>
+            <span className="text-[11px] font-semibold text-neutral-300">Autonomous Revenue Recovery</span>
           </div>
         </motion.div>
 
         <h1
           style={{
             fontFamily: 'var(--font-jakarta)',
-            fontSize: '52px',
+            fontSize: '48px',
             fontWeight: 300,
             lineHeight: 1.08,
             letterSpacing: '-1.2px',
@@ -170,22 +169,22 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             marginBottom: '8px',
           }}
         >
-          <BlurFadeWords text="Every payment event is verified first." baseDelay={0.4} isInView={isInView} />
+          <BlurFadeWords text="Never Lose Revenue to Failed Payments" baseDelay={0.4} isInView={isInView} />
         </h1>
 
         <p
           style={{
             fontFamily: 'var(--font-jakarta)',
-            fontSize: '28px',
+            fontSize: '24px',
             fontWeight: 300,
-            lineHeight: 1.2,
+            lineHeight: 1.25,
             letterSpacing: '-0.5px',
             margin: 0,
             marginBottom: '16px',
           }}
         >
           <BlurFadeWords
-            text="Real webhooks stay. Fake or duplicate ones are blocked."
+            text="Automatically detects, investigates, and recovers lost Razorpay sales."
             baseDelay={0.65}
             isInView={isInView}
             wordStyle={{
@@ -199,17 +198,17 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
         <p
           style={{
             fontFamily: 'var(--font-jakarta)',
-            fontSize: '17px',
+            fontSize: '15px',
             fontWeight: 300,
-            lineHeight: 1.35,
-            color: 'rgba(255,255,255,0.65)',
+            lineHeight: 1.45,
+            color: 'rgba(255,255,255,0.68)',
             margin: 0,
-            maxWidth: '420px',
+            maxWidth: '430px',
           }}
         >
-          <BlurFadeWords text="How: We check Razorpay's signature and event ID." baseDelay={0.9} isInView={isInView} />
+          <BlurFadeWords text="Instant Protection: Every webhook is verified for authenticity before processing." baseDelay={0.9} isInView={isInView} />
           <br />
-          <BlurFadeWords text="What you get: One clean incident with amount and proof." baseDelay={1.15} isInView={isInView} />
+          <BlurFadeWords text="Zero Manual Work: Turns noisy payment errors into clean, self-recovering incidents." baseDelay={1.15} isInView={isInView} />
         </p>
       </div>
 
@@ -245,7 +244,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
           zIndex: 15,
         }}
       >
-        {/* Top Card: HMAC Signature Engine */}
+        {/* Top Card: Cryptographic Verification */}
         <div style={{ flex: 0.93, position: 'relative', overflow: 'hidden' }}>
           <motion.div
             initial={{ opacity: 0, x: -60, scale: 0.95 }}
@@ -257,78 +256,66 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#00ff87] uppercase tracking-wider">
-                  <Cpu className="h-3.5 w-3.5" /> How we check it's real
+                  <Zap className="h-3.5 w-3.5" /> Instant Webhook Verification
                 </span>
-                <span className="rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2 py-0.5 text-[9px] font-bold text-[#00ff87]">
-                  Verified v1.0
+                <span className="rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2 py-0.5 text-[9px] font-bold text-[#b8ffd9]">
+                  HMAC SHA-256
                 </span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-1">Webhook → Trusted event</h3>
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                We verify the Razorpay signature (like a password check) and ignore duplicates. Only real, new events become incidents you can act on.
+              <p className="text-sm font-semibold text-white">Cryptographic Security Guarantee</p>
+              <p className="mt-1 text-xs leading-5 text-neutral-400">
+                Verifies secret Razorpay HMAC signatures instantly. Blocks fake webhooks and duplicate retries before they touch your database.
               </p>
             </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">What we store</div>
-                <div className="text-sm font-bold text-white">Why it happened</div>
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
+              <div className="flex justify-between text-xs">
+                <span className="text-neutral-400">Razorpay Signature</span>
+                <span className="font-mono font-bold text-[#00ff87]">VERIFIED (200 OK)</span>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
-                <div className="text-[10px] text-neutral-400 font-mono">Why this matters</div>
-                <div className="text-sm font-bold text-[#00ff87]">No double counting</div>
+              <div className="mt-2 flex justify-between text-xs">
+                <span className="text-neutral-400">Duplicate Protection</span>
+                <span className="font-mono text-neutral-300">Durable Lease Lock</span>
               </div>
             </div>
-
-            <MagicBorder color={MAGIC_BORDER_GREEN} radius="24px" isInView={isInView} />
           </motion.div>
         </div>
 
-        {/* Bottom Card: MeshAPI Engine Execution */}
-        <div style={{ flex: 1.07, overflow: 'hidden' }}>
+        {/* Bottom Card: At-Risk Money */}
+        <div style={{ flex: 1.07, position: 'relative', overflow: 'hidden' }}>
           <motion.div
-            initial={{ opacity: 0, x: 60, scale: 0.95 }}
-            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 60, scale: 0.95 }}
-            transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9, delay: 0.1 } : { duration: 0 }}
+            initial={{ opacity: 0, x: -60, scale: 0.95 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: -60, scale: 0.95 }}
+            transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9, delay: 0.15 } : { duration: 0 }}
             style={{ willChange: 'transform, opacity' }}
-            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-[#00ff87]/30 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
+            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-white/10 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
           >
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#00ff87] uppercase tracking-wider">
-                  <Sparkles className="h-3.5 w-3.5" /> How we group events
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-neutral-300 uppercase tracking-wider">
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#00ff87]" /> Real-Time Merchant Visibility
                 </span>
-                <span className="font-mono text-[10px] text-neutral-400">Payment · Order · Subscription</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-neutral-400">
+                  Live Feed
+                </span>
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">One incident, not many alerts</h3>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
-                  <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff87]" /> Payments from same order? One incident.
-                  </span>
-                  <span className="font-mono font-bold text-amber-400">Grouped</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
-                  <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff87]" /> Different currencies? Never grouped.
-                  </span>
-                  <span className="font-mono text-sky-400">Safe</span>
-                </div>
+              <p className="text-sm font-semibold text-white">Full Financial Control</p>
+              <p className="mt-1 text-xs leading-5 text-neutral-400">
+                Calculates exact money at risk and groups all related customer failure attempts into a clean, actionable record.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs">
+                <span className="text-neutral-400">Deduplicated Webhooks</span>
+                <span className="font-bold text-white">100% Grouped</span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-[#00ff87]/20 bg-[#00ff87]/[0.05] p-2.5 text-xs">
+                <span className="text-neutral-300">Total Money Protected</span>
+                <span className="font-semibold text-[#00ff87]">₹1,250</span>
               </div>
             </div>
-
-            <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-              <span className="text-[11px] text-neutral-400">How we match:</span>
-              <span className="text-xs font-bold text-[#00ff87]">Same payment, order, or subscription; otherwise customer + method within 15 min</span>
-            </div>
-
-            <MagicBorder color={MAGIC_BORDER_GREEN} radius="24px" reverse isInView={isInView} />
           </motion.div>
         </div>
       </div>
-
-      <MagicBorder color={MAGIC_BORDER_GREEN} radius="24px" duration={10} initialAngle={180} isInView={isInView} />
     </div>
   )
 
@@ -336,19 +323,26 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
     <section
       ref={sectionRef}
       style={{
-        width: '100vw',
-        height: isMobile ? 'auto' : '100vh',
-        ...(isMobile ? { minHeight: '100svh', backgroundColor: '#040406', overflow: 'hidden' } : {}),
+        position: 'relative',
+        width: '100%',
+        height: '100vh',
+        minHeight: '680px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        contain: 'layout style paint',
+        overflow: 'hidden',
+        background: '#040406',
       }}
     >
-      <div style={{ position: 'relative', flexShrink: 0, width: NATIVE_W * scale, height: NATIVE_H * scale }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: NATIVE_W, height: NATIVE_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-          {card}
-        </div>
+      <div
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          transition: 'transform 0.1s ease-out',
+          willChange: 'transform',
+        }}
+      >
+        {card}
       </div>
     </section>
   )
