@@ -8,13 +8,13 @@ const { requireDatabaseClient } = require('../dist/db/client');
 const { MvpRepository } = require('../dist/db/mvp-repository');
 
 if (process.env.PAYSCOPE_RUN_EVALUATION !== 'true') {
-  console.log('Skipped fixture evaluation recording (set PAYSCOPE_RUN_EVALUATION=true for Test Mode Supabase).');
+  console.log('Skipped fixture evaluation recording (set PAYSCOPE_RUN_EVALUATION=true for Supabase).');
   process.exit(0);
 }
-const organizationId = process.env.PAYSCOPE_DEMO_ORGANIZATION_ID;
+const organizationId = process.env.PAYSCOPE_ORGANIZATION_ID;
 const secret = process.env.PAYSCOPE_FIXTURE_SIGNING_SECRET;
 const split = process.env.PAYSCOPE_EVALUATION_SPLIT === 'held_out' ? 'held_out' : 'development';
-if (!organizationId) throw new Error('PAYSCOPE_DEMO_ORGANIZATION_ID is required to record an evaluation report.');
+if (!organizationId) throw new Error('PAYSCOPE_ORGANIZATION_ID is required to record an evaluation report.');
 if (!secret || secret.length < 32) throw new Error('PAYSCOPE_FIXTURE_SIGNING_SECRET must be at least 32 characters.');
 
 (async () => {

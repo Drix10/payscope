@@ -1,4 +1,4 @@
-/* Opt-in Test Mode proof that simulated outreach is rechecked and counted in
+/* Opt-in integration proof that simulated outreach is rechecked and counted in
  * the database, rather than trusting a stale policy decision from the worker. */
 require('dotenv/config');
 const assert = require('node:assert/strict');
@@ -7,7 +7,7 @@ const { requireDatabaseClient } = require('../dist/db/client');
 const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_OUTREACH_INTEGRATION !== 'true') {
-  console.log('Skipped outreach stopping-rule integration test (set PAYSCOPE_RUN_OUTREACH_INTEGRATION=true for Test Mode Supabase).');
+  console.log('Skipped outreach stopping-rule integration test (set PAYSCOPE_RUN_OUTREACH_INTEGRATION=true for dedicated integration Supabase).');
   process.exit(0);
 }
 const organizationId = requireIntegrationOrganization();
@@ -31,15 +31,15 @@ let originalPolicy;
     if (incidentError) throw new Error(incidentError.message);
     const { error: proposalError } = await client.from('payscope_action_proposals').insert([{ id: firstProposalId, organization_id: organizationId, incident_id: incidentId, action_type: 'retry_link_sms', content: {} }, { id: secondProposalId, organization_id: organizationId, incident_id: incidentId, action_type: 'retry_link_sms', content: {} }]);
     if (proposalError) throw new Error(proposalError.message);
-    const delivery = { status: 'simulated', note: 'integration test; no customer message sent', simulatedAt: now };
-    const [first, second] = await Promise.all([
-      client.rpc('payscope_approve_proposal', { p_organization_id: organizationId, p_proposal_id: firstProposalId, p_actor_id: 'integration-test', p_actor_session_hash: 'e'.repeat(64), p_delivery_result: delivery }),
-      client.rpc('payscope_approve_proposal', { p_organization_id: organizationId, p_proposal_id: secondProposalId, p_actor_id: 'integration-test', p_actor_session_hash: 'e'.repeat(64), p_delivery_result: delivery }),
+    const runs = await Promise.all([
+      client.rpc('payscope_autonomously_simulate_pending_proposals', { p_organization_id: organizationId, p_incident_id: incidentId }),
+      client.rpc('payscope_autonomously_simulate_pending_proposals', { p_organization_id: organizationId, p_incident_id: incidentId }),
     ]);
-    const approvals = [first, second];
-    const approvalErrors = approvals.map(result => result.error?.message ?? null);
-    assert.equal(approvals.filter(result => !result.error).length, 1, `the advisory lock must admit exactly one concurrent outreach approval; errors: ${JSON.stringify(approvalErrors)}`);
-    assert.equal(approvals.filter(result => result.error).length, 1, `one-per-24h stopping rule must reject the competing approval; errors: ${JSON.stringify(approvalErrors)}`);
+    assert.ok(runs.every(result => !result.error), `autonomous simulation must be idempotent: ${JSON.stringify(runs.map(result => result.error?.message ?? null))}`);
+    const proposals = await client.from('payscope_action_proposals').select('status').in('id', [firstProposalId, secondProposalId]);
+    if (proposals.error) throw new Error(proposals.error.message);
+    assert.equal(proposals.data.filter(row => row.status === 'simulated').length, 1, 'only one outreach action may be simulated in 24 hours');
+    assert.equal(proposals.data.filter(row => row.status === 'failed').length, 1, 'the competing outreach action must be terminally blocked');
     const contacts = await client.from('payscope_contact_attempts').select('id').eq('organization_id', organizationId).eq('incident_id', incidentId);
     if (contacts.error) throw new Error(contacts.error.message);
     assert.equal(contacts.data.length, 1);

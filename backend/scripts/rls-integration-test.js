@@ -1,6 +1,6 @@
 /*
- * Reuses two fixed, non-production Test Mode organizations and creates
- * password-randomized fixture operators to prove that an authenticated Org A
+ * Reuses two fixed, non-production integration organizations and creates
+ * password-randomized fixture principals to prove that an authenticated Org A
  * session cannot read Org B. The organizations intentionally remain: their
  * immutable audit genesis entries cannot be deleted by design. All mutable
  * rows and every temporary auth user are removed in finally.
@@ -11,7 +11,7 @@ const { randomBytes, randomUUID } = require('node:crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 if (process.env.PAYSCOPE_RUN_RLS_INTEGRATION !== 'true') {
-  console.log('Skipped RLS integration test (set PAYSCOPE_RUN_RLS_INTEGRATION=true to run against Test Mode Supabase).');
+  console.log('Skipped RLS integration test (set PAYSCOPE_RUN_RLS_INTEGRATION=true to run against dedicated integration Supabase).');
   process.exit(0);
 }
 
@@ -44,10 +44,10 @@ async function ensureFixtureOrganization(label) {
   return fixture.id;
 }
 
-async function createFixtureOperator(label, organizationId) {
+async function createFixturePrincipal(label, organizationId) {
   const email = `payscope-rls-${label}-${suffix}@example.test`;
   const { data: user, error: userError } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-  if (userError || !user.user) throw new Error(`Could not create ${label} fixture operator: ${userError?.message ?? 'missing user'}`);
+  if (userError || !user.user) throw new Error(`Could not create ${label} fixture principal: ${userError?.message ?? 'missing user'}`);
   const { error: profileError } = await admin.from('payscope_users').insert({ id: user.user.id, organization_id: organizationId, email, display_name: `RLS ${label} fixture` });
   if (profileError) {
     await admin.auth.admin.deleteUser(user.user.id);
@@ -59,7 +59,7 @@ async function createFixtureOperator(label, organizationId) {
 async function signedInClient(email) {
   const client = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data, error } = await client.auth.signInWithPassword({ email, password });
-  if (error || !data.user || !data.session) throw new Error(`Could not establish fixture operator session: ${error?.message ?? 'missing session'}`);
+  if (error || !data.user || !data.session) throw new Error(`Could not establish fixture principal session: ${error?.message ?? 'missing session'}`);
   return client;
 }
 
@@ -67,8 +67,8 @@ async function signedInClient(email) {
   let orgA; let orgB; let incidentId; const userIds = [];
   try {
     const [organizationAId, organizationBId] = await Promise.all([ensureFixtureOrganization('a'), ensureFixtureOrganization('b')]);
-    orgA = await createFixtureOperator('a', organizationAId); userIds.push(orgA.userId);
-    orgB = await createFixtureOperator('b', organizationBId); userIds.push(orgB.userId);
+    orgA = await createFixturePrincipal('a', organizationAId); userIds.push(orgA.userId);
+    orgB = await createFixturePrincipal('b', organizationBId); userIds.push(orgB.userId);
     incidentId = randomUUID();
     const { error: incidentError } = await admin.from('payscope_incidents').insert({
       id: incidentId, organization_id: orgB.organizationId, risk_tier: 'MEDIUM', status: 'OPEN',

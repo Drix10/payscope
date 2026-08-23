@@ -78,7 +78,7 @@ export function Section4({
 
   if (isMobile) {
     return (
-       <MobileShowcasePanel eyebrow="04 / Operator Dashboard" title="One dashboard. Full control." description="Review incidents, inspect evidence-bound investigations, and record human decisions. Communications remain proposals until an operator approves them." accentClass="text-[#00ff87]">
+       <MobileShowcasePanel eyebrow="04 / AI Activity Dashboard" title="One dashboard. Full visibility." description="Browse incidents and inspect the evidence, policy decision, and bounded action record the AI created automatically." accentClass="text-[#00ff87]">
          <button type="button" onClick={onOpenDashboard} className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ff87] px-4 py-3 text-sm font-bold text-black shadow-[0_0_24px_rgba(0,255,135,0.25)] hover:bg-[#00ff87]/90">
            Open the PayScope Dashboard <ArrowRight className="h-4 w-4" />
          </button>
@@ -133,16 +133,16 @@ export function Section4({
             </span>
             <span className="font-mono text-xs font-bold tracking-widest text-amber-300">04 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-300">Approval-Gated Proposals</span>
+            <span className="text-[11px] font-semibold text-neutral-300">Autonomous action records</span>
           </div>
         </motion.div>
 
         <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '46px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '6px' }}>
-          <BlurFadeWords text="Human Control. Clear Boundaries." baseDelay={0.4} isInView={isInView} />
+          <BlurFadeWords text="Autonomous. Fully Traceable." baseDelay={0.4} isInView={isInView} />
         </h1>
 
         <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '17px', fontWeight: 300, color: 'rgba(255,255,255,0.7)', margin: 0, marginBottom: '18px' }}>
-           <BlurFadeWords text="Set stopping rules once — the agent drafts evidence-bound proposals. Nothing reaches a customer without operator approval." baseDelay={0.7} isInView={isInView} />
+           <BlurFadeWords text="Set stopping rules once — the agent investigates, applies policy, and records every permitted bounded action automatically." baseDelay={0.7} isInView={isInView} />
         </p>
 
         {/* User Guidance Step Pills */}
@@ -172,10 +172,10 @@ export function Section4({
 
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-400">
-                <ShieldCheck className="h-3.5 w-3.5" /> 3. Human Review
+                <ShieldCheck className="h-3.5 w-3.5" /> 3. Automatic Simulation
              </div>
              <p className="mt-1 text-[11px] text-neutral-400">
-                Approve a proposal manually; outbound communications are simulated until an approved adapter is configured.
+                The worker records every policy-permitted action as a simulation; no customer message is sent.
              </p>
           </div>
         </motion.div>

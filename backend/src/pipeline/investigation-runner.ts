@@ -13,6 +13,7 @@ const AGENT_PIPELINE_DEADLINE_MS = 9_500;
 /** Executes only bounded agents and persists either a validated result or a safe escalation. */
 export async function runDurableInvestigation(repository: MvpRepository, provider: ModelProvider, job: QueueJob): Promise<void> {
   if (!job.incidentId) throw new Error('Investigation job is missing incidentId');
+  if (!job.triggerEventId) throw new Error('Investigation job is missing triggerEventId');
   const started = Date.now();
   // A database read failure is transient infrastructure failure: let the
   // durable queue retry it rather than recording an incorrect agent outcome.
@@ -57,7 +58,8 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       },
     };
   });
-  await repository.persistInvestigation(job.organizationId, job.incidentId, output.plan.plan, output.risk.analysis, output.recovery.plan, output.policy, proposals, [output.plan.modelId, output.risk.modelId, output.recovery.modelId].join(','), output.plan.tokensUsed + output.risk.tokensUsed + output.recovery.tokensUsed, Date.now() - started);
+  await repository.persistInvestigation(job.organizationId, job.incidentId, job.triggerEventId, output.plan.plan, output.risk.analysis, output.recovery.plan, output.policy, proposals, [output.plan.modelId, output.risk.modelId, output.recovery.modelId].join(','), output.plan.tokensUsed + output.risk.tokensUsed + output.recovery.tokensUsed, Date.now() - started);
+  await repository.autonomouslySimulatePendingProposals(job.organizationId, job.incidentId);
 }
 
 function providerWithDeadline(provider: ModelProvider, deadlineAt: number): ModelProvider {

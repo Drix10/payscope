@@ -1,4 +1,4 @@
-/* Opt-in Test Mode proof for Phase 3's server-scoped Risk Analyst facts and
+/* Opt-in integration proof for Phase 3's server-scoped Risk Analyst facts and
  * compact audit-integrity summary. Temporary rows are deleted in finally. */
 require('dotenv/config');
 const assert = require('node:assert/strict');
@@ -7,7 +7,7 @@ const { requireDatabaseClient } = require('../dist/db/client');
 const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_PHASE3_INTEGRATION !== 'true') {
-  console.log('Skipped Phase 3 risk-tool integration test (set PAYSCOPE_RUN_PHASE3_INTEGRATION=true for Test Mode Supabase).');
+  console.log('Skipped Phase 3 risk-tool integration test (set PAYSCOPE_RUN_PHASE3_INTEGRATION=true for dedicated integration Supabase).');
   process.exit(0);
 }
 

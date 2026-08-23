@@ -21,7 +21,6 @@
     "test:agentic-webhook": "npm run build && node scripts/agentic-webhook-intake-test.js",
     "test:mvp-api": "npm run build && node scripts/mvp-api-test.js",
     "test:dashboard": "npm run build && node scripts/dashboard-repository-test.js",
-    "test:communications": "npm run build && node scripts/communications-test.js",
     "test:evaluation": "npm run build && node scripts/evaluation-metrics-test.js",
     "test:attribution": "npm run build && node scripts/recovery-attribution-test.js",
     "test:integration-scope": "node scripts/integration-organization-test.js",

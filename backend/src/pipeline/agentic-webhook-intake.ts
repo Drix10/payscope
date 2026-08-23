@@ -10,7 +10,7 @@ export class AgenticWebhookIntake {
   constructor(private readonly repository: MvpRepository, private readonly config: RuntimeConfig) {}
 
   async receive(rawBody: Buffer, signature: string | undefined, razorpayEventId: string | undefined): Promise<AgenticWebhookResult> {
-    if (!this.config.organizationId) throw new Error('PAYSCOPE_DEMO_ORGANIZATION_ID is required when PAYSCOPE_MVP_PIPELINE=true');
+    if (!this.config.organizationId) throw new Error('PAYSCOPE_ORGANIZATION_ID is required when PAYSCOPE_PIPELINE_ENABLED=true');
     verifyRazorpayWebhook(rawBody, signature, this.config.webhookSecret);
     // Validate the signature before looking at event content, then acknowledge
     // out-of-scope Razorpay events without persisting their payload or PII.

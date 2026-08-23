@@ -10,7 +10,7 @@ export const SignedFixtureSchema = z.object({
   organizationId: z.string().uuid(),
   event: NormalizedEventSchema,
   enrichment: VulcanEnrichmentSchema.nullable(),
-  expected: z.object({ incidentStatus: z.enum(['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED']), groundTruth: FixtureGroundTruthSchema }).strict(),
+  expected: z.object({ incidentStatus: z.enum(['OPEN', 'MONITORING', 'DISPUTE_OPENED', 'RESOLVED', 'DISMISSED']), groundTruth: FixtureGroundTruthSchema }).strict(),
   signature: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 

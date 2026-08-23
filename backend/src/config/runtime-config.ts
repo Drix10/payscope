@@ -2,13 +2,11 @@ import { ENRICHMENT_TIMEOUT_MS, MODEL_TIMEOUT_MS, QUEUE_LOCK_TIMEOUT_MS, RECOVER
 
 export type RuntimeConfig = {
   environment: 'development' | 'test' | 'production';
-  razorpayEnvironment: 'test';
+  razorpayEnvironment: 'test' | 'live';
   supabaseUrl?: string;
   supabaseServiceRoleKey?: string;
   webhookSecret?: string;
   organizationId?: string;
-  demoApprovalToken?: string;
-  demoOperatorId: string;
   workerId: string;
   enrichmentTimeoutMs: number;
   modelTimeoutMs: number;
@@ -34,22 +32,22 @@ function boundedText(value: string | undefined, fallback: string, name: string):
   return parsed;
 }
 
-/** Parses only MVP configuration. It never accepts Razorpay Live Mode. */
+/** Parses the Razorpay ingestion environment without granting financial actions. */
 export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const declaredEnvironment = optional(env.NODE_ENV) ?? 'development';
   if (!['development', 'test', 'production'].includes(declaredEnvironment)) throw new Error('NODE_ENV must be development, test, or production');
   const razorpayEnvironment = optional(env.RAZORPAY_ENVIRONMENT) ?? 'test';
-  if (razorpayEnvironment !== 'test') throw new Error('The PayScope MVP supports Razorpay Test Mode only');
+  if (razorpayEnvironment !== 'test' && razorpayEnvironment !== 'live') throw new Error('RAZORPAY_ENVIRONMENT must be test or live');
+  const razorpayKeyId = optional(env.RAZORPAY_KEY_ID);
+  if (razorpayKeyId && !razorpayKeyId.startsWith(`rzp_${razorpayEnvironment}_`)) throw new Error(`RAZORPAY_KEY_ID does not match RAZORPAY_ENVIRONMENT=${razorpayEnvironment}`);
 
   return {
     environment: declaredEnvironment as RuntimeConfig['environment'],
-    razorpayEnvironment: 'test',
+    razorpayEnvironment,
     supabaseUrl: optional(env.SUPABASE_URL),
     supabaseServiceRoleKey: optional(env.SUPABASE_SERVICE_ROLE_KEY),
     webhookSecret: optional(env.RAZORPAY_WEBHOOK_SECRET),
-    organizationId: optional(env.PAYSCOPE_DEMO_ORGANIZATION_ID),
-    demoApprovalToken: optional(env.PAYSCOPE_DEMO_APPROVAL_TOKEN),
-    demoOperatorId: boundedText(env.PAYSCOPE_DEMO_OPERATOR_ID, 'demo-operator', 'PAYSCOPE_DEMO_OPERATOR_ID'),
+    organizationId: optional(env.PAYSCOPE_ORGANIZATION_ID),
     workerId: optional(env.PAYSCOPE_WORKER_ID) ?? `worker-${process.pid}`,
     enrichmentTimeoutMs: positiveInteger(env.PAYSCOPE_ENRICHMENT_TIMEOUT_MS, ENRICHMENT_TIMEOUT_MS, 'PAYSCOPE_ENRICHMENT_TIMEOUT_MS'),
     modelTimeoutMs: positiveInteger(env.PAYSCOPE_MODEL_TIMEOUT_MS, MODEL_TIMEOUT_MS, 'PAYSCOPE_MODEL_TIMEOUT_MS'),

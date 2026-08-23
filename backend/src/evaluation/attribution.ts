@@ -12,7 +12,7 @@ export type AttributionProposal = {
   incidentId: string;
   actionType: ActionProposal['actionType'];
   status: 'simulated' | 'pending' | 'cancelled_by_dispute' | 'cancelled_by_recovery' | 'failed';
-  approvedAt: string | null;
+  simulatedAt: string | null;
 };
 export type AttributionIncident = { id: string; totalFailedAmountPaise: number };
 export type CapturedPayment = {
@@ -26,8 +26,8 @@ export type CapturedPayment = {
 export type AttributedRecovery = { eventId: string; proposalId: string; incidentId: string; recoveredPaise: number };
 
 /**
- * Produces Test Mode recovery evidence only when all four locked conditions
- * hold: a recovery proposal, operator approval, captured payment within 24h,
+ * Produces causal recovery evidence only when all four locked conditions
+ * hold: a simulated recovery action, captured payment within 24h,
  * and either its proposal-bound Payment Link reference or incident correlation.
  */
 export function attributeRecoveries(
@@ -52,7 +52,7 @@ export function attributeRecoveries(
       if (!matches.length) return null;
       // An exact Payment Link reference is stronger than shared incident
       // correlation. One capture can never be counted more than once.
-      matches.sort((left, right) => Number(payment.paymentLinkReferenceId === paymentLinkReferenceForProposal(right.id)) - Number(payment.paymentLinkReferenceId === paymentLinkReferenceForProposal(left.id)) || timestamp(right.approvedAt!, 'Proposal approval') - timestamp(left.approvedAt!, 'Proposal approval'));
+      matches.sort((left, right) => Number(payment.paymentLinkReferenceId === paymentLinkReferenceForProposal(right.id)) - Number(payment.paymentLinkReferenceId === paymentLinkReferenceForProposal(left.id)) || timestamp(right.simulatedAt!, 'Proposal simulation') - timestamp(left.simulatedAt!, 'Proposal simulation'));
       const proposal = matches[0];
       const incident = incidentById.get(proposal.incidentId);
       if (!incident) throw new Error('Attribution proposal references an unknown incident');
@@ -81,9 +81,9 @@ export function paymentLinkReferenceForProposal(proposalId: string): string {
 }
 
 function isEligibleProposal(proposal: AttributionProposal, capturedAt: number): boolean {
-  if (!ATTRIBUTABLE_ACTIONS.has(proposal.actionType) || proposal.status !== 'simulated' || !proposal.approvedAt) return false;
-  const approvedAt = timestamp(proposal.approvedAt, 'Proposal approval');
-  return capturedAt >= approvedAt && capturedAt - approvedAt <= ATTRIBUTION_WINDOW_MS;
+  if (!ATTRIBUTABLE_ACTIONS.has(proposal.actionType) || proposal.status !== 'simulated' || !proposal.simulatedAt) return false;
+  const simulatedAt = timestamp(proposal.simulatedAt, 'Proposal simulation');
+  return capturedAt >= simulatedAt && capturedAt - simulatedAt <= ATTRIBUTION_WINDOW_MS;
 }
 
 function timestamp(value: string, label: string): number {

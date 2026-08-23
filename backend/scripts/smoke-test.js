@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
 
-process.env.PAYSCOPE_MVP_PIPELINE = 'false';
+process.env.PAYSCOPE_PIPELINE_ENABLED = 'false';
 process.env.NODE_ENV = 'test';
 const app = require('../dist/server').default;
 

@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 export const EnrichmentSourceSchema = z.enum(['razorpay_fields_heuristic', 'fixture_signed', 'vulcan_direct', 'unavailable']);
-export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED']);
+export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'DISPUTE_OPENED', 'RESOLVED', 'DISMISSED']);
 export const RiskTierSchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'MONITOR']);
-export const ProposalStatusSchema = z.enum(['pending', 'approved', 'simulated', 'cancelled_by_dispute', 'cancelled_by_recovery', 'failed']);
+export const ProposalStatusSchema = z.enum(['pending', 'simulated', 'cancelled_by_dispute', 'cancelled_by_recovery', 'failed']);
 export const ActionTypeSchema = z.enum([
   'retry_link_whatsapp',
   'retry_link_sms',
@@ -80,9 +80,13 @@ export const IncidentSchema = z.object({
 export const InvestigationPlanSchema = z.object({
   hypothesis: z.string().min(1).max(100),
   primaryFailureCategory: z.enum(['infrastructure', 'fraud_suspected', 'fraud_confirmed', 'customer_error', 'subscription_issue', 'unknown']),
+  objectives: z.array(z.string().min(1).max(120)).min(1).max(4),
+  evidencePriorities: z.array(z.object({ fact: z.string().min(1).max(160), whyItMatters: z.string().min(1).max(160) }).strict()).min(1).max(5),
   subAgents: z.array(z.object({ agent: z.enum(['risk_analyst', 'recovery_planner']), question: z.string().min(1).max(80), priority: z.union([z.literal(1), z.literal(2)]), allowedContextFields: z.array(z.string().min(1).max(80)).max(20) }).strict()).max(2),
+  constraints: z.array(z.string().min(1).max(140)).min(1).max(6),
+  noActionCriteria: z.array(z.string().min(1).max(140)).min(1).max(6),
   estimatedAutoResolvable: z.boolean(),
-  requiresHumanReview: z.boolean(),
+  requiresNoActionFallback: z.boolean(),
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(1).max(200),
 }).strict();
@@ -98,6 +102,9 @@ export const RiskAnalysisSchema = z.object({
   failureRootCause: z.enum(['gateway_degraded', 'issuer_block', 'fraud_confirmed', 'fraud_suspected', 'customer_error', 'subscription_lapse', 'unknown']),
   evidenceStrength: z.enum(['strong', 'moderate', 'weak']),
   confidence: z.number().min(0).max(1),
+  causalNarrative: z.string().min(1).max(320),
+  evidenceConfidenceRationale: z.string().min(1).max(240),
+  alternativeHypotheses: z.array(z.string().min(1).max(160)).max(3),
   falsePositiveCostEstimatePaise: paise,
   missingEvidence: z.array(z.string().min(1).max(160)).max(12),
   chargebackEvidenceReady: z.boolean(),
@@ -110,18 +117,18 @@ export const RiskAnalysisSchema = z.object({
 export const RiskAnalysisModelOutputSchema = RiskAnalysisSchema.omit({ toolResults: true });
 
 export const RecoveryPlanSchema = z.object({
-  proposedActions: z.array(z.object({ actionType: ActionTypeSchema, rationale: z.string().min(1).max(100), estimatedRecoveryPaise: paise.nullable(), scriptContent: z.string().min(1).max(600).optional(), requiresOperatorApproval: z.literal(true) }).strict()).max(8),
+  proposedActions: z.array(z.object({ actionType: ActionTypeSchema, rationale: z.string().min(1).max(100), preconditions: z.array(z.string().min(1).max(140)).min(1).max(6), expectedOutcome: z.string().min(1).max(160), estimatedRecoveryPaise: paise.nullable(), scriptContent: z.string().min(1).max(600).optional(), requiresAutonomousExecution: z.literal(true) }).strict()).max(8),
   noActionReason: z.string().min(1).max(200).optional(),
   recoveryProbability: z.number().min(0).max(1),
   confidence: z.number().min(0).max(1),
 }).strict();
 
 export const PolicyDecisionSchema = z.object({
-  outcome: z.enum(['auto_with_proposals', 'auto_no_action', 'escalate']),
+  outcome: z.enum(['auto_with_proposals', 'auto_no_action']),
   permittedActions: z.array(RecoveryPlanSchema.shape.proposedActions.element).max(8),
-  escalationReason: z.string().min(1).max(120).nullable(),
+  noActionReason: z.string().min(1).max(120).nullable(),
   matchedPolicyId: z.string().uuid().nullable(),
-  gates: z.array(z.object({ name: z.enum(['fraud', 'dispute', 'auto_resolve_ceiling', 'human_review_floor', 'critical_tier', 'contact_limits', 'merchant_policy']), result: z.enum(['passed', 'blocked', 'restricted', 'skipped']), rationale: z.string().min(1).max(160) }).strict()).length(7).default([]),
+  gates: z.array(z.object({ name: z.enum(['fraud', 'dispute', 'auto_resolve_ceiling', 'critical_tier', 'contact_limits', 'merchant_policy']), result: z.enum(['passed', 'blocked', 'restricted', 'skipped']), rationale: z.string().min(1).max(160) }).strict()).length(6).default([]),
 }).strict();
 
 export const InvestigationStatusSchema = z.enum(['PENDING', 'RUNNING', 'COMPLETE', 'FAILED']);
@@ -149,8 +156,7 @@ export const ActionProposalSchema = z.object({
   content: z.record(z.unknown()),
   status: ProposalStatusSchema,
   proposedAt: isoDateTime,
-  approvedAt: isoDateTime.nullable(),
-  approvedBy: uuid.nullable(),
+  simulatedAt: isoDateTime.nullable(),
   deliveryResult: z.record(z.unknown()).nullable(),
 }).strict();
 
@@ -160,7 +166,7 @@ export const AuditEntrySchema = z.object({
   incidentId: uuid.nullable(),
   sequenceNumber: z.number().int().nonnegative(),
   eventType: z.string().min(1).max(120),
-  actorType: z.enum(['system', 'human']),
+  actorType: z.enum(['system', 'legacy']),
   actorId: z.string().min(1).max(160),
   actorSessionHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   decision: z.string().min(1).max(240),
@@ -211,7 +217,7 @@ export const DashboardMetricsSchema = z.object({
   operations: z.object({
     totalAtRiskPaise: paise.nullable(),
     proposalsGenerated: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
-    proposalsApproved: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    proposalsSimulated: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
     attributedRecoveries: z.number().int().nonnegative().nullable(),
     recoveredPaise: paise.nullable(),
     recoveryRate: z.number().min(0).max(1).nullable(),

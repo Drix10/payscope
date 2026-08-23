@@ -1,4 +1,4 @@
-/* Opt-in Test Mode proof for SKIP LOCKED claiming and stale-lease recovery. */
+/* Opt-in integration proof for SKIP LOCKED claiming and stale-lease recovery. */
 require('dotenv/config');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
@@ -6,7 +6,7 @@ const { requireDatabaseClient } = require('../dist/db/client');
 const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_QUEUE_INTEGRATION !== 'true') {
-  console.log('Skipped queue lease integration test (set PAYSCOPE_RUN_QUEUE_INTEGRATION=true for Test Mode Supabase).');
+  console.log('Skipped queue lease integration test (set PAYSCOPE_RUN_QUEUE_INTEGRATION=true for dedicated integration Supabase).');
   process.exit(0);
 }
 const organizationId = requireIntegrationOrganization();

@@ -1,10 +1,9 @@
 import { randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ActionProposal, ActionProposalSchema, AuditEntry, AuditEntrySchema, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, QueueJobSchema, RecoveryPlan, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
+import { ActionProposal, ActionProposalSchema, AuditEntry, AuditEntrySchema, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
 import { CorrelationEvent, IncidentCandidate } from '../pipeline/correlation-engine';
 import { CustomerContactStats, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
-import { SimulatedDeliveryResult } from '../providers/communications/interface';
 import { canCorrelateWithTerminalIncident } from '../pipeline/webhook-event-policy';
 import type { FixtureEvaluationReport } from '../evaluation/run-evaluation';
 
@@ -23,7 +22,7 @@ const PolicyContextSchema = z.object({
     allowedActions: z.array(z.enum(['retry_link_whatsapp', 'retry_link_sms', 'hinglish_voice_script', 'merchant_email_notification', 'merchant_webhook_notification', 'flag_for_review', 'prepare_chargeback_evidence', 'auto_resolve_infrastructure'])).min(1).max(8),
     merchantOptedIn: z.boolean(),
   }).strict(),
-  stats: z.object({ autoResolveFraction: z.number().min(0).max(1), humanReviewFraction: z.number().min(0).max(1) }).strict(),
+  stats: z.object({ autoResolveFraction: z.number().min(0).max(1) }).strict(),
   contact: z.object({ incidentAttempts: z.number().int().nonnegative(), attemptsLast24Hours: z.number().int().nonnegative(), attemptsLast7Days: z.number().int().nonnegative(), merchantOptedIn: z.boolean(), customerReferenceAvailable: z.boolean() }).strict(),
 }).strict();
 
@@ -54,7 +53,7 @@ export class MvpRepository {
       .eq('id', organizationId)
       .maybeSingle();
     if (error) throw databaseError('organization lookup', error.message);
-    if (!data) throw new Error('Configured PAYSCOPE_DEMO_ORGANIZATION_ID does not exist in payscope_organizations');
+    if (!data) throw new Error('Configured PAYSCOPE_ORGANIZATION_ID does not exist in payscope_organizations');
     const row = data as { id?: unknown; customer_hash_secret?: unknown };
     if (typeof row.id !== 'string' || typeof row.customer_hash_secret !== 'string' || row.customer_hash_secret.length < 32) throw new Error('Configured PayScope organization has an invalid customer hash secret');
     return { id: row.id, customerHashSecret: row.customer_hash_secret };
@@ -147,7 +146,7 @@ export class MvpRepository {
     if (error) throw databaseError('correlation persistence', error.message);
   }
 
-  /** A real query, used to keep the operator health response honest. */
+  /** A real query, used to keep the autonomous health response honest. */
   async healthCheck(organizationId: string): Promise<void> {
     const { data, error } = await this.client
       .from('payscope_organizations')
@@ -303,10 +302,11 @@ export class MvpRepository {
     if (error) throw databaseError('investigation failure record', error.message);
   }
 
-  async persistInvestigation(organizationId: string, incidentId: string, plan: InvestigationPlan, risk: RiskAnalysis, recovery: RecoveryPlan, policy: PolicyDecisionContract, proposals: ProposalDraft[], modelId: string, tokensUsed: number, latencyMs: number): Promise<void> {
+  async persistInvestigation(organizationId: string, incidentId: string, triggerEventId: string, plan: InvestigationPlan, risk: RiskAnalysis, recovery: RecoveryPlan, policy: PolicyDecisionContract, proposals: ProposalDraft[], modelId: string, tokensUsed: number, latencyMs: number): Promise<void> {
     const { error } = await this.client.rpc('payscope_persist_investigation_with_proposals', {
       p_organization_id: organizationId,
       p_incident_id: incidentId,
+      p_trigger_event_id: triggerEventId,
       p_plan: plan,
       p_risk_analysis: risk,
       p_recovery_plan: recovery,
@@ -319,30 +319,15 @@ export class MvpRepository {
     if (error) throw databaseError('investigation persistence', error.message);
   }
 
-  async approveProposal(organizationId: string, proposalId: string, actorId: string, actorSessionHash: string, deliveryResult: SimulatedDeliveryResult): Promise<ActionProposal> {
-    const { data, error } = await this.client.rpc('payscope_approve_proposal', {
+  /** The durable worker, never a browser, records every permitted action. */
+  async autonomouslySimulatePendingProposals(organizationId: string, incidentId: string): Promise<void> {
+    const { error } = await this.client.rpc('payscope_autonomously_simulate_pending_proposals', {
       p_organization_id: organizationId,
-      p_proposal_id: proposalId,
-      p_actor_id: actorId,
-      p_actor_session_hash: actorSessionHash,
-      p_delivery_result: deliveryResult,
+      p_incident_id: incidentId,
     });
-    if (error) throw databaseError('proposal approval', error.message);
-    const row = Array.isArray(data) ? data[0] : data;
-    return proposalFromRow(record(row));
+    if (error) throw databaseError('autonomous simulated execution', error.message);
   }
 
-  async proposalById(organizationId: string, proposalId: string): Promise<ActionProposal> {
-    const { data, error } = await this.client
-      .from('payscope_action_proposals')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('id', proposalId)
-      .maybeSingle();
-    if (error) throw databaseError('proposal lookup', error.message);
-    if (!data) throw new Error('PayScope proposal was not found');
-    return proposalFromRow(data as Record<string, unknown>);
-  }
 }
 
 function eventFromRow(row: Record<string, unknown>): StoredEvent {
@@ -390,8 +375,7 @@ function proposalFromRow(row: Record<string, unknown>): ActionProposal {
     content: row.content,
     status: row.status,
     proposedAt: row.proposed_at,
-    approvedAt: row.approved_at,
-    approvedBy: row.approved_by,
+    simulatedAt: row.simulated_at ?? simulatedAt(row.delivery_result),
     deliveryResult: row.delivery_result,
   });
 }
@@ -403,7 +387,7 @@ function auditFromRow(row: Record<string, unknown>): AuditEntry {
     incidentId: row.incident_id,
     sequenceNumber: Number(row.sequence_number),
     eventType: row.event_type,
-    actorType: row.actor_type,
+    actorType: row.actor_type === 'system' ? 'system' : 'legacy',
     actorId: row.actor_id,
     actorSessionHash: row.actor_session_hash,
     decision: row.decision,
@@ -417,27 +401,75 @@ function auditFromRow(row: Record<string, unknown>): AuditEntry {
 }
 
 function investigationFromRow(row: Record<string, unknown>): Investigation {
+  const plan = row.plan === null || row.plan === undefined ? null : legacyPlan(record(row.plan));
   const risk = row.risk_analysis === null || row.risk_analysis === undefined
     ? null
-    : RiskAnalysisSchema.parse({
-      ...record(row.risk_analysis),
-      // Historical investigations predate the explicit server-tool trace.
-      toolResults: record(row.risk_analysis).toolResults ?? { incidentTimelineEventCount: 0, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },
-    });
+    : legacyRisk(record(row.risk_analysis));
+  const recovery = row.recovery_plan === null || row.recovery_plan === undefined ? null : legacyRecovery(record(row.recovery_plan));
   return InvestigationSchema.parse({
     id: row.id,
     organizationId: row.organization_id,
     incidentId: row.incident_id,
     status: row.status,
-    plan: row.plan ?? null,
+    plan,
     riskAnalysis: risk,
-    recoveryPlan: row.recovery_plan ?? null,
-    policyDecision: row.policy_decision ?? null,
+    recoveryPlan: recovery,
+    policyDecision: row.policy_decision === null || row.policy_decision === undefined ? null : legacyPolicy(record(row.policy_decision)),
     modelId: row.model_id ?? null,
     tokensUsed: row.tokens_used === null || row.tokens_used === undefined ? null : numeric(row.tokens_used),
     latencyMs: row.latency_ms === null || row.latency_ms === undefined ? null : numeric(row.latency_ms),
     startedAt: row.started_at,
     completedAt: row.completed_at ?? null,
+  });
+}
+
+function legacyPlan(value: Record<string, unknown>): InvestigationPlan {
+  return InvestigationPlanSchema.parse({
+    ...value,
+    objectives: value.objectives ?? ['Classify the persisted incident evidence.'],
+    evidencePriorities: value.evidencePriorities ?? [{ fact: 'Legacy investigation record', whyItMatters: 'The original plan did not retain detailed evidence priorities.' }],
+    constraints: value.constraints ?? ['No PII, customer outreach, or financial execution.'],
+    noActionCriteria: value.noActionCriteria ?? ['Insufficient or conflicting evidence requires autonomous no action.'],
+  });
+}
+
+function legacyRisk(value: Record<string, unknown>): RiskAnalysis {
+  return RiskAnalysisSchema.parse({
+    ...value,
+    causalNarrative: value.causalNarrative ?? 'Legacy investigation record did not retain a causal narrative.',
+    evidenceConfidenceRationale: value.evidenceConfidenceRationale ?? 'Legacy investigation record did not retain confidence rationale.',
+    alternativeHypotheses: value.alternativeHypotheses ?? [],
+      // Historical investigations predate the explicit server-tool trace.
+    toolResults: value.toolResults ?? { incidentTimelineEventCount: 0, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },
+  });
+}
+
+function legacyRecovery(value: Record<string, unknown>): RecoveryPlan {
+  const actions = Array.isArray(value.proposedActions)
+    ? value.proposedActions.map(action => {
+      const proposal = record(action);
+      return {
+        ...proposal,
+        preconditions: proposal.preconditions ?? ['Validated deterministic policy permission.'],
+        expectedOutcome: proposal.expectedOutcome ?? 'A bounded autonomous simulation record is stored.',
+      };
+    })
+    : value.proposedActions;
+  return RecoveryPlanSchema.parse({ ...value, proposedActions: actions });
+}
+
+function legacyPolicy(value: Record<string, unknown>): PolicyDecisionContract {
+  const { escalationReason, ...withoutLegacyReason } = value;
+  const activeGates = Array.isArray(value.gates)
+    ? value.gates
+      .filter(gate => !(gate && typeof gate === 'object' && !Array.isArray(gate) && (gate as Record<string, unknown>).name === 'human_review_floor'))
+      .slice(0, 6)
+    : value.gates;
+  return PolicyDecisionSchema.parse({
+    ...withoutLegacyReason,
+    gates: activeGates,
+    outcome: value.outcome === 'escalate' ? 'auto_no_action' : value.outcome,
+    noActionReason: value.noActionReason ?? (typeof escalationReason === 'string' ? escalationReason : null),
   });
 }
 
@@ -455,17 +487,17 @@ function record(value: unknown): Record<string, unknown> {
 function parseDashboardFilters(query: string): { statuses: Incident['status'][]; riskTiers: RiskTier[] } {
   const text = query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/[_-]/g, ' ');
   const statuses = ([
-    ['open', 'OPEN'], ['monitoring', 'MONITORING'], ['escalated', 'ESCALATED'], ['dispute opened', 'DISPUTE_OPENED'],
-    ['resolved', 'RESOLVED'], ['human resolved', 'HUMAN_RESOLVED'], ['dismissed', 'DISMISSED'],
+    ['open', 'OPEN'], ['monitoring', 'MONITORING'], ['dispute opened', 'DISPUTE_OPENED'],
+    ['resolved', 'RESOLVED'], ['dismissed', 'DISMISSED'],
   ] as const).filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
   const riskTiers = ([['critical', 'CRITICAL'], ['high', 'HIGH'], ['medium', 'MEDIUM'], ['monitor', 'MONITOR']] as const)
     .filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
-  // A specific multi-word lifecycle term wins over its shorter component:
-  // “human resolved” is not also a request for every RESOLVED incident.
-  const normalizedStatuses = statuses.includes('HUMAN_RESOLVED')
-    ? statuses.filter(status => status !== 'RESOLVED')
-    : statuses;
-  return { statuses: normalizedStatuses, riskTiers };
+  return { statuses, riskTiers };
+}
+
+function simulatedAt(value: unknown): string | null {
+  const result = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  return typeof result?.simulatedAt === 'string' ? result.simulatedAt : null;
 }
 
 function includesTerm(text: string, term: string): boolean {

@@ -12,7 +12,7 @@ export type CorrelationEvent = {
 export type IncidentCandidate = { incident: Incident; events: CorrelationEvent[] };
 export type CorrelationResult = { incident: Incident; created: boolean; stateChanged: boolean; reason: string } | undefined;
 
-const TERMINAL = new Set<IncidentStatus>(['RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED', 'DISPUTE_OPENED']);
+const TERMINAL = new Set<IncidentStatus>(['RESOLVED', 'DISMISSED', 'DISPUTE_OPENED']);
 
 /** Deterministic only: no model output can create, resolve, or correlate an incident. */
 export function correlateEvent(
@@ -90,7 +90,7 @@ function applyRecovery(incident: Incident, incoming: CorrelationEvent): Correlat
       ...incident,
       recoveredAmountPaise,
       remainingAmountPaise,
-      status: resolved ? 'RESOLVED' : incident.status === 'ESCALATED' ? 'ESCALATED' : 'MONITORING',
+      status: resolved ? 'RESOLVED' : 'MONITORING',
       resolvedAt: resolved ? incoming.event.occurredAt : null,
     },
     created: false,

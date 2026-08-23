@@ -24,6 +24,12 @@ export function queueFailureDecision(currentAttempt: number, now = Date.now()): 
   return { status: 'pending', attemptNumber: nextAttempt, nextAttemptAt: new Date(now + delay).toISOString() };
 }
 
+/** Fail closed for jobs whose referenced durable resource no longer exists. */
+export function isTerminalQueueJobError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /PayScope (event|incident) was not found|job is missing (eventId|incidentId|triggerEventId)/i.test(error.message);
+}
+
 /** A single VPS worker that claims jobs atomically through Supabase RPC. */
 export class QueueWorker {
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -119,7 +125,10 @@ export class QueueWorker {
   }
 
   private async fail(row: ClaimedQueueRow, error: unknown): Promise<void> {
-    const decision = queueFailureDecision(row.attempt_number);
+    const retryDecision = queueFailureDecision(row.attempt_number);
+    const decision = isTerminalQueueJobError(error)
+      ? { status: 'dead' as const, attemptNumber: row.attempt_number, nextAttemptAt: null }
+      : retryDecision;
     const update = decision.status === 'dead'
       ? { status: 'dead', updated_at: new Date().toISOString(), locked_at: null, locked_by: null }
       : { status: 'pending', attempt_number: decision.attemptNumber, next_attempt_at: decision.nextAttemptAt, updated_at: new Date().toISOString(), locked_at: null, locked_by: null };

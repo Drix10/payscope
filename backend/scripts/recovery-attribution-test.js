@@ -4,8 +4,8 @@ const { attributeRecoveries, paymentLinkReferenceForProposal } = require('../dis
 const incidentId = '00000000-0000-4000-8000-000000000111';
 const proposalId = '00000000-0000-4000-8000-000000000112';
 const secondProposalId = '00000000-0000-4000-8000-000000000113';
-const approvedAt = '2026-08-23T00:00:00.000Z';
-const proposal = { id: proposalId, incidentId, actionType: 'retry_link_sms', status: 'simulated', approvedAt };
+const simulatedAt = '2026-08-23T00:00:00.000Z';
+const proposal = { id: proposalId, incidentId, actionType: 'retry_link_sms', status: 'simulated', simulatedAt };
 const result = attributeRecoveries([{ id: incidentId, totalFailedAmountPaise: 1_000 }], [proposal], [
   { eventId: 'capture-1', incidentId, capturedAt: '2026-08-23T01:00:00.000Z', amountPaise: 600, paymentLinkReferenceId: null, disputeOpenedBeforeCapture: false },
   { eventId: 'capture-2', incidentId: null, capturedAt: '2026-08-23T02:00:00.000Z', amountPaise: 600, paymentLinkReferenceId: paymentLinkReferenceForProposal(proposalId), disputeOpenedBeforeCapture: false },
@@ -19,7 +19,7 @@ assert.equal(attributeRecoveries([{ id: incidentId, totalFailedAmountPaise: 1_00
 ]).length, 0, 'captures after 24 hours cannot be attributed');
 assert.equal(attributeRecoveries([{ id: incidentId, totalFailedAmountPaise: 1_000 }], [{ ...proposal, status: 'pending' }], [
   { eventId: 'unapproved', incidentId, capturedAt: '2026-08-23T01:00:00.000Z', amountPaise: 1, paymentLinkReferenceId: null, disputeOpenedBeforeCapture: false },
-]).length, 0, 'approval is mandatory');
+]).length, 0, 'simulation is mandatory');
 assert.equal(attributeRecoveries([{ id: incidentId, totalFailedAmountPaise: 1_000 }], [proposal], [
   { eventId: 'disputed', incidentId, capturedAt: '2026-08-23T01:00:00.000Z', amountPaise: 1, paymentLinkReferenceId: null, disputeOpenedBeforeCapture: true },
 ]).length, 0, 'a disputed incident cannot claim recovery');

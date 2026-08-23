@@ -10,5 +10,5 @@ major_version = 17
 enabled = true
 
 [db.seed]
-# Production/Test Mode data is seeded explicitly, never by CLI reset.
+# Production and integration data are seeded explicitly, never by CLI reset.
 enabled = false

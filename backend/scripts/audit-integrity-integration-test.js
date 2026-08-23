@@ -7,7 +7,7 @@ const { requireDatabaseClient } = require('../dist/db/client');
 const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_AUDIT_INTEGRATION !== 'true') {
-  console.log('Skipped audit-integrity integration test (set PAYSCOPE_RUN_AUDIT_INTEGRATION=true for fixture Test Mode Supabase).');
+  console.log('Skipped audit-integrity integration test (set PAYSCOPE_RUN_AUDIT_INTEGRATION=true for dedicated integration Supabase).');
   process.exit(0);
 }
 const organizationId = requireIntegrationOrganization();

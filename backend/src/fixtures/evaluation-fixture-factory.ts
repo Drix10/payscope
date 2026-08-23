@@ -57,6 +57,6 @@ function createFixture(fixtureSet: 'development' | 'held_out', ordinal: number, 
       providerData: {},
     },
     enrichment,
-    expected: { incidentStatus: fraud ? 'ESCALATED' : 'OPEN', groundTruth: fraud ? 'fraud' : 'not_fraud' },
+    expected: { incidentStatus: fraud ? 'DISMISSED' : 'OPEN', groundTruth: fraud ? 'fraud' : 'not_fraud' },
   }, secret);
 }

@@ -1,4 +1,4 @@
-/* Opt-in Test Mode proof that terminal correlation cancels a pending proposal
+/* Opt-in integration proof that terminal correlation cancels a pending proposal
  * inside the same database transaction. Append-only audit evidence is kept. */
 require('dotenv/config');
 const assert = require('node:assert/strict');
@@ -7,7 +7,7 @@ const { requireDatabaseClient } = require('../dist/db/client');
 const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_TERMINAL_INTEGRATION !== 'true') {
-  console.log('Skipped terminal-cancellation integration test (set PAYSCOPE_RUN_TERMINAL_INTEGRATION=true for Test Mode Supabase).');
+  console.log('Skipped terminal-cancellation integration test (set PAYSCOPE_RUN_TERMINAL_INTEGRATION=true for dedicated integration Supabase).');
   process.exit(0);
 }
 const organizationId = requireIntegrationOrganization();

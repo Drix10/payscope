@@ -241,11 +241,11 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#4C6DFF] uppercase tracking-wider">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Disambiguation Gate
+                  <ShieldCheck className="h-3.5 w-3.5" /> Autonomous Safety Gate
                 </span>
-                <span className="font-mono text-[10px] text-neutral-400">Human-In-The-Loop</span>
+                <span className="font-mono text-[10px] text-neutral-400">Policy-Enforced</span>
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Approval-Gated Proposals</h3>
+              <h3 className="text-lg font-bold text-white mb-2">Automatically Simulated Actions</h3>
               
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
@@ -256,9 +256,9 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
                   <span className="flex items-center gap-2 text-neutral-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-[#4C6DFF]" /> Resolve proposal — reviewed
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#4C6DFF]" /> Policy-permitted action — simulated
                   </span>
-                  <span className="font-mono text-sky-300">Human approved</span>
+                  <span className="font-mono text-sky-300">Recorded by AI</span>
                 </div>
               </div>
             </div>

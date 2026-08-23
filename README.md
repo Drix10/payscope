@@ -1,190 +1,202 @@
 # PayScope
 
-PayScope is a Razorpay **Test Mode** payment-incident MVP. It receives a
-verified webhook, stores only a bounded normalized record, processes it through
-a durable queue, correlates it into an incident, and exposes a read-only React
-operator workspace.
+<p align="center">
+  <strong>An autonomous payment-operations agent for Razorpay merchants.</strong><br />
+  From a signed payment signal to an evidence-backed, policy-bounded incident record.
+</p>
 
-It is intentionally safe by default: no live payment operation, customer
-message, refund, subscription change, or direct Vulcan claim exists.
+<p align="center">
+  <img alt="Razorpay AI Buildathon" src="https://img.shields.io/badge/Razorpay-AI%20Buildathon-0C1021?style=for-the-badge&logo=razorpay&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.6-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img alt="React" src="https://img.shields.io/badge/React-Vite-61DAFB?style=for-the-badge&logo=react&logoColor=111827" />
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-RLS%20%2B%20Audit-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
+  <img alt="Structured outputs" src="https://img.shields.io/badge/AI-Structured%20Outputs-7C3AED?style=for-the-badge" />
+</p>
 
-## What runs today
+PayScope turns Razorpay webhook events into a complete, tenant-scoped operations record. Its AI agents investigate evidence under strict structured-output contracts; deterministic policy—not a model—decides whether a bounded action record is allowed. The result is a dashboard that makes each incident understandable rather than merely visible.
+
+> **Safety boundary:** PayScope currently records simulated actions only. It never sends a customer message, moves money, captures/refunds payments, or writes to Razorpay. Incoming data may come from either Razorpay environment; the safety boundary remains the same.
+
+## Showcase
+
+| | |
+|---|---|
+| **01 — Command center**<br />The landing surface explains the operating model before a merchant opens the product. | **02 — Incident feed**<br />A readable timeline of payment incidents, risk level, current lifecycle, and at-risk amount. |
+| `docs/screenshots/01-command-center.png` | `docs/screenshots/02-incident-feed.png` |
+| **03 — AI decision record**<br />Evidence, causal reasoning, alternatives, policy gates, prerequisites, and bounded outcome in one incident detail. | **04 — Audit and metrics**<br />Append-only audit verification and explicitly-qualified operational metrics. |
+| `docs/screenshots/03-ai-decision-record.png` | `docs/screenshots/04-audit-and-metrics.png` |
+
+The four screenshot paths above are intentional capture targets for the deployed experience. They keep the submission deck, product walkthrough, and repository showcase aligned as UI evolves; see [`docs/screenshots/README.md`](docs/screenshots/README.md) for capture requirements.
+
+## Buildathon submission
+
+| Question | Answer |
+|---|---|
+| **Track selection** | AI agents for payment operations |
+| **Project name / title** | **PayScope — Autonomous Payment Operations Agent** |
+| **GitHub repository** | [github.com/Drix10/payscope](https://github.com/Drix10/payscope) |
+| **Project objective** | Detect payment incidents from signed Razorpay events, reason over evidence using bounded AI, enforce deterministic safety policy, and give a merchant an auditable record of what the system concluded. |
+| **What it solves** | Payment failure signals are noisy, scattered, and hard to triage. PayScope correlates them into incidents, distinguishes infrastructure and customer risk, preserves evidence, records a safe next-step simulation, and makes the reasoning inspectable. |
+
+### Build challenges and technical obstacles
+
+| Challenge | Resolution |
+|---|---|
+| A language model can sound certain without having sufficient evidence. | Each agent returns a strict schema containing evidence priorities, confidence rationale, alternatives, constraints, and no-action criteria. Invalid output is safely terminalized and audited. |
+| Payment webhooks can arrive more than once or out of order. | HMAC verification, durable idempotent intake, queue leases, retries, correlation rules, and idempotent action recording converge duplicate work onto the same incident. |
+| AI autonomy must not become unbounded execution. | The model cannot call tools directly or create action types. A deterministic policy engine enforces contact caps, fraud/dispute stops, merchant opt-in, evidence requirements, and an allowlist before a simulation is recorded. |
+| A dashboard can hide uncertainty behind polished numbers. | Metrics include an exception list, recovery attribution needs a causal correlation chain, and every screen exposes source labels, evidence gaps, policy gates, and audit integrity. |
+| Sensitive payment context must not leak to the browser or model. | The data path is organization-scoped, PII is minimized and hashed, model prompts use a reduced context, and the frontend receives presentation-safe read models only. |
+
+## How it works
 
 ```text
-Razorpay Test Mode webhook
-  -> raw-body HMAC verification and payload hashing
-  -> Supabase atomic event + durable queue job
-  -> VPS QueueWorker
-  -> labelled Razorpay-field heuristic enrichment
-  -> tenant-scoped correlation and incident lifecycle
-  -> bounded model investigation, or audited human escalation
-  -> React/Vite incident and audit workspace on Vercel
+Razorpay webhook
+   │  HMAC verification · event allowlist · deduplication
+   ▼
+Durable, tenant-scoped queue
+   │  leased worker · bounded retry · idempotency
+   ▼
+Enrichment + correlation
+   │  documented fields · downtime signal · source labels
+   ▼
+Structured AI investigation
+   │  Supervisor → Risk Analyst → Recovery Planner
+   ▼
+Deterministic policy evaluator
+   │  hard stops · contact rules · allowlist · outcome gates
+   ▼
+Simulation / autonomous no-action
+   │  append-only audit entry · lifecycle update
+   ▼
+Read-only React dashboard
 ```
 
-- Test Mode is enforced at backend startup.
-- Customer identifiers become organization-specific HMAC hashes; raw webhook
-  bodies and contact details are never persisted.
-- Every API/database read injects the configured organization ID.
-- If the Mesh key is absent or an agent response is invalid, the incident is
-  escalated and audited—never turned into an action.
-- The audit table is append-only and hash-chained per organization.
+### The agent stack
 
-## Deliberate MVP limits
+| Layer | Produces | Cannot do |
+|---|---|---|
+| **Supervisor** | objectives, evidence priorities, bounded plan, constraints, no-action criteria | access tools, PII, or select an action |
+| **Risk Analyst** | causal narrative, confidence rationale, alternative hypotheses, evidence gaps | use anything except four tenant-scoped read tools; recommend execution |
+| **Recovery Planner** | finite action proposals, prerequisites, expected outcome, optional Hinglish script | invent actions, contacts, links, or payment operations |
+| **Policy Evaluator** | deterministic gate trace and permit/restrict/no-action result | call a model or override stopping rules |
+| **Simulation adapter** | idempotent simulated action record | send communications or execute financial operations |
 
-The dashboard exposes read-only incident data plus one token-gated,
-simulated-only proposal approval. It does not have a user-management product,
-browser session transport, live communications, payment execution, or a claim
-of real recovered merchant revenue. Fixture metrics and remaining work are
-tracked in [backend/CHECKPOINTS.md](./backend/CHECKPOINTS.md) and
-[frontend/CHECKPOINTS.md](./frontend/CHECKPOINTS.md).
+The model sees data, never instructions hidden inside webhook payloads. Prompts require JSON only, explicitly treat payload content as untrusted, prohibit PII and execution, demand alternatives and uncertainty, and require a safe no-action route when the evidence is degraded.
 
-The incident read API is deliberately public for this one-merchant demo; CORS
-only restricts which browser origins can read it and is not authentication.
-Responses are reduced to presentation-safe Test Mode data and never include
-customer hashes, provider payment/order IDs, or raw Razorpay payloads.
+### What an incident can become
 
-## Local setup
-
-Requirements: Node.js 20+, npm, a Razorpay Test Mode account, and Supabase for
-the durable path.
-
-```powershell
-cd backend
-Copy-Item .env.example .env
-
-cd ..\frontend
-Copy-Item .env.example .env
+```text
+OPEN → enrichment / correlation → investigation → policy
+                                           ├── RESOLVED          (full recovery signal)
+                                           ├── MONITORING        (partial recovery)
+                                           ├── DISPUTE_OPENED    (terminal safeguard)
+                                           └── DISMISSED         (bounded no-action)
 ```
 
-Keep `PAYSCOPE_MVP_PIPELINE=false` while working without Supabase. The backend
-will start in a deliberately degraded state and reject webhooks rather than
-falling back to memory. To enable the durable pipeline, complete the next
-section first.
+The legacy `ESCALATED` and `HUMAN_RESOLVED` states are retired. PayScope does not place work in an invisible manual queue: if it cannot safely proceed, it records the reason and ends in a bounded autonomous state.
 
-### Enable the durable Test Mode pipeline
+## Technical guarantees
 
-1. Authenticate the Supabase CLI, link the configured project, and push the
-   canonical migration:
+- **Tenant isolation:** every event, job, query, incident, audit entry, and agent context is organization-scoped; Supabase RLS and RPC boundaries enforce it.
+- **Evidence integrity:** every enrichment fact names its source. Missing evidence stays missing—no fabricated completion or confidence.
+- **Auditability:** database rules make audit entries append-only and hash-chain them per organization. Verification detects a broken chain.
+- **Safe metrics:** attributed recovery requires a simulated proposal and a correlated later payment event within the valid window. It is labelled simulation evidence, not merchant revenue.
+- **Browser safety:** the dashboard API is read-only. It exposes neither provider payloads, secrets, contact data, nor any approval/action endpoint.
+- **Failure behavior:** invalid model output, unavailable evidence, queue retry exhaustion, duplicate delivery, policy blocks, fraud, and disputes resolve to explicit, auditable outcomes rather than unsafe execution.
 
-   ```powershell
-   cd backend
-   npx supabase login
-   npx supabase link --project-ref oheegffhhtdudlbgrtso
-   npx supabase db push
-   ```
+## Repository map
 
-   The CLI is the canonical migration path. If a dashboard-only recovery is
-   unavoidable, execute every SQL file in
-   [`backend/supabase/migrations`](./backend/supabase/migrations) in filename
-   order, then reconcile the migration history before any later CLI push.
-2. Create one organization, then copy its ID into
-   `PAYSCOPE_DEMO_ORGANIZATION_ID` and its Test Mode key ID into `razorpay_key_id`.
-   Generate the customer hash secret locally; it must be at least 32 characters.
+```text
+backend/
+  src/pipeline/          agent prompts, orchestration, policy, correlation
+  src/domain/            Zod contracts and finite action/lifecycle definitions
+  src/db/                tenant-scoped repository and Supabase RPC boundary
+  supabase/migrations/   ordered schema, queue, RLS, audit, and lifecycle changes
+  CHECKPOINTS.md         backend completion and hosted-proof gates
+frontend/
+  src/                   landing experience and read-only operations dashboard
+  CHECKPOINTS.md         UX, accessibility, and deployment gates
+Plan.md                  canonical product, safety, and agent specification
+```
 
-   ```sql
-   insert into public.payscope_organizations (name, razorpay_key_id, customer_hash_secret)
-   values ('PayScope Test Merchant', 'rzp_test_replace_me', 'replace_with_a_random_32_plus_character_secret')
-   returning id;
-   ```
+## Run locally
 
-3. Put the returned UUID, Supabase service-role key, Razorpay Test Mode keys,
-   and webhook secret in `backend/.env`; set `PAYSCOPE_MVP_PIPELINE=true`.
-   Add `MESH_API_KEY` to run the schema-constrained AI investigation path.
-   Mesh calls use `response_format: json_schema` and local Zod validation.
-   For hosted integration tests, seed one separate fixture organization and put
-   its UUID in `PAYSCOPE_TEST_ORGANIZATION_ID`. It is never used by the public
-   demo: audit-producing integration tests are append-only and deliberately
-   refuse to run against `PAYSCOPE_DEMO_ORGANIZATION_ID`.
-4. Configure Razorpay Test Mode to deliver to
-   `https://<your-vps-host>/webhooks/razorpay`, using the same webhook secret.
-   PayScope persists only `payment.failed`, `payment.captured`,
-   `payment_link.paid`, `order.paid`, and dispute-opening events (`created`,
-   `under_review`, `action_required`).
-   Other correctly signed Razorpay events are acknowledged with `200` and
-   discarded: they create no event, queue job, audit entry, or incident.
+### Prerequisites
 
-The service-role key stays on the VPS. It must never appear in Vercel, frontend
-files, or a `VITE_*` variable.
+- Node.js 20 or newer
+- npm
+- A Supabase project
+- Razorpay API credentials and webhook secret (server only)
+- Mesh model API credentials (server only)
 
-The RLS test already uses fixed fixture tenant IDs. If you need a dedicated
-general-purpose integration tenant instead, insert a second Test Mode
-organization with the same SQL pattern as the demo organization, then use its
-returned UUID only for `PAYSCOPE_TEST_ORGANIZATION_ID`.
+### Backend
 
-Audit evidence is append-only. If a fixture tenant's integrity status is ever
-`broken`, do not delete, rewrite, or reuse its evidence: create a fresh fixture
-tenant, investigate the defect, and retain the old chain for diagnosis. The
-current audit writer normalizes confidence to the stored `numeric(4,3)` format
-before hashing, preventing representation-only mismatches such as `0.9` versus
-`0.900`.
-
-## Run and verify
-
-```powershell
+```bash
 cd backend
-npm ci
+copy .env.example .env
+npm install
+npm run build
+npm run start
+```
+
+Set `PAYSCOPE_PIPELINE_ENABLED=true` only after the Supabase migrations have been applied. See [`backend/.env.example`](backend/.env.example) and the [backend deployment guide](backend/docs/PRODUCTION_RAZORPAY_DEPLOYMENT.md) for the complete server-side configuration.
+
+### Frontend
+
+```bash
+cd frontend
+copy .env.example .env
+npm install
+npm run build
+npm run dev
+```
+
+The frontend needs only the public backend origin. It must never contain Razorpay, Supabase service-role, webhook, or Mesh secrets.
+
+## Database and webhook setup
+
+Apply migrations deliberately—application startup never mutates production schema:
+
+```bash
+cd backend
+npx supabase login
+npx supabase link --project-ref <project-ref>
+npx supabase db push
+```
+
+Create one organization with the provided SQL/RPC workflow in the deployment guide, set its UUID as `PAYSCOPE_ORGANIZATION_ID`, then deploy the backend behind HTTPS. Configure Razorpay to send its supported payment, dispute, downtime, order, invoice, refund, settlement, fund-account, payment-link, and account events to:
+
+```text
+POST https://<your-api-domain>/webhooks/razorpay
+```
+
+Use the same webhook secret as `RAZORPAY_WEBHOOK_SECRET`; HMAC verification happens over the raw request body before the payload is trusted. `RAZORPAY_ENVIRONMENT` must match the prefix of `RAZORPAY_KEY_ID` (`rzp_live_` or `rzp_test_`).
+
+## Verification
+
+```bash
+# backend
 npm run build
 npm run test:contracts
-npm run test:database-client
-npm run test:mvp-api
-npm run test:webhook-intake
-npm run test:agentic-webhook
-npm run test:queue
-npm run test:enrichment
-npm run test:correlation
+npm run test:schema
 npm run test:agents
 npm run test:investigation-runner
-npm run start
+npm run test:phase3
+npm run test:mvp-api
+npm audit --omit=dev --audit-level=high
 
-cd ..\frontend
-npm ci
+# frontend
 npm run build
+npm audit --omit=dev --audit-level=high
 ```
 
-`GET /health` reports whether the durable pipeline is enabled. With it enabled,
-the React app uses `GET /api/mvp/health`, `/incidents`, incident detail, and
-audit history. Configure `CORS_ORIGINS` with the exact Vercel URL.
+The repository’s canonical implementation details and remaining environment-level proof steps live in [`Plan.md`](Plan.md), [`backend/CHECKPOINTS.md`](backend/CHECKPOINTS.md), and [`frontend/CHECKPOINTS.md`](frontend/CHECKPOINTS.md).
 
-## Evaluation and Test Mode recovery evidence
+## Product boundary
 
-The dashboard never invents a recovery. A value is credited only when a
-recovery proposal was created, an operator approved its simulation, a
-`payment.captured` event occurred within 24 hours, and the capture has either
-the proposal's `ps:<proposal-uuid>` Payment Link reference or an explicit
-incident correlation. Each capture is credited once and never above its
-incident's original at-risk amount. These are still **Test Mode simulation
-metrics, not real merchant revenue**.
+PayScope is built as a high-integrity autonomous operations layer, not a payment executor. Before enabling any real customer communication or financial write, the product would require a separately designed consent model, recipient resolution, delivery provider, regulatory review, live-action idempotency model, reconciliation, kill switch, and independent security assessment. None of those capabilities are hidden behind an environment variable in this repository.
 
-The Phase 5 runner needs the VPS-only `PAYSCOPE_FIXTURE_SIGNING_SECRET` from
-`backend/.env.example`. Run development first, lock the baseline, then run the
-held-out split exactly once per fixture version:
+---
 
-```powershell
-cd backend
-$env:PAYSCOPE_RUN_EVALUATION = 'true'
-$env:PAYSCOPE_EVALUATION_SPLIT = 'development' # then held_out after lock
-npm run run:evaluation
-```
-
-The database records a versioned report and audit entry; it rejects a second
-held-out report for the same organization and fixture version. The current
-500-item split (300 development / 200 held-out) is HMAC-signed, PII-free, and
-deterministic, but it is programmatically generated. It is useful for pipeline
-regression only and **must be replaced with the locked plan's manually curated
-labels before presenting a final precision/recall claim**.
-
-## Deployment
-
-- **VPS:** deploy `backend/`; run `npm ci`, `npm run build`, then `npm run start`
-  behind HTTPS. Use [backend deployment notes](./backend/docs/PRODUCTION_RAZORPAY_DEPLOYMENT.md).
-- **Vercel:** deploy `frontend/` with `VITE_API_BASE_URL` set to the HTTPS VPS
-  origin. Use [frontend deployment notes](./frontend/docs/DEPLOYMENT.md).
-
-## Safety boundary
-
-PayScope is a demo MVP, not a production financial-operations platform. It has
-no Live Mode, payment execution, customer outreach, or production recovery
-claim. Enrichment is labelled by its true source; no direct provider capability
-is claimed unless that adapter is explicitly implemented and enabled.
-
-The locked product contract remains in [Plan.md](./Plan.md).
+Designed for the Razorpay AI Buildathon — make payment operations explainable, bounded, and genuinely autonomous.

@@ -1,4 +1,4 @@
-/* Opt-in Test Mode proof that every enqueue RPC writes a tenant-scoped source
+/* Opt-in integration proof that every enqueue RPC writes a tenant-scoped source
  * event relation and that deleting that source cannot leave queue debris. */
 require('dotenv/config');
 const assert = require('node:assert/strict');
@@ -7,7 +7,7 @@ const { requireDatabaseClient } = require('../dist/db/client');
 const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_QUEUE_INTEGRITY_INTEGRATION !== 'true') {
-  console.log('Skipped queue-event-integrity integration test (set PAYSCOPE_RUN_QUEUE_INTEGRITY_INTEGRATION=true for Test Mode Supabase).');
+  console.log('Skipped queue-event-integrity integration test (set PAYSCOPE_RUN_QUEUE_INTEGRITY_INTEGRATION=true for dedicated integration Supabase).');
   process.exit(0);
 }
 

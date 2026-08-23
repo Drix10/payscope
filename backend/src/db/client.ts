@@ -5,7 +5,7 @@ import { createRuntimeConfig, RuntimeConfig } from '../config/runtime-config';
 
 // The worker, API, model, and Razorpay requests all have bounded work. Apply
 // the same ceiling to Supabase's HTTP transport so a network stall cannot keep
-// a queue lease, approval lock, or request handler alive indefinitely.
+// a queue lease or request handler alive indefinitely.
 const SUPABASE_REQUEST_TIMEOUT_MS = 15_000;
 
 function boundedFetch(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): ReturnType<typeof fetch> {

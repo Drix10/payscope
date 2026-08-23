@@ -1,31 +1,17 @@
 import { Router } from 'express';
-import { createHash, timingSafeEqual } from 'crypto';
 import { ZodError } from 'zod';
 import { MvpRepository } from '../db/mvp-repository';
-import { CommunicationsProvider } from '../providers/communications/interface';
 import { IncidentStatus } from '../domain/contracts';
 
-export type MvpRouterOptions = {
-  approvalToken?: string;
-  approvalActorId: string;
-  communications: CommunicationsProvider;
-  enrichmentAdapter: 'razorpay_fields_heuristic';
-};
+export type MvpRouterOptions = { enrichmentAdapter: 'razorpay_fields_heuristic'; razorpayEnvironment: 'test' | 'live' };
 
-/** Tenant-scoped presentation API with one token-gated simulated approval action. */
-export function createMvpRouter(repository: MvpRepository, organizationId: string, options?: MvpRouterOptions): Router {
+/** Read-only tenant dashboard API. All permitted action simulation occurs in the durable worker. */
+export function createMvpRouter(repository: MvpRepository, organizationId: string, options: MvpRouterOptions): Router {
   const router = Router();
-  // The MVP is deployed as one VPS process. Serializing an approval here
-  // prevents two near-simultaneous browser requests from both invoking even
-  // the simulated communications adapter before the durable RPC rejects the
-  // proposal's changed state. The database RPC remains the cross-process
-  // source of truth should deployment topology change later.
-  const approvalLocks = new Map<string, Promise<void>>();
-
   router.get('/health', async (_req, res, next) => {
     try {
       await repository.healthCheck(organizationId);
-      res.status(200).json({ success: true, data: { organizationId, pipeline: 'agentic_mvp', testMode: true, communications: 'proposal_only', database: 'ready', queueWorker: 'configured', webhook: 'signed_test_mode_only', enrichmentAdapter: options?.enrichmentAdapter ?? 'razorpay_fields_heuristic' } });
+      res.status(200).json({ success: true, data: { organizationId, pipeline: 'autonomous', razorpayEnvironment: options.razorpayEnvironment, communications: 'autonomous_simulation', database: 'ready', queueWorker: 'configured', webhook: 'signed', enrichmentAdapter: options.enrichmentAdapter } });
     } catch (error) { next(error); }
   });
   router.get('/incidents', async (req, res, next) => {
@@ -41,18 +27,10 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
     try {
       if (!isUuid(req.params.incidentId)) return invalidRequest(res, 'incidentId must be a UUID.');
       const detail = await repository.incidentDetail(organizationId, req.params.incidentId);
-      // The operator surface receives only presentation-safe fields. Internal
-      // payment/order IDs, customer hashes, and provider context remain VPS-only.
       res.status(200).json({ success: true, data: { ...detail, events: detail.events.map(event => ({
         id: event.id,
         organizationId: event.organizationId,
-        event: {
-          eventType: event.event.eventType,
-          occurredAt: event.event.occurredAt,
-          receivedAt: event.event.receivedAt,
-          amountPaise: event.event.amountPaise,
-          paymentMethod: event.event.paymentMethod,
-        },
+        event: { eventType: event.event.eventType, occurredAt: event.event.occurredAt, receivedAt: event.event.receivedAt, amountPaise: event.event.amountPaise, paymentMethod: event.event.paymentMethod },
         enrichment: event.enrichment,
         enrichmentSource: event.enrichmentSource,
       })) } });
@@ -62,19 +40,14 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
     try {
       const incidentId = typeof req.query.incidentId === 'string' ? req.query.incidentId : undefined;
       if (req.query.incidentId !== undefined && (!incidentId || !isUuid(incidentId))) return invalidRequest(res, 'incidentId must be a UUID.');
-      const entries = await repository.auditEntries(organizationId, incidentId);
-      res.status(200).json({ success: true, data: entries.map(projectAuditEntry) });
+      res.status(200).json({ success: true, data: (await repository.auditEntries(organizationId, incidentId)).map(projectAuditEntry) });
     } catch (error) { next(error); }
   });
   router.get('/audit/integrity', async (_req, res, next) => {
-    try {
-      res.status(200).json({ success: true, data: await repository.auditIntegrity(organizationId) });
-    } catch (error) { next(error); }
+    try { res.status(200).json({ success: true, data: await repository.auditIntegrity(organizationId) }); } catch (error) { next(error); }
   });
   router.get('/dashboard/metrics', async (_req, res, next) => {
-    try {
-      res.status(200).json({ success: true, data: await repository.dashboardMetrics(organizationId) });
-    } catch (error) { next(error); }
+    try { res.status(200).json({ success: true, data: await repository.dashboardMetrics(organizationId) }); } catch (error) { next(error); }
   });
   router.get('/dashboard/query', async (req, res, next) => {
     try {
@@ -85,25 +58,9 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
       res.status(200).json({ success: true, data: await repository.dashboardQuery(organizationId, query, limit) });
     } catch (error) { next(error); }
   });
-  router.post('/proposals/:proposalId/approve', async (req, res, next) => {
-    try {
-      if (!isUuid(req.params.proposalId)) return invalidRequest(res, 'proposalId must be a UUID.');
-      if (!options?.approvalToken) return unavailable(res, 'Proposal approval is not configured on this demo server.');
-      const presentedToken = req.header('x-payscope-demo-approval-token');
-      if (!presentedToken || !matchesApprovalToken(presentedToken, options.approvalToken)) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'A valid demo approval token is required.' } });
-      const approved = await withKeyLock(approvalLocks, req.params.proposalId, async () => {
-        const pending = await repository.proposalById(organizationId, req.params.proposalId);
-        if (pending.status !== 'pending') return undefined;
-        const deliveryResult = await options.communications.executeApprovedAction(pending);
-        return repository.approveProposal(organizationId, pending.id, options.approvalActorId, hashToken(presentedToken), deliveryResult);
-      });
-      if (!approved) return res.status(409).json({ success: false, error: { code: 'PROPOSAL_NOT_PENDING', message: 'This proposal has already been processed or cancelled.' } });
-      res.status(200).json({ success: true, data: approved });
-    } catch (error) { next(error); }
-  });
   router.use((error: Error, _req: unknown, res: { status(code: number): { json(value: unknown): void } }, _next: unknown) => {
     const status = error instanceof ZodError ? 502 : /was not found/.test(error.message) ? 404 : 500;
-    res.status(status).json({ success: false, error: { code: status === 404 ? 'INCIDENT_NOT_FOUND' : status === 502 ? 'INVALID_BACKEND_DATA' : 'MVP_API_ERROR', message: status === 500 ? 'The agentic MVP API could not complete the request.' : error.message } });
+    res.status(status).json({ success: false, error: { code: status === 404 ? 'INCIDENT_NOT_FOUND' : status === 502 ? 'INVALID_BACKEND_DATA' : 'MVP_API_ERROR', message: status === 500 ? 'The autonomous PayScope MVP API could not complete the request.' : error.message } });
   });
   return router;
 }
@@ -118,7 +75,7 @@ function parseLimit(value: unknown, res: { status(code: number): { json(value: u
 
 function parseStatus(value: unknown, res: { status(code: number): { json(value: unknown): void } }): IncidentStatus | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED'].includes(value)) return invalidRequest(res, 'status must be a valid incident lifecycle state.');
+  if (typeof value !== 'string' || !['OPEN', 'MONITORING', 'DISPUTE_OPENED', 'RESOLVED', 'DISMISSED'].includes(value)) return invalidRequest(res, 'status must be a valid incident lifecycle state.');
   return value as IncidentStatus;
 }
 
@@ -137,59 +94,11 @@ function parseDashboardLimit(value: unknown, res: { status(code: number): { json
   return parsed;
 }
 
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-function invalidRequest(res: { status(code: number): { json(value: unknown): void } }, message: string): undefined {
-  res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message } });
-  return undefined;
-}
-
-function unavailable(res: { status(code: number): { json(value: unknown): void } }, message: string): undefined {
-  res.status(503).json({ success: false, error: { code: 'APPROVAL_UNAVAILABLE', message } });
-  return undefined;
-}
-
-function hashToken(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
-}
+function isUuid(value: string): boolean { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
+function invalidRequest(res: { status(code: number): { json(value: unknown): void } }, message: string): undefined { res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message } }); return undefined; }
 
 function projectAuditEntry(entry: Awaited<ReturnType<MvpRepository['auditEntries']>>[number]) {
   const snapshot = entry.enrichmentSnapshot;
-  const source = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && typeof (snapshot as Record<string, unknown>).source === 'string'
-    ? (snapshot as Record<string, unknown>).source
-    : null;
-  return {
-    id: entry.id,
-    organizationId: entry.organizationId,
-    incidentId: entry.incidentId,
-    sequenceNumber: entry.sequenceNumber,
-    eventType: entry.eventType,
-    actorType: entry.actorType,
-    actorId: entry.actorId,
-    decision: entry.decision,
-    rationale: entry.rationale,
-    confidence: entry.confidence,
-    enrichmentSource: source,
-    createdAt: entry.createdAt,
-  };
-}
-
-function matchesApprovalToken(presented: string, configured: string): boolean {
-  return timingSafeEqual(Buffer.from(hashToken(presented), 'hex'), Buffer.from(hashToken(configured), 'hex'));
-}
-
-async function withKeyLock<T>(locks: Map<string, Promise<void>>, key: string, task: () => Promise<T>): Promise<T> {
-  const predecessor = locks.get(key) ?? Promise.resolve();
-  let release: (() => void) | undefined;
-  const current = new Promise<void>(resolve => { release = resolve; });
-  locks.set(key, current);
-  await predecessor;
-  try {
-    return await task();
-  } finally {
-    release?.();
-    if (locks.get(key) === current) locks.delete(key);
-  }
+  const source = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && typeof (snapshot as Record<string, unknown>).source === 'string' ? (snapshot as Record<string, unknown>).source : null;
+  return { id: entry.id, organizationId: entry.organizationId, incidentId: entry.incidentId, sequenceNumber: entry.sequenceNumber, eventType: entry.eventType, actorType: entry.actorType, actorId: entry.actorId, decision: entry.decision, rationale: entry.rationale, confidence: entry.confidence, enrichmentSource: source, createdAt: entry.createdAt };
 }

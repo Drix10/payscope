@@ -1,4 +1,4 @@
-/* Opt-in Test Mode proof for the database transaction behind webhook intake.
+/* Opt-in integration proof for the database transaction behind webhook intake.
  * It creates only uniquely named temporary rows and removes them in finally. */
 require('dotenv/config');
 const assert = require('node:assert/strict');
@@ -7,7 +7,7 @@ const { requireDatabaseClient } = require('../dist/db/client');
 const { requireIntegrationOrganization } = require('./require-integration-organization');
 
 if (process.env.PAYSCOPE_RUN_DURABLE_INTEGRATION !== 'true') {
-  console.log('Skipped durable intake integration test (set PAYSCOPE_RUN_DURABLE_INTEGRATION=true for Test Mode Supabase).');
+  console.log('Skipped durable intake integration test (set PAYSCOPE_RUN_DURABLE_INTEGRATION=true for dedicated integration Supabase).');
   process.exit(0);
 }
 

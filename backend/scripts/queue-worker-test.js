@@ -1,11 +1,14 @@
 const assert = require('node:assert/strict');
-const { QueueWorker, queueFailureDecision } = require('../dist/queue/queue-worker');
+const { QueueWorker, isTerminalQueueJobError, queueFailureDecision } = require('../dist/queue/queue-worker');
 
 const now = Date.parse('2026-08-22T00:00:00.000Z');
 assert.deepEqual(queueFailureDecision(1, now), { status: 'pending', attemptNumber: 2, nextAttemptAt: '2026-08-22T00:00:01.000Z' });
 assert.deepEqual(queueFailureDecision(2, now), { status: 'pending', attemptNumber: 3, nextAttemptAt: '2026-08-22T00:00:05.000Z' });
 assert.deepEqual(queueFailureDecision(3, now), { status: 'pending', attemptNumber: 4, nextAttemptAt: '2026-08-22T00:00:30.000Z' });
 assert.deepEqual(queueFailureDecision(4, now), { status: 'dead', attemptNumber: 4, nextAttemptAt: null });
+assert.equal(isTerminalQueueJobError(new Error('PayScope event was not found')), true);
+assert.equal(isTerminalQueueJobError(new Error('Investigation job is missing triggerEventId')), true);
+assert.equal(isTerminalQueueJobError(new Error('temporary database outage')), false);
 
 const org = '00000000-0000-4000-8000-000000000001';
 const eventId = '00000000-0000-4000-8000-000000000002';
@@ -43,6 +46,25 @@ const waitFor = async (predicate, message) => {
   assert.equal(processed.length, 1, 'a fourth delivery must be executable before dead-lettering');
   assert.equal(processed[0].attemptNumber, 4);
   assert.equal(updates[0].status, 'complete');
+
+  // A deleted/stale durable resource cannot appear later. It is dead-lettered
+  // immediately instead of producing four noisy retries.
+  const staleUpdates = [];
+  const staleQuery = { update(value) { staleUpdates.push(value); return this; }, eq() { return this; }, select() { return this; }, async maybeSingle() { return { data: { id: jobId }, error: null }; } };
+  let staleClaims = 0;
+  const staleClient = {
+    async rpc() { staleClaims += 1; return staleClaims === 1 ? { data: [{ id: jobId, attempt_number: 1, locked_by: 'stale-worker', payload: { jobId, organizationId: org, type: 'enrich_event', createdAt: '2026-08-22T00:00:00.000Z', eventId } }], error: null } : { data: [], error: null }; },
+    from() { return staleQuery; },
+  };
+  const previousStaleError = console.error;
+  console.error = () => {};
+  try {
+    const staleWorker = new QueueWorker(staleClient, 'stale-worker', async () => { throw new Error('PayScope event was not found'); }, 60_000);
+    staleWorker.start();
+    await waitFor(() => staleUpdates.length === 1, 'stale job was not terminalized');
+    await staleWorker.stopAndDrain();
+  } finally { console.error = previousStaleError; }
+  assert.equal(staleUpdates[0].status, 'dead');
 
   // A burst drains serially as soon as a completion is persisted; it does not
   // create one timer/promise per job or wait an entire poll interval per row.
