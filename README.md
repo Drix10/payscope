@@ -206,6 +206,8 @@ The backend test command runs the end-to-end agent suite, exercising the full Su
 
 The repository’s canonical implementation details and remaining environment-level proof steps live in [`Plan.md`](Plan.md), [`backend/CHECKPOINTS.md`](backend/CHECKPOINTS.md), and [`frontend/CHECKPOINTS.md`](frontend/CHECKPOINTS.md).
 
+The five-minute Razorpay test-mode recording kit, including signed webhook scenarios, preflight checks, verification, and the narrated runbook, lives in [`docs/demo-kit/`](docs/demo-kit/).
+
 ---
 
 Designed for the Razorpay AI Buildathon — make payment resolution autonomous, verifiable, and explainable.

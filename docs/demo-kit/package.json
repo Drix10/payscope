@@ -1,0 +1,17 @@
+{
+    "name": "payscope-demo-kit",
+    "private": true,
+    "version": "1.0.0",
+    "description": "Standalone local operator kit for the PayScope production-hosted Razorpay test-mode demo",
+    "type": "module",
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "start": "node scripts/start-demo.mjs",
+        "preflight": "node --env-file=.env scripts/demo-preflight.mjs",
+        "demo": "node --env-file=.env scripts/run-demo.mjs",
+        "verify": "node --env-file=.env scripts/verify-demo.mjs",
+        "self-test": "node scripts/self-test.mjs"
+    }
+}
