@@ -7,7 +7,7 @@ export type RazorpayRetryClassification = 'retryable' | 'idempotent_retry' | 'te
 export type RazorpayErrorMeta = { status: number; code: string | null; classification: RazorpayRetryClassification };
 
 export class RazorpayExecutionClient {
-  constructor(private readonly keyId: string, private readonly keySecret: string, private readonly timeoutMs = 10_000) {}
+  constructor(private readonly keyId: string, private readonly keySecret: string, private readonly timeoutMs = 10_000) { }
 
   async createPaymentLink(input: { referenceId: string; amountPaise: number; currency: string; description: string }): Promise<RazorpayPaymentLink> {
     if (!/^ps_[a-f0-9]{32}$/.test(input.referenceId)) throw new Error('Invalid PayScope Payment Link reference');
@@ -77,25 +77,28 @@ export class RazorpayExecutionClient {
     if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100) throw new Error('Refund amount invalid');
     if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('Refund currency invalid');
     if (!input.receipt || input.receipt.length > 160) throw new Error('Refund receipt invalid');
-    if (!input.idempotencyKey || input.idempotencyKey.length < 1 || input.idempotencyKey.length > 240 || /[\r\n]/.test(input.idempotencyKey)) throw new Error('Refund idempotency key invalid');
+    if (!/^[A-Za-z0-9_-]{10,240}$/.test(input.idempotencyKey)) throw new Error('Refund idempotency key invalid');
     const canonical = await this.fetchPayment(input.paymentId);
     if (canonical.status !== 'captured') throw new Error('Refund requires captured payment');
     if (canonical.currency !== input.currency) throw new Error('Refund currency must match canonical payment');
-    const body = JSON.stringify({ amount: input.amountPaise, currency: input.currency, notes: { receipt: input.receipt.slice(0, 80) } });
+    const body = JSON.stringify({ amount: input.amountPaise, currency: input.currency, receipt: input.receipt.slice(0, 80) });
     const result = await this.request(`/v1/payments/${encodeURIComponent(input.paymentId)}/refund`, {
       method: 'POST',
       body,
       headers: { 'X-Refund-Idempotency': input.idempotencyKey },
-    } as RequestInit & { headers: Record<string,string> });
+    } as RequestInit & { headers: Record<string, string> });
     return parseRefund(result, input.paymentId);
   }
 
   async uploadDisputeDocument(input: { fileName: string; contentBase64: string }): Promise<{ documentId: string }> {
     if (!input.fileName || input.fileName.length > 160) throw new Error('Document fileName invalid');
     if (!input.contentBase64) throw new Error('Document content required');
+    const form = new FormData();
+    form.append('purpose', 'dispute_evidence');
+    form.append('file', new Blob([Buffer.from(input.contentBase64, 'base64')]), input.fileName);
     const hash = await this.request('/v1/documents', {
       method: 'POST',
-      body: JSON.stringify({ file_name: input.fileName, document: input.contentBase64 }),
+      body: form,
     });
     const row = hash as Record<string, unknown>;
     if (typeof row.id !== 'string') throw new Error('Document upload response invalid');
@@ -124,9 +127,10 @@ export class RazorpayExecutionClient {
     return 'terminal';
   }
 
-  private async request(path: string, init: RequestInit & { headers?: Record<string,string> }): Promise<unknown> {
-    const extra = (init.headers ?? {}) as Record<string,string>;
-    const headers: Record<string,string> = { Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64')}`, 'Content-Type': 'application/json', Accept: 'application/json', ...extra };
+  private async request(path: string, init: RequestInit & { headers?: Record<string, string> }): Promise<unknown> {
+    const extra = (init.headers ?? {}) as Record<string, string>;
+    const headers: Record<string, string> = { Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64')}`, Accept: 'application/json', ...extra };
+    if (!(init.body instanceof FormData)) headers['Content-Type'] = 'application/json';
     // Respect Retry-After for 429: bounded wait up to 30s
     const attempt = async (retried = false): Promise<unknown> => {
       // Fresh timeout per attempt so a retry gets its own budget

@@ -6,7 +6,8 @@
 update public.payscope_action_proposals set action_type = 'record_risk_signal' where action_type = 'flag_for_review';
 update public.payscope_action_proposals set action_type = 'resolve_infrastructure' where action_type = 'auto_resolve_infrastructure';
 update public.payscope_action_proposals set action_type = 'submit_dispute_evidence' where action_type = 'prepare_chargeback_evidence';
-update public.payscope_action_proposals set action_type = 'deliver_recovery_link_email' where action_type in ('retry_link_whatsapp','retry_link_sms','hinglish_voice_script','merchant_email_notification','merchant_webhook_notification');
+update public.payscope_action_proposals set action_type = 'record_risk_signal' where action_type in ('merchant_email_notification','merchant_webhook_notification');
+update public.payscope_action_proposals set action_type = 'deliver_recovery_link_email' where action_type in ('retry_link_whatsapp','retry_link_sms','hinglish_voice_script');
 
 -- Tighten proposal check to direct-only 6 capabilities
 alter table public.payscope_action_proposals drop constraint if exists payscope_action_proposals_action_type_check;
@@ -27,14 +28,16 @@ update public.payscope_merchant_policies set allowed_actions = array(
     when elem = 'flag_for_review' then 'record_risk_signal'
     when elem = 'auto_resolve_infrastructure' then 'resolve_infrastructure'
     when elem = 'prepare_chargeback_evidence' then 'submit_dispute_evidence'
-    when elem in ('retry_link_whatsapp','retry_link_sms','hinglish_voice_script','merchant_email_notification','merchant_webhook_notification') then 'deliver_recovery_link_email'
+    when elem in ('merchant_email_notification','merchant_webhook_notification') then 'record_risk_signal'
+    when elem in ('retry_link_whatsapp','retry_link_sms','hinglish_voice_script') then 'deliver_recovery_link_email'
     else elem end
   from unnest(allowed_actions) as elem
   where case
     when elem = 'flag_for_review' then 'record_risk_signal'
     when elem = 'auto_resolve_infrastructure' then 'resolve_infrastructure'
     when elem = 'prepare_chargeback_evidence' then 'submit_dispute_evidence'
-    when elem in ('retry_link_whatsapp','retry_link_sms','hinglish_voice_script','merchant_email_notification','merchant_webhook_notification') then 'deliver_recovery_link_email'
+    when elem in ('merchant_email_notification','merchant_webhook_notification') then 'record_risk_signal'
+    when elem in ('retry_link_whatsapp','retry_link_sms','hinglish_voice_script') then 'deliver_recovery_link_email'
     else elem end in ('deliver_recovery_link_email','record_risk_signal','submit_dispute_evidence','capture_authorized_payment','refund_payment','resolve_infrastructure')
 ) where allowed_actions && array['retry_link_whatsapp','retry_link_sms','hinglish_voice_script','merchant_email_notification','merchant_webhook_notification','flag_for_review','prepare_chargeback_evidence','auto_resolve_infrastructure'];
 

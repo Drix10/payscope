@@ -5,6 +5,7 @@ export class CircuitBreaker {
   private successesInHalfOpen = 0;
   private state: State = 'closed';
   private openedAt = 0;
+  private halfOpenProbeInFlight = false;
   constructor(
     private readonly name: string,
     private readonly failureThreshold = 5,
@@ -21,9 +22,15 @@ export class CircuitBreaker {
     if (this.state === 'open' && Date.now() - this.openedAt >= this.resetMs) {
       this.state = 'half_open';
       this.successesInHalfOpen = 0;
-      return this.halfOpenProbe;
+      if (!this.halfOpenProbe) return false;
+      this.halfOpenProbeInFlight = true;
+      return true;
     }
-    return this.state === 'half_open';
+    if (this.state === 'half_open' && this.halfOpenProbe && !this.halfOpenProbeInFlight) {
+      this.halfOpenProbeInFlight = true;
+      return true;
+    }
+    return false;
   }
 
   onSuccess(): void {
@@ -35,10 +42,12 @@ export class CircuitBreaker {
         this.state = 'closed';
         this.successesInHalfOpen = 0;
       }
+      this.halfOpenProbeInFlight = false;
       return;
     }
     this.failures = 0;
     this.state = 'closed';
+    this.halfOpenProbeInFlight = false;
   }
   onFailure(): void {
     this.failures += 1;
@@ -46,6 +55,7 @@ export class CircuitBreaker {
       this.state = 'open';
       this.openedAt = Date.now();
       this.successesInHalfOpen = 0;
+      this.halfOpenProbeInFlight = false;
       return;
     }
     if (this.failures >= this.failureThreshold) {
@@ -64,13 +74,14 @@ export class BoundedConcurrency {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Concurrency limit must be 1-100');
   }
   async run<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.running >= this.limit) await new Promise<void>(resolve => this.queue.push(resolve));
-    this.running += 1;
+    let transferred = false;
+    if (this.running >= this.limit) await new Promise<void>(resolve => this.queue.push(() => { transferred = true; resolve(); }));
+    if (!transferred) this.running += 1;
     try { return await fn(); }
     finally {
-      this.running -= 1;
       const next = this.queue.shift();
       if (next) next();
+      else this.running -= 1;
     }
   }
   pending(): number { return this.queue.length; }

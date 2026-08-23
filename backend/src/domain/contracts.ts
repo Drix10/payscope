@@ -127,7 +127,7 @@ export const PolicyDecisionSchema = z.object({
   permittedActions: z.array(RecoveryPlanSchema.shape.proposedActions.element).max(8),
   noActionReason: z.string().min(1).max(120).nullable(),
   matchedPolicyId: z.string().uuid().nullable(),
-  gates: z.array(z.object({ name: z.enum(['fraud', 'dispute', 'auto_resolve_ceiling', 'critical_tier', 'contact_limits', 'merchant_policy', 'execution_capability', 'provider_health', 'amount_currency', 'consent_quiet_hours', 'emergency_pause', 'idempotency', 'retry_budget']), result: z.enum(['passed', 'blocked', 'restricted', 'skipped']), rationale: z.string().min(1).max(160) }).strict()).min(6).max(13).default([]),
+  gates: z.array(z.object({ name: z.enum(['fraud', 'dispute', 'auto_resolve_ceiling', 'critical_tier', 'contact_limits', 'merchant_policy', 'execution_capability', 'provider_health', 'amount_currency', 'consent_quiet_hours', 'emergency_pause', 'idempotency', 'retry_budget']), result: z.enum(['passed', 'blocked', 'restricted', 'skipped']), rationale: z.string().min(1).max(160) }).strict()).min(6).max(13),
 }).strict();
 
 export const InvestigationStatusSchema = z.enum(['PENDING', 'RUNNING', 'COMPLETE', 'FAILED']);

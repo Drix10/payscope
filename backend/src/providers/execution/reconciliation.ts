@@ -1,12 +1,12 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { createHash } from 'crypto';
+import { stableHash } from '../../execution/execution-repository';
 
 /**
  * Monotonic reconciliation: duplicate/late callbacks enrich but never regress terminal states.
  * Cross-tenant/replayed/unknown callbacks rejected without second action.
  */
 export class Reconciler {
-  constructor(private readonly client: SupabaseClient) {}
+  constructor(private readonly client: SupabaseClient) { }
 
   async reconcilePaymentLinkPaid(organizationId: string, referenceId: string, eventId: string, paymentId: string | null): Promise<void> {
     if (!/^ps_[a-f0-9]{32}$/.test(referenceId)) return;
@@ -23,7 +23,7 @@ export class Reconciler {
     if (checkError) throw new Error(`Callback dedupe check failed: ${checkError.message}`);
     if (existing) return; // idempotent replay -> skip without state change
     const payload = { referenceId, razorpayEventId: eventId, paymentId: paymentId ?? null };
-    const receiptHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+    const receiptHash = stableHash(payload);
     // First record receipt idempotently (unique on org,action,provider,receipt_kind,hash handles duplicate hash)
     const { error: receiptError } = await this.client.rpc('payscope_record_execution_receipt', {
       p_organization_id: organizationId, p_action_id: actionId, p_provider: 'razorpay', p_receipt_kind: 'payment_link_paid', p_provider_operation_id: paymentId ?? '', p_receipt_hash: receiptHash, p_redacted_payload: payload, p_state: 'confirmed', p_terminal_reason: 'PAYMENT_LINK_PAID',

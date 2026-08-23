@@ -51,7 +51,12 @@
 
 ## Autonomous policy and agent upgrades — required
 
-- [x] Complete the direct action-contract migration: the Phase-A `deliver_recovery_link_email` saga is implemented; capture, refund, dispute evidence, `record_risk_signal`, and infrastructure resolution still need their final direct projections, while retired simulation-only/non-MVP channel enums must then be deleted.
+- [x] Complete the Phase-A `deliver_recovery_link_email` direct action-contract migration.
+- [ ] Add the direct projection for capture after its API contract and verification are live.
+- [ ] Add the direct projection for refund after its API contract and verification are live.
+- [ ] Add the direct projection for dispute evidence after its API contract and verification are live.
+- [ ] Add the direct projection for `record_risk_signal` after its API contract and verification are live.
+- [ ] Add the direct projection for infrastructure resolution after its API contract and verification are live.
 - [x] Give the Recovery Planner a capability catalogue, canonical input facts, amount/reference constraints, recipient eligibility, expected receipt schema, retry/compensation strategy, and no-action behavior.
 - [x] Update Mesh prompts to choose the email-only direct capability set without ever producing raw recipient details, provider secrets, arbitrary URLs, arbitrary monetary values, SMTP headers, HTML, attachments, or arbitrary API operations.
 - [x] Extend deterministic policy to validate execution capability, provider health, merchant configuration, canonical payment state, amount/currency caps, consent/quiet hours, fraud/dispute conditions, duplicate action key, retry budget, and compensation eligibility.

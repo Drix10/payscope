@@ -78,37 +78,37 @@ export function Section4({
 
   if (isMobile) {
     return (
-       <MobileShowcasePanel eyebrow="04 / Autonomous execution" title="From incident to confirmed outcome." description="The agent plans the recovery, clears execution policy, dispatches the provider command, and reconciles the result automatically." accentClass="text-[#00ff87]">
-         <div className="mt-7 grid grid-cols-3 gap-2">
-           {[
-             ['Signal', 'Verified'],
-             ['Plan', 'AI-ready'],
-             ['Dispatch', 'Live'],
-             ['Receipt', 'Matched'],
-             ['Reconcile', 'Running'],
-             ['Outcome', 'Confirmed'],
-           ].map(([label, state]) => (
-             <div key={label} className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5">
-               <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#86f4bd]">{label}</p>
-               <p className="mt-1 text-[11px] font-semibold text-white">{state}</p>
-             </div>
-           ))}
-         </div>
-         <div className="mt-4 rounded-2xl border border-[#00ff87]/25 bg-[#00ff87]/[0.06] p-4">
-           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Current execution</p>
-           <p className="mt-2 text-sm font-semibold text-white">Recovery link dispatched</p>
-           <p className="mt-1 text-xs leading-5 text-neutral-300">Razorpay receipt accepted · callback reconciliation in progress</p>
-         </div>
-         <button type="button" onClick={onOpenDashboard} className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ff87] px-4 py-3 text-sm font-bold text-black shadow-[0_0_24px_rgba(0,255,135,0.25)] hover:bg-[#00ff87]/90">
-           Open the PayScope Dashboard <ArrowRight className="h-4 w-4" />
-         </button>
-       </MobileShowcasePanel>
+      <MobileShowcasePanel eyebrow="04 / Autonomous execution" title="From incident to confirmed outcome." description="The agent plans the recovery, clears execution policy, dispatches the provider command, and reconciles the result automatically." accentClass="text-[#00ff87]">
+        <div className="mt-7 grid grid-cols-3 gap-2">
+          {[
+            ['Signal', 'Verified'],
+            ['Plan', 'AI-ready'],
+            ['Dispatch', 'Live'],
+            ['Receipt', 'Matched'],
+            ['Reconcile', 'Running'],
+            ['Outcome', 'Confirmed'],
+          ].map(([label, state]) => (
+            <div key={label} className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5">
+              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#86f4bd]">{label}</p>
+              <p className="mt-1 text-[11px] font-semibold text-white">{state}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-2xl border border-[#00ff87]/25 bg-[#00ff87]/[0.06] p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Current execution</p>
+          <p className="mt-2 text-sm font-semibold text-white">Recovery link dispatched</p>
+          <p className="mt-1 text-xs leading-5 text-neutral-300">Razorpay receipt accepted · callback reconciliation in progress</p>
+        </div>
+        <button type="button" onClick={onOpenDashboard} className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ff87] px-4 py-3 text-sm font-bold text-black shadow-[0_0_24px_rgba(0,255,135,0.25)] hover:bg-[#00ff87]/90">
+          Open the PayScope Dashboard <ArrowRight className="h-4 w-4" />
+        </button>
+      </MobileShowcasePanel>
     )
   }
 
   const card = (
-      <div
-        className="landing-showcase-card"
+    <div
+      className="landing-showcase-card"
       style={{
         position: 'relative',
         width: NATIVE_W,
@@ -164,7 +164,7 @@ export function Section4({
             ['1. Signal', Database, 'Got event'],
             ['2. Plan', Bot, 'AI checks'],
             ['3. Safety', ShieldCheck, 'Rule passed'],
-            ['4. Send', Send, 'Email sent'],
+            ['4. Example', Send, 'Illustrative dispatch'],
             ['5. Proof', CreditCard, 'Payment seen'],
             ['6. Done', BadgeCheck, 'You see result'],
           ].map(([label, Icon, state], index) => {
@@ -180,7 +180,7 @@ export function Section4({
         <div className="mt-4 grid grid-cols-[1.14fr_.86fr] gap-4">
           <motion.div initial={{ opacity: 0, x: -18 }} animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -18 }} transition={{ delay: 0.72, duration: 0.55 }} className="relative overflow-hidden rounded-2xl border border-[#00ff87]/25 bg-[#090d0e]/90 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
             <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#00ff87]/[0.07] blur-3xl" />
-            <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">What we are doing now</p><p className="mt-1 text-lg font-semibold text-white">Sending a payment reminder email</p></div><span className="rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2.5 py-1 text-[10px] font-bold text-[#86f4bd]">Sent</span></div>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Illustrative example</p><p className="mt-1 text-lg font-semibold text-white">A payment reminder email could be prepared</p></div><span className="rounded-full border border-white/15 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold text-neutral-300">Example</span></div>
             <div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">How</p><p className="mt-1 text-xs font-semibold text-white">New link + email</p></div><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Amount</p><p className="mt-1 text-xs font-semibold text-white">₹1,250</p></div><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Proof ID</p><p className="mt-1 font-mono text-[10px] font-semibold text-[#86f4bd]">ps:8a2f…</p></div></div>
             <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-3 text-[11px] text-neutral-400"><Webhook className="h-3.5 w-3.5 text-[#86f4bd]" /><span>How you know: A unique ID links the email to the later payment — no guesswork.</span></div>
           </motion.div>
@@ -188,7 +188,7 @@ export function Section4({
           <motion.div initial={{ opacity: 0, x: 18 }} animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 18 }} transition={{ delay: 0.84, duration: 0.55 }} className="rounded-2xl border border-white/10 bg-[#090a0f]/90 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
             <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">How we confirm it worked</p><p className="mt-1 text-sm font-semibold text-white">We wait for real proof, not assumptions.</p></div><RefreshCw className="h-4 w-4 text-sky-300" /></div>
             <div className="mt-3 space-y-2">
-              {[['Email accepted', 'Razorpay said OK', 'text-[#86f4bd]'], ['Customer paid?', 'Waiting for Razorpay', 'text-amber-200'], ['Result shown', 'Only after payment proof', 'text-neutral-300']].map(([label, value, accent]) => <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2"><span className="text-[10px] text-neutral-400">{label}</span><span className={`text-[10px] font-semibold ${accent}`}>{value}</span></div>)}
+              {[['Provider response', 'Example receipt only', 'text-[#86f4bd]'], ['Customer paid?', 'Example awaiting proof', 'text-amber-200'], ['Result shown', 'Only after payment proof', 'text-neutral-300']].map(([label, value, accent]) => <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2"><span className="text-[10px] text-neutral-400">{label}</span><span className={`text-[10px] font-semibold ${accent}`}>{value}</span></div>)}
             </div>
           </motion.div>
         </div>

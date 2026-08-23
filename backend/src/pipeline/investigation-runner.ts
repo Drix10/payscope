@@ -22,12 +22,13 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
   try {
     const latest = detail.events.at(-1);
     const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
-    const [policyContext, metrics, memory] = await Promise.all([
+    const [policyContext, metrics, memory, executionContext] = await Promise.all([
       repository.policyContext(job.organizationId, job.incidentId, latest?.event.customerHash),
       // Aggregate signals are optional evidence. A database failure here is
       // represented as unknown instead of a fabricated healthy rate.
       repository.riskToolMetrics(job.organizationId, latest?.event.paymentMethod ?? 'unknown', latest?.event.customerHash, 1).catch(() => null),
       options.directExecution ? repository.incidentMemory(job.organizationId, job.incidentId).catch(() => []) : Promise.resolve([]),
+      options.directExecution && typeof repository.executionPolicyContext === 'function' ? repository.executionPolicyContext(job.organizationId) : Promise.resolve(null),
     ]);
     const deadlineProvider = providerWithDeadline(provider, started + AGENT_PIPELINE_DEADLINE_MS);
     const supervisor = await runInvestigationSupervisor(deadlineProvider, { incident: detail.incident, enrichment, merchantPolicyCount: 1, autoResolveBudgetRemaining: Math.max(0, 1 - policyContext.stats.autoResolveFraction) }, job.organizationId);
@@ -40,7 +41,14 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     // Recovery consumes the validated risk conclusion, so it is intentionally
     // ordered after Risk Analyst. No unsafe speculative parallel model call.
     const recovery = await runRecoveryPlanner(deadlineProvider, { incident: detail.incident, riskAnalysis: risk.analysis, merchantOptedInToRecovery: policyContext.policy.merchantOptedIn, memory, directExecution: Boolean(options.directExecution) }, job.organizationId);
-    output = { plan: supervisor, risk, recovery, policy: PolicyDecisionSchema.parse(evaluatePolicy(detail.incident, risk.analysis, recovery.plan, [policyContext.policy], policyContext.stats, policyContext.contact)) };
+    const directOptions = executionContext ? {
+      executionPolicy: executionContext.policy,
+      existingCommandKeys: executionContext.existingCommandKeys,
+      commandKeyForAction: (actionType: Parameters<typeof evaluatePolicy>[2]['proposedActions'][number]['actionType']) => `${job.organizationId}:${actionType}:${detail.incident.id}`,
+      amountPaise: latest?.event.amountPaise ?? detail.incident.remainingAmountPaise,
+      currency: latest?.event.currency ?? 'INR',
+    } : undefined;
+    output = { plan: supervisor, risk, recovery, policy: PolicyDecisionSchema.parse(evaluatePolicy(detail.incident, risk.analysis, recovery.plan, [policyContext.policy], policyContext.stats, policyContext.contact, directOptions)) };
   } catch (error) {
     await repository.recordInvestigationUnavailable(job.organizationId, job.incidentId, job.triggerEventId, `Agent investigation unavailable: ${error instanceof Error ? error.name : 'unknown_error'}`);
     return;

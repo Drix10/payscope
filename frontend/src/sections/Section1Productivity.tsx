@@ -207,9 +207,9 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
             maxWidth: '420px',
           }}
         >
-           <BlurFadeWords text="How: We check Razorpay's signature and event ID." baseDelay={0.9} isInView={isInView} />
-           <br />
-           <BlurFadeWords text="What you get: One clean incident with amount and proof." baseDelay={1.15} isInView={isInView} />
+          <BlurFadeWords text="How: We check Razorpay's signature and event ID." baseDelay={0.9} isInView={isInView} />
+          <br />
+          <BlurFadeWords text="What you get: One clean incident with amount and proof." baseDelay={1.15} isInView={isInView} />
         </p>
       </div>
 
@@ -276,7 +276,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
                 <div className="text-[10px] text-neutral-400 font-mono">Why this matters</div>
-                 <div className="text-sm font-bold text-[#00ff87]">No double counting</div>
+                <div className="text-sm font-bold text-[#00ff87]">No double counting</div>
               </div>
             </div>
 
@@ -298,10 +298,10 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#00ff87] uppercase tracking-wider">
                   <Sparkles className="h-3.5 w-3.5" /> How we group events
                 </span>
-                 <span className="font-mono text-[10px] text-neutral-400">Payment · Order · Subscription</span>
+                <span className="font-mono text-[10px] text-neutral-400">Payment · Order · Subscription</span>
               </div>
               <h3 className="text-lg font-bold text-white mb-2">One incident, not many alerts</h3>
-              
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs">
                   <span className="flex items-center gap-2 text-neutral-200">
@@ -320,7 +320,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
 
             <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
               <span className="text-[11px] text-neutral-400">How we match:</span>
-              <span className="text-xs font-bold text-[#00ff87]">Same payment/order or 15-min window</span>
+              <span className="text-xs font-bold text-[#00ff87]">Same payment, order, or subscription; otherwise customer + method within 15 min</span>
             </div>
 
             <MagicBorder color={MAGIC_BORDER_GREEN} radius="24px" reverse isInView={isInView} />

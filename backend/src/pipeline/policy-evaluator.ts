@@ -87,23 +87,16 @@ export function evaluatePolicy(
     // execution capability: model must not propose disabled capability
     const disabled = permittedActions.filter(a => !ep.enabledCapabilities.includes(a.actionType));
     if (disabled.length) {
-      gates.push({ name: 'execution_capability', result: 'blocked', rationale: `Disabled capabilities proposed: ${disabled.map(d=>d.actionType).join(',')}` });
+      gates.push({ name: 'execution_capability', result: 'restricted', rationale: `Disabled capabilities removed: ${disabled.map(d => d.actionType).join(',')}` });
       permittedActions = permittedActions.filter(a => ep.enabledCapabilities.includes(a.actionType));
-      gates.push({ name: 'provider_health', result: 'skipped', rationale: 'Skipped after capability blocked.' });
-      gates.push({ name: 'amount_currency', result: 'skipped', rationale: 'Skipped after capability blocked.' });
-      gates.push({ name: 'consent_quiet_hours', result: 'skipped', rationale: 'Skipped after capability blocked.' });
-      gates.push({ name: 'idempotency', result: 'skipped', rationale: 'Skipped after capability blocked.' });
-      gates.push({ name: 'retry_budget', result: 'skipped', rationale: 'Skipped after capability blocked.' });
-      for (const n of ALL_GATES) if (!gates.some(g => g.name === n)) gates.push({ name: n, result: 'skipped', rationale: `Not evaluated.` });
-      return { outcome: permittedActions.length ? 'auto_with_proposals' : 'auto_no_action', permittedActions, noActionReason: permittedActions.length ? null : 'CAPABILITY_NOT_ENABLED', matchedPolicyId: matched?.id ?? null, gates: sortGates(gates) };
     }
-    gates.push({ name: 'execution_capability', result: 'passed', rationale: 'All proposed capabilities are enabled.' });
+    else gates.push({ name: 'execution_capability', result: 'passed', rationale: 'All proposed capabilities are enabled.' });
 
     // provider health
     const providerHealthy = directOptions.providerHealthy ?? ep.providerHealthy;
     if (!providerHealthy) {
       gates.push({ name: 'provider_health', result: 'blocked', rationale: 'PROVIDER_UNAVAILABLE' });
-      for (const n of ['amount_currency','consent_quiet_hours','idempotency','retry_budget'] as const) if (!gates.some(g=>g.name===n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after provider health blocked.' });
+      for (const n of ['amount_currency', 'consent_quiet_hours', 'idempotency', 'retry_budget'] as const) if (!gates.some(g => g.name === n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after provider health blocked.' });
       return { outcome: 'auto_no_action', permittedActions: [], noActionReason: 'PROVIDER_UNAVAILABLE', matchedPolicyId: matched?.id ?? null, gates: sortGates(gates) };
     }
     gates.push({ name: 'provider_health', result: 'passed', rationale: 'Provider is healthy.' });
@@ -113,7 +106,7 @@ export function evaluatePolicy(
     const currency = directOptions.currency ?? 'INR';
     if (!Number.isSafeInteger(amount) || amount < 0 || amount > ep.maxAmountPaise || !ep.allowedCurrencies.includes(currency)) {
       gates.push({ name: 'amount_currency', result: 'blocked', rationale: `Amount ${amount} or currency ${currency} exceeds policy caps.` });
-      for (const n of ['consent_quiet_hours','idempotency','retry_budget'] as const) if (!gates.some(g=>g.name===n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after amount/currency blocked.' });
+      for (const n of ['consent_quiet_hours', 'idempotency', 'retry_budget'] as const) if (!gates.some(g => g.name === n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after amount/currency blocked.' });
       return { outcome: 'auto_no_action', permittedActions: [], noActionReason: 'AMOUNT_OR_CURRENCY_CAP_EXCEEDED', matchedPolicyId: matched?.id ?? null, gates: sortGates(gates) };
     }
     gates.push({ name: 'amount_currency', result: 'passed', rationale: `Amount ${amount} ${currency} within caps.` });
@@ -134,13 +127,13 @@ export function evaluatePolicy(
       return isInQuietHours(istH, qStart, qEnd);
     })() : false;
     if (inQuiet && permittedActions.some(a => OUTREACH.has(a.actionType))) {
-      gates.push({ name: 'consent_quiet_hours', result: 'blocked', rationale: `Quiet hours active (${ep.quietHoursStart}-${ep.quietHoursEnd} UTC).` });
-      for (const n of ['idempotency','retry_budget'] as const) if (!gates.some(g=>g.name===n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after quiet hours blocked.' });
+      gates.push({ name: 'consent_quiet_hours', result: 'blocked', rationale: `Quiet hours active (${ep.quietHoursStart}-${ep.quietHoursEnd} IST).` });
+      for (const n of ['idempotency', 'retry_budget'] as const) if (!gates.some(g => g.name === n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after quiet hours blocked.' });
       return { outcome: 'auto_no_action', permittedActions: [], noActionReason: 'QUIET_HOURS_ACTIVE', matchedPolicyId: matched?.id ?? null, gates: sortGates(gates) };
     }
     if (ep.emailConsentRequired && !contact.customerReferenceAvailable) {
       gates.push({ name: 'consent_quiet_hours', result: 'blocked', rationale: 'CONSENT_NOT_AVAILABLE' });
-      for (const n of ['idempotency','retry_budget'] as const) if (!gates.some(g=>g.name===n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after consent blocked.' });
+      for (const n of ['idempotency', 'retry_budget'] as const) if (!gates.some(g => g.name === n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after consent blocked.' });
       return { outcome: 'auto_no_action', permittedActions: [], noActionReason: 'CONSENT_NOT_AVAILABLE', matchedPolicyId: matched?.id ?? null, gates: sortGates(gates) };
     }
     gates.push({ name: 'consent_quiet_hours', result: 'passed', rationale: 'Consent and quiet-hours checks passed.' });
@@ -149,15 +142,10 @@ export function evaluatePolicy(
     if (directOptions.existingCommandKeys && directOptions.commandKeyForAction) {
       const dup = permittedActions.filter(a => directOptions.existingCommandKeys!.has(directOptions.commandKeyForAction!(a.actionType)));
       if (dup.length) {
-        gates.push({ name: 'idempotency', result: 'blocked', rationale: `Duplicate command key for ${dup.map(d=>d.actionType).join(',')}` });
-        gates.push({ name: 'retry_budget', result: 'skipped', rationale: 'Skipped after idempotency blocked.' });
+        gates.push({ name: 'idempotency', result: 'blocked', rationale: `Duplicate command key for ${dup.map(d => d.actionType).join(',')}` });
         permittedActions = permittedActions.filter(a => !directOptions.existingCommandKeys!.has(directOptions.commandKeyForAction!(a.actionType)));
-        // if all were duplicates, no permitted remains
-        for (const n of ALL_GATES) if (!gates.some(g => g.name === n)) gates.push({ name: n, result: 'skipped', rationale: `Not evaluated.` });
-        return { outcome: permittedActions.length ? 'auto_with_proposals' : 'auto_no_action', permittedActions, noActionReason: permittedActions.length ? null : 'DUPLICATE_COMMAND_KEY', matchedPolicyId: matched?.id ?? null, gates: sortGates(gates) };
-      }
-    }
-    gates.push({ name: 'idempotency', result: 'passed', rationale: 'No duplicate command key.' });
+      } else gates.push({ name: 'idempotency', result: 'passed', rationale: 'No duplicate command key.' });
+    } else gates.push({ name: 'idempotency', result: 'passed', rationale: 'No duplicate command key.' });
 
     // retry budget: number of retries allowed after initial dispatch (0 = initial only)
     const retries = directOptions.currentRetryCount ?? 0;

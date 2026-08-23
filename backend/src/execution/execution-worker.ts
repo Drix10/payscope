@@ -16,7 +16,7 @@ export class ExecutionWorker {
   private readonly razorpayConcurrency = new BoundedConcurrency(2); // per organization/capability bound; 2 Razorpay concurrent max
   private readonly emailConcurrency = new BoundedConcurrency(3); // 3 SMTP concurrent max
 
-  constructor(private readonly repository: ExecutionRepository, private readonly razorpay: RazorpayExecutionClient, private readonly email: RecoveryEmailAdapter, private readonly encryptionKey: string, private readonly workerId = `execution-${process.pid}-${randomUUID()}`, private readonly pollIntervalMs = 2_000) {}
+  constructor(private readonly repository: ExecutionRepository, private readonly razorpay: RazorpayExecutionClient, private readonly email: RecoveryEmailAdapter, private readonly encryptionKey: string, private readonly workerId = `execution-${process.pid}-${randomUUID()}`, private readonly pollIntervalMs = 2_000) { }
 
   start(): void {
     if (this.timer) return;
@@ -95,6 +95,7 @@ export class ExecutionWorker {
       const referenceId = text(action.commandPayload.referenceId, 40);
       const copyIntent = text(action.commandPayload.copyIntent, 600);
       if (!customerHash || !referenceId || !copyIntent) throw new ExecutionPreconditionError('invalid_command');
+      if (action.amountPaise === null || action.currency === null) throw new ExecutionPreconditionError('invalid_command');
       // Resolve consented recipient before creating a Payment Link. This avoids
       // an unnecessary external object when eligibility was withdrawn while a
       // command waited in the durable outbox.
@@ -110,17 +111,19 @@ export class ExecutionWorker {
       let link = await this.repository.paymentLinkReceipt(action.organizationId, action.id);
       if (!link) {
         try {
-          const created = await this.razorpayConcurrency.run(() => this.razorpay.createPaymentLink({ referenceId, amountPaise: action.amountPaise, currency: action.currency, description: 'Complete your pending payment securely.' }));
-          this.razorpayBreaker.onSuccess();
+          const created = await this.razorpayConcurrency.run(() => this.razorpay.createPaymentLink({ referenceId, amountPaise: action.amountPaise as number, currency: action.currency as string, description: 'Complete your pending payment securely.' }));
           link = { id: created.id, url: created.shortUrl };
         } catch (error) {
           this.razorpayBreaker.onFailure();
           const recovered = await this.razorpayConcurrency.run(() => this.razorpay.paymentLinkByReference(referenceId).catch(() => null));
           if (!recovered) throw error;
-          this.razorpayBreaker.onSuccess();
           link = { id: recovered.id, url: recovered.shortUrl };
         }
         await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'razorpay', kind: 'payment_link_created', providerOperationId: link.id, payload: { referenceId, paymentLinkId: link.id, shortUrl: link.url }, state: 'dispatching' });
+      }
+      if (!this.emailBreaker.canExecute()) {
+        logger.warn({ actionId: action.id }, 'PayScope SMTP circuit open; requeue without dispatch');
+        return this.repository.requeueForCircuitOpen(outbox, this.workerId, 30_000);
       }
       if (!await this.repository.markEmailSendStarted(action.organizationId, action.id)) {
         // A stale leased worker may have set the durable send marker after we
@@ -134,10 +137,6 @@ export class ExecutionWorker {
           executionAttempts.inc({ capability: action.capability, outcome: 'blocked' });
         }
         return this.repository.completeOutbox(outbox, this.workerId);
-      }
-      if (!this.emailBreaker.canExecute()) {
-        logger.warn({ actionId: action.id }, 'PayScope SMTP circuit open; requeue without dispatch');
-        return this.repository.requeueForCircuitOpen(outbox, this.workerId, 30_000);
       }
       try {
         const result = await this.emailConcurrency.run(() => this.email.send({ to: recipient, paymentLinkUrl: link.url, incidentId: action.incidentId, subject: 'Complete your pending payment', copyIntent }));

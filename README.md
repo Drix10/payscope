@@ -193,13 +193,13 @@ Use the same webhook secret as `RAZORPAY_WEBHOOK_SECRET`; HMAC verification happ
 
 ```bash
 # backend
-npm run build
-npm run test
-npm audit --omit=dev --audit-level=high
+(cd backend && npm run build)
+(cd backend && npm run test)
+(cd backend && npm audit --omit=dev --audit-level=high)
 
 # frontend
-npm run build
-npm audit --omit=dev --audit-level=high
+(cd frontend && npm run build)
+(cd frontend && npm audit --omit=dev --audit-level=high)
 ```
 
 The backend test command runs the end-to-end agent suite, exercising the full Supervisor → Risk Analyst → Recovery Planner → deterministic policy → durable investigation path across infrastructure, fraud, dispute, contact-limit, consent, quiet-hours, idempotency, retry-budget, and memory-bounded scenarios, plus the execution worker's encrypted-recipient → Payment Link → SMTP accepted flow, ambiguous-send no-resend, withdrawn-consent no-dispatch, and Payment Link reference reconciliation.

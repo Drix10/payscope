@@ -11,8 +11,8 @@ export type ExecutionAction = {
   commandPayload: Record<string, unknown>;
   commandKey: string;
   state: 'queued' | 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'retry_scheduled' | 'compensating' | 'failed' | 'cancelled';
-  amountPaise: number;
-  currency: string;
+  amountPaise: number | null;
+  currency: string | null;
   emailSendStartedAt: string | null;
   providerObjectId: string | null;
   retryCount: number;
@@ -29,7 +29,7 @@ export class ExecutionPreconditionError extends Error {
 }
 
 export class ExecutionRepository {
-  constructor(private readonly client: SupabaseClient) {}
+  constructor(private readonly client: SupabaseClient) { }
 
   async claim(workerId: string): Promise<ExecutionOutbox | null> {
     const { data, error } = await this.client.rpc('payscope_claim_execution_outbox', { p_worker_id: workerId });
@@ -46,15 +46,15 @@ export class ExecutionRepository {
     if (error) throw new Error(`PayScope execution action lookup failed: ${error.message}`);
     if (!data || typeof data !== 'object') throw new Error('PayScope execution action was not found');
     const row = data as Record<string, unknown>;
-    const capabilitySet = new Set(['deliver_recovery_link_email','capture_authorized_payment','refund_payment','submit_dispute_evidence','record_risk_signal','resolve_infrastructure']);
-    const stateSet = new Set(['queued','dispatching','accepted','unreconciled','confirmed','retry_scheduled','compensating','failed','cancelled']);
-    if (!capabilitySet.has(row.capability as string) || typeof row.id !== 'string' || typeof row.organization_id !== 'string' || typeof row.incident_id !== 'string' || !isRecord(row.command_payload) || typeof row.state !== 'string' || !stateSet.has(row.state as string) || !Number.isSafeInteger(Number(row.amount_paise)) || typeof row.currency !== 'string') throw new Error('PayScope execution action row is invalid');
+    const capabilitySet = new Set(['deliver_recovery_link_email', 'capture_authorized_payment', 'refund_payment', 'submit_dispute_evidence', 'record_risk_signal', 'resolve_infrastructure']);
+    const stateSet = new Set(['queued', 'dispatching', 'accepted', 'unreconciled', 'confirmed', 'retry_scheduled', 'compensating', 'failed', 'cancelled']);
+    if (!capabilitySet.has(row.capability as string) || typeof row.id !== 'string' || typeof row.organization_id !== 'string' || typeof row.incident_id !== 'string' || !isRecord(row.command_payload) || typeof row.state !== 'string' || !stateSet.has(row.state as string) || (row.amount_paise !== null && !Number.isSafeInteger(Number(row.amount_paise))) || (row.currency !== null && typeof row.currency !== 'string')) throw new Error('PayScope execution action row is invalid');
     if (typeof row.command_key !== 'string' || !row.command_key) throw new Error('PayScope execution action missing command_key');
     return {
       id: row.id, organizationId: row.organization_id, incidentId: row.incident_id,
       capability: row.capability as ExecutionAction['capability'], commandPayload: row.command_payload,
       commandKey: row.command_key, state: row.state as ExecutionAction['state'],
-      amountPaise: Number(row.amount_paise), currency: row.currency,
+      amountPaise: row.amount_paise === null ? null : Number(row.amount_paise), currency: row.currency === null ? null : row.currency,
       emailSendStartedAt: typeof row.email_send_started_at === 'string' ? row.email_send_started_at : null,
       providerObjectId: typeof row.provider_object_id === 'string' ? row.provider_object_id : null,
       retryCount: Number.isSafeInteger(Number(row.retry_count)) ? Number(row.retry_count) : 0,
@@ -98,7 +98,7 @@ export class ExecutionRepository {
       p_provider: input.provider,
       p_receipt_kind: input.kind,
       p_provider_operation_id: input.providerOperationId ?? '',
-      p_receipt_hash: hash(input.payload),
+      p_receipt_hash: stableHash(input.payload),
       p_redacted_payload: input.payload,
       p_state: input.state,
       p_terminal_reason: input.terminalReason ?? null,
@@ -139,12 +139,12 @@ export class ExecutionRepository {
 
   async appendMemory(organizationId: string, incidentId: string, memoryType: 'execution' | 'customer_message', sourceId: string, content: Record<string, unknown>, importance: number): Promise<void> {
     if (!sourceId || sourceId.length > 160 || !Number.isInteger(importance) || importance < 0 || importance > 100 || Buffer.byteLength(JSON.stringify(content), 'utf8') > 1_200) throw new Error('PayScope incident memory write is outside bounded limits');
-    const { error } = await this.client.from('payscope_incident_memory').insert({ organization_id: organizationId, incident_id: incidentId, memory_type: memoryType, source_id: sourceId, content, content_hash: hash(content), importance });
+    const { error } = await this.client.from('payscope_incident_memory').insert({ organization_id: organizationId, incident_id: incidentId, memory_type: memoryType, source_id: sourceId, content, content_hash: stableHash(content), importance });
     if (error && !/duplicate key/i.test(error.message)) throw new Error(`PayScope incident memory write failed: ${error.message}`);
   }
 }
 
-function hash(value: unknown): string {
+export function stableHash(value: unknown): string {
   // Deterministic: sort keys recursively to avoid JSON.stringify order variance causing hash mismatch across replicas
   const stable = (v: unknown): unknown => {
     if (v === null || typeof v !== 'object' || Array.isArray(v)) {

@@ -3,7 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ActionProposal, ActionProposalSchema, ActionTypeSchema, AuditEntry, AuditEntrySchema, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, ExecutionActionSummary, ExecutionActionSummarySchema, ExecutionStateSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
 import { CorrelationEvent, IncidentCandidate } from '../pipeline/correlation-engine';
-import { CustomerContactStats, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
+import { CustomerContactStats, ExecutionPolicy, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
 import { canCorrelateWithTerminalIncident } from '../pipeline/webhook-event-policy';
 import { Reconciler } from '../providers/execution/reconciliation';
 type DemoOrganization = { id: string; customerHashSecret: string };
@@ -11,6 +11,7 @@ type IngestResult = { eventId: string; duplicate: boolean };
 export type StoredEvent = CorrelationEvent & { organizationId: string; enrichmentSource: EnrichmentSource | null };
 export type ProposalDraft = { id: string; actionType: ActionProposal['actionType']; content: Record<string, unknown>; rationale: string };
 export type PolicyContext = { policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats };
+export type ExecutionPolicyContext = { policy: ExecutionPolicy; existingCommandKeys: Set<string> };
 export type RiskToolMetrics = { merchantFailureRate: number | null; networkFailureRate: number | null; customerIncidentCount: number | null };
 export type AuditIntegrity = { status: 'intact' | 'broken'; entryCount: number; checkedAt: string };
 export type IncidentMemory = { type: 'event_summary' | 'investigation' | 'execution' | 'customer_message' | 'customer_reply'; content: Record<string, unknown>; importance: number; createdAt: string };
@@ -44,7 +45,7 @@ function databaseError(operation: string, message: string): Error {
 
 /** Service-role-only persistence for the buildathon MVP pipeline. */
 export class MvpRepository {
-  constructor(private readonly client: SupabaseClient) {}
+  constructor(private readonly client: SupabaseClient) { }
 
   async demoOrganization(organizationId: string): Promise<DemoOrganization> {
     const { data, error } = await this.client
@@ -176,6 +177,26 @@ export class MvpRepository {
     return PolicyContextSchema.parse(data);
   }
 
+  async executionPolicyContext(organizationId: string): Promise<ExecutionPolicyContext> {
+    const [{ data: policy, error: policyError }, { data: actions, error: actionError }] = await Promise.all([
+      this.client.from('payscope_organization_execution_policy').select('*').eq('organization_id', organizationId).maybeSingle(),
+      this.client.from('payscope_execution_actions').select('command_key, incident_id, capability').eq('organization_id', organizationId),
+    ]);
+    if (policyError) throw databaseError('execution policy', policyError.message);
+    if (actionError) throw databaseError('execution command keys', actionError.message);
+    const row = record(policy);
+    if (!Array.isArray(row.enabled_capabilities) || !Number.isSafeInteger(row.max_amount_paise) || !Array.isArray(row.allowed_currencies) || typeof row.email_consent_required !== 'boolean' || !Number.isSafeInteger(row.retry_budget) || typeof row.emergency_paused !== 'boolean' || typeof row.provider_healthy !== 'boolean') throw new Error('PayScope execution policy row is invalid');
+    return {
+      policy: { enabledCapabilities: row.enabled_capabilities as ExecutionPolicy['enabledCapabilities'], maxAmountPaise: row.max_amount_paise as number, allowedCurrencies: row.allowed_currencies as string[], emailConsentRequired: row.email_consent_required, providerHealthy: row.provider_healthy, emergencyPaused: row.emergency_paused, retryBudget: row.retry_budget as number, quietHoursStart: typeof row.quiet_hours_start === 'number' ? row.quiet_hours_start : undefined, quietHoursEnd: typeof row.quiet_hours_end === 'number' ? row.quiet_hours_end : undefined },
+      existingCommandKeys: new Set((actions ?? []).flatMap(action => {
+        const value = action as Record<string, unknown>;
+        const keys = typeof value.command_key === 'string' ? [value.command_key] : [];
+        if (typeof value.incident_id === 'string' && typeof value.capability === 'string') keys.push(`${organizationId}:${value.capability}:${value.incident_id}`);
+        return keys;
+      })),
+    };
+  }
+
   /** Read-only, server-scoped facts supplied to the bounded Risk Analyst. */
   async riskToolMetrics(organizationId: string, gateway: string, customerHash: string | undefined, windowHours: 1 | 4 | 24): Promise<RiskToolMetrics> {
     const { data, error } = await this.client.rpc('payscope_risk_tool_metrics', {
@@ -278,16 +299,17 @@ export class MvpRepository {
     // join from execution actions back to their incidents (read-only, deterministic).
     let executionIncidentIds: Set<string> | null = null;
     if (parsed.executionStates.length || parsed.providers.length || parsed.unresolvedReceipts) {
-      let actionQuery = this.client.from('payscope_execution_actions').select('incident_id, state, capability').eq('organization_id', organizationId);
+      const candidateIncidentIds = incidents.map(incident => incident.id);
+      let actionQuery = this.client.from('payscope_execution_actions').select('incident_id, state, capability').eq('organization_id', organizationId).in('incident_id', candidateIncidentIds);
       if (parsed.providers.length) actionQuery = actionQuery.in('capability', parsed.providers);
+      if (parsed.executionStates.length) actionQuery = actionQuery.in('state', parsed.executionStates);
+      if (parsed.unresolvedReceipts) actionQuery = actionQuery.in('state', ['accepted', 'dispatching']);
       const { data: actionRows, error: actionError } = await actionQuery.limit(200);
       if (actionError) throw databaseError('dashboard execution filter', actionError.message);
       executionIncidentIds = new Set((actionRows ?? [])
         .filter(row => {
           const value = record(row as Record<string, unknown>);
           const state = String(value.state ?? '');
-          if (parsed.executionStates.length && !parsed.executionStates.includes(state as never)) return false;
-          if (parsed.unresolvedReceipts && !['accepted', 'dispatching'].includes(state)) return false;
           return typeof value.incident_id === 'string';
         })
         .map(row => (row as Record<string, unknown>).incident_id as string));
@@ -434,9 +456,9 @@ function executionSummaryFromRow(row: Record<string, unknown>): ExecutionActionS
     terminalReason: typeof row.terminal_reason === 'string' ? row.terminal_reason : null,
     providerObjectId: typeof row.provider_object_id === 'string' ? row.provider_object_id : null,
     retryCount: Number.isSafeInteger(Number(row.retry_count)) ? Number(row.retry_count) : 0,
-    policyVersion: typeof row.policy_version === 'string' && row.policy_version ? row.policy_version : 'direct-execution-policy-v2',
-    capabilityVersion: typeof row.capability_version === 'string' && row.capability_version ? row.capability_version : 'deliver_recovery_link_email-v1',
-    createdAt: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+    policyVersion: row.policy_version,
+    capabilityVersion: row.capability_version,
+    createdAt: row.created_at,
     dispatchedAt: typeof row.dispatched_at === 'string' ? row.dispatched_at : null,
     completedAt: typeof row.completed_at === 'string' ? row.completed_at : null,
   });
@@ -481,7 +503,7 @@ function legacyRisk(value: Record<string, unknown>): RiskAnalysis {
     causalNarrative: value.causalNarrative ?? 'Legacy investigation record did not retain a causal narrative.',
     evidenceConfidenceRationale: value.evidenceConfidenceRationale ?? 'Legacy investigation record did not retain confidence rationale.',
     alternativeHypotheses: value.alternativeHypotheses ?? [],
-      // Historical investigations predate the explicit server-tool trace.
+    // Historical investigations predate the explicit server-tool trace.
     toolResults: value.toolResults ?? { incidentTimelineEventCount: 0, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },
   });
 }
@@ -541,7 +563,7 @@ function parseDashboardFilters(query: string): { statuses: Incident['status'][];
   ] as const).filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
   const providers = ([
     ['recovery email', 'deliver_recovery_link_email'], ['capture', 'capture_authorized_payment'],
-    ['refund', 'refund_payment'], ['dispute', 'submit_dispute_evidence'],
+    ['refund', 'refund_payment'], ['dispute evidence', 'submit_dispute_evidence'],
     ['risk signal', 'record_risk_signal'], ['infrastructure', 'resolve_infrastructure'],
   ] as const).filter(([term]) => includesTerm(text, term)).map(([, value]) => value);
   const unresolvedReceipts = includesTerm(text, 'pending receipt') || includesTerm(text, 'awaiting receipt') || includesTerm(text, 'unresolved receipt');

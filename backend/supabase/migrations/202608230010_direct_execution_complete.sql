@@ -71,6 +71,8 @@ create table if not exists public.payscope_reconciliation_log (
 create index if not exists payscope_reconciliation_log_action_idx on public.payscope_reconciliation_log (organization_id, action_id, created_at desc);
 alter table public.payscope_reconciliation_log enable row level security;
 
+alter table public.payscope_execution_actions add column if not exists verified_at timestamptz;
+
 -- 3. Monotonic reconciliation: duplicate/late callbacks enrich but never regress terminal state; newer verified canonical read wins
 create or replace function public.payscope_reconcile_action(
   p_organization_id uuid,
@@ -101,6 +103,10 @@ begin
     insert into public.payscope_reconciliation_log (organization_id, action_id, event_type, previous_state, new_state, reason, provider_event_id) values (p_organization_id, p_action_id, 'monotonic_skipped', cur_state, cur_state, 'Stale callback ignored: newer canonical read wins', p_provider_event_id);
     return cur_state;
   end if;
+  if cur_state in ('queued', 'dispatching') then
+    insert into public.payscope_reconciliation_log (organization_id, action_id, event_type, previous_state, new_state, reason, provider_event_id) values (p_organization_id, p_action_id, 'monotonic_skipped', cur_state, cur_state, 'Provider evidence cannot transition an un-dispatched action', p_provider_event_id);
+    return cur_state;
+  end if;
   -- rank monotonic: regressing rank is blocked for non-canonical (duplicate/late) callbacks
   rank_cur := case cur_state when 'confirmed' then 9 when 'failed' then 8 when 'cancelled' then 8 when 'compensating' then 7 when 'retry_scheduled' then 6 when 'unreconciled' then 5 when 'accepted' then 4 when 'dispatching' then 3 when 'queued' then 2 else 0 end;
   rank_now := case p_target_state when 'confirmed' then 9 when 'failed' then 8 when 'cancelled' then 8 when 'compensating' then 7 when 'retry_scheduled' then 6 when 'unreconciled' then 5 when 'accepted' then 4 when 'dispatching' then 3 when 'queued' then 2 else 0 end;
@@ -109,7 +115,7 @@ begin
     return cur_state;
   end if;
   -- Valid forward transition is delegated to payscope_validate_execution_transition trigger; we just update and let trigger enforce graph
-  update public.payscope_execution_actions set state = p_target_state, updated_at = greatest(updated_at, p_verified_at), completed_at = case when p_target_state in ('confirmed','failed','cancelled','unreconciled') then coalesce(completed_at, p_verified_at) else completed_at end where id = p_action_id and organization_id = p_organization_id;
+  update public.payscope_execution_actions set state = p_target_state, verified_at = greatest(coalesce(verified_at, p_verified_at), p_verified_at), completed_at = case when p_target_state in ('confirmed','failed','cancelled','unreconciled') then coalesce(completed_at, p_verified_at) else completed_at end where id = p_action_id and organization_id = p_organization_id;
   insert into public.payscope_reconciliation_log (organization_id, action_id, event_type, previous_state, new_state, reason, provider_event_id) values (p_organization_id, p_action_id, 'reconciled', cur_state, p_target_state, 'Reconciled via verified provider evidence', p_provider_event_id);
   return p_target_state;
 end;
@@ -192,7 +198,7 @@ begin
   if old.state in ('confirmed','failed','cancelled') and new.state is distinct from old.state then raise exception 'PayScope terminal execution action cannot transition'; end if;
   -- allowed transition graph
   allowed := (
-    (old.state = 'queued' and new.state in ('queued','dispatching','failed','cancelled')) or
+    (old.state = 'queued' and new.state in ('queued','dispatching','confirmed','failed','cancelled')) or
     (old.state = 'dispatching' and new.state in ('dispatching','accepted','unreconciled','failed','cancelled')) or
     (old.state = 'accepted' and new.state in ('accepted','confirmed','unreconciled','retry_scheduled','compensating','failed','cancelled')) or
     (old.state = 'unreconciled' and new.state in ('unreconciled','confirmed','failed','cancelled')) or
