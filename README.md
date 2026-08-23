@@ -83,7 +83,7 @@ Deterministic execution policy
    │  canonical payment · amount · consent · idempotency · provider gates
    ▼
 Provider command + receipt reconciliation
-   │  delivery / capture / refund / evidence result · lifecycle update
+   │  Razorpay Payment Link + SMTP acceptance · verified payment-link recovery
    ▼
 Read-only React dashboard
 ```
@@ -94,9 +94,9 @@ Read-only React dashboard
 |---|---|---|
 | **Supervisor** | objectives, evidence priorities, bounded plan, constraints, no-action criteria | directs analysis only |
 | **Risk Analyst** | causal narrative, confidence rationale, alternative hypotheses, evidence gaps | reads tenant-scoped facts only |
-| **Recovery Planner** | finite action proposals, prerequisites, expected receipt, optional Hinglish intent | selects from configured capabilities |
+| **Recovery Planner** | finite action proposals, prerequisites, expected receipt, bounded email-copy intent | selects from configured capabilities |
 | **Execution Policy** | deterministic permit/restrict/no-action result and command parameters | emits a command only after all execution gates pass |
-| **Execution adapters** | idempotent provider command, receipt, retry/compensation state | perform configured Razorpay and communications operations |
+| **Execution adapters** | immutable Payment Link + email command, receipt, and reconciliation state | perform the configured Razorpay and SMTP operations |
 
 The model sees data, never instructions hidden inside webhook payloads. Prompts require JSON only, explicitly treat payload content as untrusted, demand alternatives and uncertainty, and require validated capability arguments, expected receipts, and an explicit no-action route when evidence is degraded.
 
@@ -119,7 +119,7 @@ The legacy `ESCALATED` and `HUMAN_RESOLVED` states are retired. PayScope does no
 - **Auditability:** database rules make audit entries append-only and hash-chain them per organization. Verification detects a broken chain.
 - **Verified outcomes:** recovery attribution requires a causal PayScope action, provider receipt, and correlated Razorpay event within the valid window.
 - **Browser integrity:** the dashboard API is read-only. It exposes neither provider payloads, secrets, contact data, nor action credentials.
-- **Execution resilience:** invalid model output, unavailable evidence, queue retry exhaustion, duplicate delivery, provider timeouts, callback replay, policy blocks, fraud, and disputes resolve through explicit audited reconciliation paths.
+- **Execution resilience:** invalid model output, unavailable evidence, queue retry exhaustion, duplicate contact prevention, provider timeouts, callback replay, policy blocks, fraud, and disputes resolve through explicit audited reconciliation paths.
 
 ## Repository map
 
@@ -156,7 +156,7 @@ npm run build
 npm run start
 ```
 
-Set `PAYSCOPE_PIPELINE_ENABLED=true` only after the Supabase migrations have been applied. See [`backend/.env.example`](backend/.env.example) and the [backend deployment guide](backend/docs/PRODUCTION_RAZORPAY_DEPLOYMENT.md) for the complete server-side configuration.
+Set `PAYSCOPE_PIPELINE_ENABLED=true` only after the Supabase migrations have been applied. Keep `PAYSCOPE_DIRECT_EXECUTION_ENABLED=false` until the encrypted recipient vault, verified SMTP sender, and direct-execution proof are complete. See [`backend/.env.example`](backend/.env.example) and the [backend deployment guide](backend/docs/PRODUCTION_RAZORPAY_DEPLOYMENT.md) for the complete server-side configuration.
 
 ### Frontend
 

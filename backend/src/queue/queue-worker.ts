@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { QUEUE_RETRY_DELAYS_MS } from '../config/stopping-rules';
 import { QueueJob, QueueJobSchema } from '../domain/contracts';
+import { logger } from '../observability';
 
 type ClaimedQueueRow = {
   id: string;
@@ -92,7 +93,7 @@ export class QueueWorker {
     } catch (error) {
       // A later interval retries a transient claim failure. `processOne` has
       // already released its in-flight/processing state in its finally block.
-      console.error('[PayScope queue worker error]', error instanceof Error ? error.message : 'unknown error');
+      logger.error({ errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope queue worker error');
     }
   }
 
@@ -142,7 +143,7 @@ export class QueueWorker {
       .maybeSingle();
     if (failureError) throw new Error(`PayScope queue failure update failed: ${failureError.message}`);
     if (!failed) throw new Error('PayScope queue failure update lost its lease');
-    console.error('[PayScope queue job failed]', { jobId: row.id, attempt: row.attempt_number, dead: decision.status === 'dead', error: error instanceof Error ? error.message : 'unknown error' });
+    logger.error({ jobId: row.id, attempt: row.attempt_number, dead: decision.status === 'dead', errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope queue job failed');
   }
 }
 

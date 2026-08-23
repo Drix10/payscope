@@ -21,7 +21,7 @@ const repository = {
 };
 const app = express();
 app.use(express.json());
-app.use('/api/mvp', createMvpRouter(repository, organizationId, { enrichmentAdapter: 'razorpay_fields_heuristic', razorpayEnvironment: 'live' }));
+app.use('/api/mvp', createMvpRouter(repository, organizationId, { enrichmentAdapter: 'razorpay_fields_heuristic', razorpayEnvironment: 'live', directExecutionEnabled: false, directExecutionReady: () => false }));
 
 function request(port, path) {
   return new Promise((resolve, reject) => {
@@ -64,6 +64,14 @@ function request(port, path) {
     assert.equal(dashboard.status, 200); assert.deepEqual(calls.at(-1), ['query', organizationId, 'show open incidents', 5]);
     const retiredRoute = await request(port, `/api/mvp/proposals/${incidentId}/approve`);
     assert.equal(retiredRoute.status, 404, 'the retired action route must not be mounted');
+    const unavailableApp = express();
+    unavailableApp.use('/api/mvp', createMvpRouter(repository, organizationId, { enrichmentAdapter: 'razorpay_fields_heuristic', razorpayEnvironment: 'live', directExecutionEnabled: true, directExecutionReady: () => false }));
+    const unavailableServer = unavailableApp.listen(0, '127.0.0.1');
+    await new Promise(resolve => unavailableServer.once('listening', resolve));
+    try {
+      const unavailable = await request(unavailableServer.address().port, '/api/mvp/health');
+      assert.equal(unavailable.status, 503); assert.equal(unavailable.body.data.communications, 'email_execution_unavailable');
+    } finally { await new Promise(resolve => unavailableServer.close(resolve)); }
     console.log('Read-only autonomous MVP API request-boundary checks passed.');
   } finally { await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

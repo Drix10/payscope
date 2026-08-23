@@ -1,7 +1,7 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ActionProposal, ActionProposalSchema, AuditEntry, AuditEntrySchema, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
+import { ActionProposal, ActionProposalSchema, ActionTypeSchema, AuditEntry, AuditEntrySchema, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, Incident, IncidentSchema, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
 import { CorrelationEvent, IncidentCandidate } from '../pipeline/correlation-engine';
 import { CustomerContactStats, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
 import { canCorrelateWithTerminalIncident } from '../pipeline/webhook-event-policy';
@@ -14,12 +14,13 @@ export type ProposalDraft = { id: string; actionType: ActionProposal['actionType
 export type PolicyContext = { policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats };
 export type RiskToolMetrics = { merchantFailureRate: number | null; networkFailureRate: number | null; customerIncidentCount: number | null };
 export type AuditIntegrity = { status: 'intact' | 'broken'; entryCount: number; checkedAt: string };
+export type IncidentMemory = { type: 'event_summary' | 'investigation' | 'execution' | 'customer_message' | 'customer_reply'; content: Record<string, unknown>; importance: number; createdAt: string };
 
 const PolicyContextSchema = z.object({
   policy: z.object({
     id: z.string().uuid(), enabled: z.boolean(), minimumConfidence: z.number().min(0).max(1),
     rootCauses: z.array(z.enum(['gateway_degraded', 'issuer_block', 'fraud_confirmed', 'fraud_suspected', 'customer_error', 'subscription_lapse', 'unknown'])).min(1).max(7),
-    allowedActions: z.array(z.enum(['retry_link_whatsapp', 'retry_link_sms', 'hinglish_voice_script', 'merchant_email_notification', 'merchant_webhook_notification', 'flag_for_review', 'prepare_chargeback_evidence', 'auto_resolve_infrastructure'])).min(1).max(8),
+    allowedActions: z.array(ActionTypeSchema).min(1).max(8),
     merchantOptedIn: z.boolean(),
   }).strict(),
   stats: z.object({ autoResolveFraction: z.number().min(0).max(1) }).strict(),
@@ -78,6 +79,23 @@ export class MvpRepository {
     const row = Array.isArray(data) ? data[0] : undefined;
     if (!row || typeof row.event_id !== 'string' || typeof row.duplicate !== 'boolean') throw new Error('PayScope durable database event intake returned an invalid response');
     return { eventId: row.event_id, duplicate: row.duplicate };
+  }
+
+  /** Reconciles a verified Payment Link completion to the immutable email action. */
+  async reconcileDirectPaymentLinkEvent(organizationId: string, event: NormalizedEvent): Promise<void> {
+    if (event.eventType !== 'payment_link.paid') return;
+    const referenceId = typeof event.providerData.payment_link_reference_id === 'string' ? event.providerData.payment_link_reference_id : undefined;
+    if (!referenceId || !/^ps_[a-f0-9]{32}$/.test(referenceId)) return;
+    const { data, error } = await this.client.from('payscope_execution_actions').select('id').eq('organization_id', organizationId).eq('capability', 'deliver_recovery_link_email').eq('command_payload->>referenceId', referenceId).in('state', ['accepted', 'unreconciled', 'dispatching']).limit(1);
+    if (error) throw databaseError('Payment Link execution reconciliation lookup', error.message);
+    const actionId = Array.isArray(data) && data[0] && typeof (data[0] as Record<string, unknown>).id === 'string' ? (data[0] as Record<string, unknown>).id as string : null;
+    if (!actionId) return;
+    const payload = { referenceId, razorpayEventId: event.eventId, paymentId: event.paymentId ?? null, amountPaise: event.amountPaise ?? null, currency: event.currency ?? null };
+    const { error: receiptError } = await this.client.rpc('payscope_record_execution_receipt', {
+      p_organization_id: organizationId, p_action_id: actionId, p_provider: 'razorpay', p_receipt_kind: 'payment_link_paid', p_provider_operation_id: '',
+      p_receipt_hash: createHash('sha256').update(JSON.stringify(payload)).digest('hex'), p_redacted_payload: payload, p_state: 'confirmed', p_terminal_reason: 'PAYMENT_LINK_PAID',
+    });
+    if (receiptError) throw databaseError('Payment Link execution reconciliation', receiptError.message);
   }
 
   async eventById(organizationId: string, eventId: string): Promise<StoredEvent> {
@@ -233,6 +251,21 @@ export class MvpRepository {
     return AuditIntegritySchema.parse(data);
   }
 
+  /** Bounded redacted incident memory for agent continuity; never returns recipients or raw provider payloads. */
+  async incidentMemory(organizationId: string, incidentId: string, limit = 12): Promise<IncidentMemory[]> {
+    const { data, error } = await this.client.from('payscope_incident_memory').select('memory_type, content, importance, created_at, expires_at').eq('organization_id', organizationId).eq('incident_id', incidentId).order('importance', { ascending: false }).order('created_at', { ascending: false }).limit(48);
+    if (error) throw databaseError('incident memory lookup', error.message);
+    const now = Date.now();
+    return (data ?? []).filter(row => {
+      const expiresAt = (row as Record<string, unknown>).expires_at;
+      return expiresAt === null || expiresAt === undefined || (typeof expiresAt === 'string' && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) > now);
+    }).slice(0, Math.min(Math.max(limit, 1), 12)).map(row => {
+      const value = record(row as Record<string, unknown>);
+      if (!['event_summary', 'investigation', 'execution', 'customer_message', 'customer_reply'].includes(String(value.memory_type)) || !record(value.content) || Buffer.byteLength(JSON.stringify(value.content), 'utf8') > 1_200 || !Number.isInteger(Number(value.importance)) || typeof value.created_at !== 'string') throw new Error('PayScope incident memory row is invalid');
+      return { type: value.memory_type as IncidentMemory['type'], content: record(value.content), importance: Number(value.importance), createdAt: value.created_at };
+    });
+  }
+
   /** Aggregate only presentation-safe tenant metrics; no PII or raw events. */
   async dashboardMetrics(organizationId: string): Promise<DashboardMetrics> {
     const { data, error } = await this.client.rpc('payscope_dashboard_metrics', { p_organization_id: organizationId });
@@ -317,6 +350,24 @@ export class MvpRepository {
       p_latency_ms: latencyMs,
     });
     if (error) throw databaseError('investigation persistence', error.message);
+  }
+
+  /** Direct-execution persistence is a separate forward-migration RPC. */
+  async persistDirectInvestigation(organizationId: string, incidentId: string, triggerEventId: string, plan: InvestigationPlan, risk: RiskAnalysis, recovery: RecoveryPlan, policy: PolicyDecisionContract, proposals: ProposalDraft[], modelId: string, tokensUsed: number, latencyMs: number): Promise<void> {
+    const { error } = await this.client.rpc('payscope_persist_direct_investigation', {
+      p_organization_id: organizationId,
+      p_incident_id: incidentId,
+      p_trigger_event_id: triggerEventId,
+      p_plan: plan,
+      p_risk_analysis: risk,
+      p_recovery_plan: recovery,
+      p_policy_decision: policy,
+      p_proposals: proposals.map(proposal => ({ id: proposal.id, action_type: proposal.actionType, content: proposal.content, rationale: proposal.rationale })),
+      p_model_id: modelId,
+      p_tokens_used: tokensUsed,
+      p_latency_ms: latencyMs,
+    });
+    if (error) throw databaseError('direct investigation persistence', error.message);
   }
 
   /** The durable worker, never a browser, records every permitted action. */

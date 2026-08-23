@@ -7,7 +7,7 @@ export type CustomerContactStats = { incidentAttempts: number; attemptsLast24Hou
 export type PolicyGate = { name: 'fraud' | 'dispute' | 'auto_resolve_ceiling' | 'critical_tier' | 'contact_limits' | 'merchant_policy'; result: 'passed' | 'blocked' | 'restricted' | 'skipped'; rationale: string };
 export type PolicyDecision = { outcome: 'auto_with_proposals' | 'auto_no_action'; permittedActions: RecoveryPlan['proposedActions']; noActionReason: string | null; matchedPolicyId: string | null; gates: PolicyGate[] };
 
-const OUTREACH = new Set<ActionType>(['retry_link_whatsapp', 'retry_link_sms', 'hinglish_voice_script']);
+const OUTREACH = new Set<ActionType>(['deliver_recovery_link_email', 'retry_link_whatsapp', 'retry_link_sms', 'hinglish_voice_script']);
 
 /** The only component that permits an action proposal to leave an investigation. */
 export function evaluatePolicy(incident: Incident, risk: RiskAnalysis, recovery: RecoveryPlan, policies: MerchantPolicy[], stats: OrgDailyStats, contact: CustomerContactStats): PolicyDecision {

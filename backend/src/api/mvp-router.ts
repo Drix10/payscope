@@ -3,15 +3,16 @@ import { ZodError } from 'zod';
 import { MvpRepository } from '../db/mvp-repository';
 import { IncidentStatus } from '../domain/contracts';
 
-export type MvpRouterOptions = { enrichmentAdapter: 'razorpay_fields_heuristic'; razorpayEnvironment: 'test' | 'live' };
+export type MvpRouterOptions = { enrichmentAdapter: 'razorpay_fields_heuristic'; razorpayEnvironment: 'test' | 'live'; directExecutionEnabled: boolean; directExecutionReady: () => boolean };
 
-/** Read-only tenant dashboard API. All permitted action simulation occurs in the durable worker. */
+/** Read-only tenant dashboard API. Provider execution remains server-side. */
 export function createMvpRouter(repository: MvpRepository, organizationId: string, options: MvpRouterOptions): Router {
   const router = Router();
   router.get('/health', async (_req, res, next) => {
     try {
       await repository.healthCheck(organizationId);
-      res.status(200).json({ success: true, data: { organizationId, pipeline: 'autonomous', razorpayEnvironment: options.razorpayEnvironment, communications: 'autonomous_simulation', database: 'ready', queueWorker: 'configured', webhook: 'signed', enrichmentAdapter: options.enrichmentAdapter } });
+      const communications = options.directExecutionEnabled ? (options.directExecutionReady() ? 'email_execution' : 'email_execution_unavailable') : 'autonomous_simulation';
+      res.status(communications === 'email_execution_unavailable' ? 503 : 200).json({ success: true, data: { organizationId, pipeline: 'autonomous', razorpayEnvironment: options.razorpayEnvironment, communications, database: 'ready', queueWorker: 'configured', webhook: 'signed', enrichmentAdapter: options.enrichmentAdapter } });
     } catch (error) { next(error); }
   });
   router.get('/incidents', async (req, res, next) => {

@@ -13,11 +13,12 @@ npx supabase db push --dry-run
 npx supabase db push
 ```
 
-This project has two active autonomous-lifecycle migrations that must be present before the pipeline is enabled:
+This project has the following active autonomous-lifecycle migrations before the pipeline is enabled:
 
 - `202608230006_autonomous_simulated_execution.sql`
 - `202608230007_autonomous_lifecycle_and_metrics.sql`
 - `202608230008_investigation_trigger_idempotency.sql`
+- `202608230009_direct_execution_email.sql` (required before direct email execution)
 
 Create the merchant organization through the canonical migration/RPC workflow, copy its UUID to `PAYSCOPE_ORGANIZATION_ID`, and keep a separate `PAYSCOPE_INTEGRATION_ORGANIZATION_ID` for opt-in integration checks. Do not use an incident-bearing organization for destructive fixture cleanup; audit entries are append-only by design.
 
@@ -27,14 +28,36 @@ Copy `backend/.env.example` to a private `backend/.env`. Set:
 
 - `NODE_ENV=production`
 - `PAYSCOPE_PIPELINE_ENABLED=true` only after migrations and organization setup succeed
+- `PAYSCOPE_DIRECT_EXECUTION_ENABLED=false` until the direct migration, recipient vault, SMTP sender verification, and Phase-A proof have completed
 - a unique `PAYSCOPE_WORKER_ID`
 - `CORS_ORIGINS=https://<your-vercel-domain>`
 - `RAZORPAY_ENVIRONMENT=live` or `test`, matching the `rzp_live_` or `rzp_test_` prefix of `RAZORPAY_KEY_ID`
-- Razorpay key secret and webhook secret, Supabase URL/service-role key, and Mesh API key only on the VPS
+- Razorpay key secret and webhook secret, Supabase URL/service-role key, Mesh API key, SMTP credentials, and `PAYSCOPE_EMAIL_ENCRYPTION_KEY` only on the VPS
 
 If the service is behind exactly one trusted reverse proxy, set `TRUST_PROXY=true`. Do not set it when Node is directly internet-facing. Do not place any backend value in Vercel or a `VITE_*` variable.
 
-PayScope automatically records every policy-permitted **simulation** and every autonomous no-action outcome. It does not send a customer message or execute a payment action. No environment value changes that boundary.
+When `PAYSCOPE_DIRECT_EXECUTION_ENABLED=true`, PayScope's Phase-A capability creates a Razorpay Payment Link with Razorpay notifications disabled and sends one recovery email through the configured SMTP relay. A recipient must be in the encrypted, consented email vault. The execution worker starts only after SMTP verification succeeds; otherwise direct execution reports unhealthy and actions remain queued. Immediately before the irreversible SMTP marker, the database rechecks active consent, a non-terminal incident, and a 24-hour command lifetime. SMTP acceptance is not delivery or recovery; only a verified `payment_link.paid` event confirms recovery. An ambiguous SMTP result is recorded as `unreconciled` and is never blindly resent.
+
+Before enabling that value, configure the merchant policy for the Phase-A capability and enroll only a consented recipient from the VPS:
+
+```sql
+update public.payscope_merchant_policies
+set enabled = true,
+    merchant_opted_in_to_recovery = true,
+    allowed_actions = array['deliver_recovery_link_email', 'record_risk_signal', 'resolve_infrastructure']::text[]
+where organization_id = '<merchant-organization-uuid>';
+```
+
+```bash
+# Run only on the VPS; remove the three temporary PAYSCOPE_RECIPIENT_* values
+# from .env immediately after the encrypted write succeeds.
+PAYSCOPE_RECIPIENT_CUSTOMER_ID=cust_... \
+PAYSCOPE_RECIPIENT_EMAIL=customer@example.com \
+PAYSCOPE_RECIPIENT_EMAIL_CONSENT=true \
+npm run recipient:upsert
+```
+
+Set `PAYSCOPE_DIRECT_EXECUTION_ENABLED=true` only after the SMTP `verify()` readiness check succeeds and the Phase-A integration proof passes.
 
 ## 3. Build and run
 
@@ -60,7 +83,8 @@ After saving the webhook, send one known event and confirm this chain in server 
 
 ```text
 accepted webhook → durable event + job → leased worker → enrichment → correlation
-→ schema-validated AI investigation → deterministic policy → simulation/no-action → audit chain
+→ schema-validated AI investigation → deterministic policy → immutable email command
+→ Razorpay Payment Link → SMTP acceptance/rejection → payment-link reconciliation → audit chain
 ```
 
 ## 5. Post-deploy checks
@@ -72,11 +96,13 @@ npm run test:schema
 npm run test:agents
 npm run test:investigation-runner
 npm run test:phase3
+npm run test:direct-agent
+npm run test:execution
 npm run test:mvp-api
 npm run test:cors
 npm audit --omit=dev --audit-level=high
 ```
 
-Run opt-in integration scripts only against the dedicated integration organization. Exercise duplicate webhooks, stale/missing jobs, model timeout or invalid JSON, unavailable enrichment, fraud, dispute, contact limit, partial/full late capture, and concurrent worker claims. In every case confirm that the browser remains read-only and no customer/provider write occurs.
+Run opt-in integration scripts only against the dedicated integration organization. Exercise duplicate webhooks, stale/missing jobs, model timeout or invalid JSON, unavailable enrichment, fraud, dispute, contact limit, partial/full late capture, concurrent worker claims, SMTP rejection, and an execution-worker restart after the durable email-send marker. In every case confirm that the browser remains read-only and an ambiguous email is never sent twice.
 
-For signed fixture evaluation reports, set a unique 32+ character `PAYSCOPE_FIXTURE_SIGNING_SECRET` and run `PAYSCOPE_RUN_EVALUATION=true npm run run:evaluation`. Run `development` before `held_out`; held-out reports are database-locked per fixture version. Their recovery figures remain simulation evidence, never real-revenue claims.
+For signed fixture evaluation reports, set a unique 32+ character `PAYSCOPE_FIXTURE_SIGNING_SECRET` and run `PAYSCOPE_RUN_EVALUATION=true npm run run:evaluation`. Run `development` before `held_out`; held-out reports are database-locked per fixture version. The legacy fixture benchmark is not evidence of direct-execution recovery; report direct recovery only from action → receipt → verified Razorpay event evidence.

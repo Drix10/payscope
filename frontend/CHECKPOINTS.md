@@ -9,23 +9,24 @@
 - [x] Render tenant-scoped incident feed, lifecycle, at-risk context, source labels, verified chronology, AI decision, causal narrative, alternatives, evidence gaps, deterministic gate trace, audit chain, and metrics.
 - [x] Validate health, incident, investigation, proposal, audit, and metrics contracts at the API boundary; degrade safely on malformed or unavailable responses.
 - [x] Keep loading, empty, error, abort, stale-response, keyboard, focus, menu, responsive, dark-theme, and no-secret browser behavior covered in the existing dashboard foundation.
-- [x] Remove active public wording that positions PayScope as a restricted data-only or action-simulation product.
+- [ ] Replace the remaining active simulation vocabulary/projection (`simulated` proposal status, metrics, audit labels, Section 3 and dashboard copy) only when the direct-execution API migration is live; do not present the illustrative landing execution flow as an executed provider action.
 
 ## Landing page — autonomous execution story
 
-- [ ] Rebuild section 4 as a dense autonomous execution engine surface: detected signal, AI plan, policy clearance, provider dispatch, receipt/reconciliation, and final outcome must be visible at a glance.
-- [ ] Replace sparse explanatory cards with an animated execution pipeline, live command/receipt cards, provider state transitions, and clear “the AI executes; the dashboard explains” narrative.
-- [ ] Update mobile section 4 so it communicates the same execution loop, not merely a dashboard CTA.
+- [x] Rebuild section 4 as a dense illustrative autonomous execution-engine surface: detected signal, AI plan, policy clearance, provider dispatch, receipt/reconciliation, and final outcome are visible at a glance.
+- [x] Replace sparse explanatory cards with an animated illustrative execution pipeline, command/receipt cards, provider-state transitions, and clear “the AI executes; the dashboard explains” narrative. It makes no claim that a provider command has already been dispatched.
+- [x] Update mobile section 4 so it communicates the same execution loop, not merely a dashboard CTA.
 - [ ] Remove all remaining simulation-only or human-approval copy from the landing page, dashboard, empty states, tooltips, and visual components.
 - [ ] Preserve the current dark visual language, motion quality, responsive scaling, reduced-motion behavior, and working dashboard navigation while adding density.
 
 ## Execution-ledger experience — required
 
-- [ ] Add execution status vocabulary and visuals: `queued`, `dispatching`, `accepted`, `delivered`, `confirmed`, `retry scheduled`, `compensating`, `failed`, and `cancelled`.
+- [ ] Add execution status vocabulary and visuals: `queued`, `dispatching`, `SMTP accepted`, `unreconciled`, `confirmed`, `retry scheduled`, `compensating`, `failed`, and `cancelled`. Never label SMTP acceptance as delivered.
 - [ ] Show a clear chronological split between AI investigation, deterministic policy, dispatched command, provider receipt, callback verification, reconciliation, retry/compensation, and final incident outcome.
-- [ ] Render each capability with a human-readable provider operation: recovery link, WhatsApp/SMS, voice call, merchant email/webhook, capture, refund, dispute evidence, risk signal, and infrastructure resolution.
+- [ ] Add a bounded incident-memory timeline that shows only redacted evidence summaries and prior AI execution facts; never render recipient data, raw provider payloads, or customer-email content.
+- [ ] Render each capability with a human-readable provider operation: recovery link, recovery email, capture, refund, dispute evidence, risk signal, and infrastructure resolution. Do not expose non-MVP WhatsApp, SMS, voice, or merchant-webhook actions.
 - [ ] Display redacted action prerequisites, canonical payment reference, amount/currency, policy version, idempotency state, provider request ID, receipt state, retry schedule, and compensation link without exposing recipient data or secrets.
-- [ ] Replace simulation metrics with execution metrics: actions dispatched, provider accepted, delivered, confirmed recoveries, refunds, failed actions, retries, compensations, and unresolved receipts.
+- [ ] Replace simulation metrics with execution metrics: actions dispatched, SMTP accepted/rejected, unreconciled emails, confirmed recoveries, refunds, failed actions, retries, compensations, and unresolved receipts.
 - [ ] Make causal attribution explicit: an outcome belongs to PayScope only when action ID, provider receipt, and Razorpay event are linked.
 - [ ] Give each terminal path useful explanation: provider refusal, callback pending, contact/consent policy, fraud, dispute, amount cap, provider outage, retry exhaustion, or compensation completion.
 

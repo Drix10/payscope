@@ -5,6 +5,14 @@ export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'DISPUTE_OPENE
 export const RiskTierSchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'MONITOR']);
 export const ProposalStatusSchema = z.enum(['pending', 'simulated', 'cancelled_by_dispute', 'cancelled_by_recovery', 'failed']);
 export const ActionTypeSchema = z.enum([
+  'deliver_recovery_link_email',
+  'record_risk_signal',
+  'submit_dispute_evidence',
+  'capture_authorized_payment',
+  'refund_payment',
+  'resolve_infrastructure',
+  // Compatibility-only values remain readable until the direct-execution
+  // migration projection has replaced historical proposal rows.
   'retry_link_whatsapp',
   'retry_link_sms',
   'hinglish_voice_script',
@@ -117,7 +125,7 @@ export const RiskAnalysisSchema = z.object({
 export const RiskAnalysisModelOutputSchema = RiskAnalysisSchema.omit({ toolResults: true });
 
 export const RecoveryPlanSchema = z.object({
-  proposedActions: z.array(z.object({ actionType: ActionTypeSchema, rationale: z.string().min(1).max(100), preconditions: z.array(z.string().min(1).max(140)).min(1).max(6), expectedOutcome: z.string().min(1).max(160), estimatedRecoveryPaise: paise.nullable(), scriptContent: z.string().min(1).max(600).optional(), requiresAutonomousExecution: z.literal(true) }).strict()).max(8),
+  proposedActions: z.array(z.object({ actionType: ActionTypeSchema, rationale: z.string().min(1).max(100), preconditions: z.array(z.string().min(1).max(140)).min(1).max(6), expectedOutcome: z.string().min(1).max(160), estimatedRecoveryPaise: paise.nullable(), scriptContent: z.string().min(1).max(600).optional(), emailCopyIntent: z.string().min(1).max(600).optional(), requiresAutonomousExecution: z.literal(true) }).strict()).max(8),
   noActionReason: z.string().min(1).max(200).optional(),
   recoveryProbability: z.number().min(0).max(1),
   confidence: z.number().min(0).max(1),

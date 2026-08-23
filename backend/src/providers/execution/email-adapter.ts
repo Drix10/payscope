@@ -1,0 +1,101 @@
+import nodemailer, { SentMessageInfo, Transporter } from 'nodemailer';
+import { RuntimeConfig } from '../../config/runtime-config';
+
+export type EmailSendResult =
+  | { kind: 'accepted'; messageId: string; acceptedCount: number; rejectedCount: number; response: string }
+  | { kind: 'rejected'; messageId: string | null; response: string };
+
+/**
+ * SMTP is deliberately isolated here: recipients, headers and URLs come from
+ * deterministic server-side inputs, never a model response or browser call.
+ */
+export class RecoveryEmailAdapter {
+  private transporter: Transporter | undefined;
+
+  constructor(private readonly config: NonNullable<RuntimeConfig['smtp']>) {}
+
+  async verify(): Promise<void> {
+    await this.getTransporter().verify();
+  }
+
+  async close(): Promise<void> {
+    this.transporter?.close();
+    this.transporter = undefined;
+  }
+
+  async send(input: { to: string; paymentLinkUrl: string; incidentId: string; subject: string; copyIntent: string }): Promise<EmailSendResult> {
+    const recipient = safeEmail(input.to, 'recipient');
+    const url = safeRazorpayUrl(input.paymentLinkUrl);
+    const info = await this.getTransporter().sendMail({
+      from: this.config.from,
+      to: recipient,
+      subject: boundedText(input.subject, 160, 'Email subject'),
+      text: renderText(input.copyIntent, url),
+      html: renderHtml(input.copyIntent, url),
+      headers: { 'X-PayScope-Incident': input.incidentId },
+    }) as SentMessageInfo;
+    const accepted = Array.isArray(info.accepted) ? info.accepted.length : 0;
+    const rejected = Array.isArray(info.rejected) ? info.rejected.length : 0;
+    const messageId = typeof info.messageId === 'string' && info.messageId ? info.messageId.slice(0, 320) : null;
+    const response = typeof info.response === 'string' ? redactSmtpResponse(info.response) : '';
+    if (!accepted || rejected) return { kind: 'rejected', messageId, response };
+    return { kind: 'accepted', messageId: messageId ?? '', acceptedCount: accepted, rejectedCount: rejected, response };
+  }
+
+  private getTransporter(): Transporter {
+    if (this.transporter) return this.transporter;
+    this.transporter = nodemailer.createTransport({
+      pool: true,
+      host: this.config.host,
+      port: this.config.port,
+      secure: this.config.secure,
+      requireTLS: !this.config.secure,
+      auth: { user: this.config.user, pass: this.config.pass },
+      maxConnections: this.config.maxConnections,
+      maxMessages: 100,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
+      tls: { servername: this.config.host, rejectUnauthorized: true },
+    });
+    return this.transporter;
+  }
+}
+
+function safeEmail(value: string, label: string): string {
+  const email = value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320 || /[\r\n]/.test(email)) throw new Error(`Invalid ${label} email`);
+  return email;
+}
+
+function safeRazorpayUrl(value: string): string {
+  const parsed = new URL(value);
+  const trustedHost = /(^|\.)razorpay\.com$/i.test(parsed.hostname) || /(^|\.)rzp\.io$/i.test(parsed.hostname);
+  if (parsed.protocol !== 'https:' || !trustedHost || parsed.username || parsed.password) throw new Error('Recovery email requires a verified Razorpay Payment Link URL');
+  return parsed.toString();
+}
+
+function boundedText(value: string, maxLength: number, label: string): string {
+  const text = value.trim().replace(/[\r\n]+/g, ' ');
+  if (!text || text.length > maxLength) throw new Error(`${label} is invalid`);
+  return text;
+}
+
+function renderText(copyIntent: string, url: string): string {
+  const copy = boundedText(copyIntent, 600, 'Email copy intent');
+  return `${copy}\n\nComplete your payment securely: ${url}\n\nIf you did not expect this email, you can ignore it.`;
+}
+
+function renderHtml(copyIntent: string, url: string): string {
+  const copy = escapeHtml(boundedText(copyIntent, 600, 'Email copy intent'));
+  const link = escapeHtml(url);
+  return `<p>${copy}</p><p><a href="${link}">Complete your payment securely</a></p><p>If you did not expect this email, you can ignore it.</p>`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]!));
+}
+
+function redactSmtpResponse(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]').slice(0, 1_000);
+}

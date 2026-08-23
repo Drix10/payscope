@@ -2,6 +2,7 @@ import { Incident, QueueJob, VulcanEnrichment } from '../domain/contracts';
 import { MvpRepository, StoredEvent } from '../db/mvp-repository';
 import { EnrichmentProvider } from '../providers/enrichment/interface';
 import { correlateEvent, IncidentCandidate } from './correlation-engine';
+import { logger } from '../observability';
 
 export interface DurablePipelineRepository {
   eventById(organizationId: string, eventId: string): Promise<StoredEvent>;
@@ -35,7 +36,7 @@ export class PipelineJobProcessor {
     } catch (error) {
       // An unavailable/malformed external signal is an auditable degraded mode,
       // not a reason to discard the verified payment event.
-      console.warn('[PayScope enrichment unavailable]', { eventId: event.id, error: error instanceof Error ? error.message : 'unknown error' });
+      logger.warn({ eventId: event.id, errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope enrichment unavailable');
     }
     await this.repository.completeEnrichmentAndEnqueueCorrelation(event, enrichment);
   }

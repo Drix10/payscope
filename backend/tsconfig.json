@@ -3,7 +3,10 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "node",
-    "lib": ["ES2022"],
+    "ignoreDeprecations": "5.0",
+    "lib": [
+      "ES2022"
+    ],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -11,5 +14,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }

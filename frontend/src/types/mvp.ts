@@ -13,7 +13,7 @@ export type Proposal = { id: string; organizationId: string; incidentId: string;
 export type IncidentDetail = { incident: Incident; events: Event[]; proposals: Proposal[]; investigation: Investigation | null }
 export type AuditEntry = { id: string; organizationId: string; incidentId: string | null; sequenceNumber: number; eventType: string; actorType: 'system' | 'legacy'; actorId: string; decision: string; rationale: string; confidence: number | null; enrichmentSource: string | null; createdAt: string }
 export type AuditIntegrity = { status: 'intact' | 'broken'; entryCount: number; checkedAt: string }
-export type MvpHealth = { organizationId: string; pipeline: 'autonomous'; razorpayEnvironment: 'test' | 'live'; communications: 'autonomous_simulation'; database: 'ready'; queueWorker: 'configured'; webhook: 'signed'; enrichmentAdapter: 'razorpay_fields_heuristic' }
+export type MvpHealth = { organizationId: string; pipeline: 'autonomous'; razorpayEnvironment: 'test' | 'live'; communications: 'autonomous_simulation' | 'email_execution' | 'email_execution_unavailable'; database: 'ready'; queueWorker: 'configured'; webhook: 'signed'; enrichmentAdapter: 'razorpay_fields_heuristic' }
 
 // Canonical Phase 2+ contracts. A new endpoint must still add its own runtime
 // guard in api.ts; these types alone are never trusted browser input.

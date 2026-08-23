@@ -18,6 +18,7 @@ export class AgenticWebhookIntake {
     const organization = await this.repository.demoOrganization(this.config.organizationId);
     const normalized = normalizeRazorpayWebhook(rawBody, razorpayEventId ?? '', organization.customerHashSecret);
     const stored = await this.repository.ingestEventWithEnrichmentJob(organization.id, normalized.eventId, rawPayloadHash(rawBody), normalized);
+    if (this.config.directExecutionEnabled && !stored.duplicate) await this.repository.reconcileDirectPaymentLinkEvent(organization.id, normalized);
     return { ...stored, ignored: false };
   }
 }
