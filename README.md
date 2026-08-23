@@ -13,20 +13,36 @@
   <img alt="Structured outputs" src="https://img.shields.io/badge/AI-Structured%20Outputs-7C3AED?style=for-the-badge" />
 </p>
 
-PayScope turns Razorpay webhook events into a complete, tenant-scoped operations record. Its AI agents investigate evidence under strict structured-output contracts; deterministic policy—not a model—decides whether a bounded action record is allowed. The result is a dashboard that makes each incident understandable rather than merely visible.
-
-> **Safety boundary:** PayScope currently records simulated actions only. It never sends a customer message, moves money, captures/refunds payments, or writes to Razorpay. Incoming data may come from either Razorpay environment; the safety boundary remains the same.
+PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution loop. Its AI agents investigate evidence under strict structured-output contracts; deterministic policy issues an idempotent provider command, verifies the provider receipt, reconciles callbacks, and records the final merchant outcome.
 
 ## Showcase
 
-| | |
-|---|---|
-| **01 — Command center**<br />The landing surface explains the operating model before a merchant opens the product. | **02 — Incident feed**<br />A readable timeline of payment incidents, risk level, current lifecycle, and at-risk amount. |
-| `docs/screenshots/01-command-center.png` | `docs/screenshots/02-incident-feed.png` |
-| **03 — AI decision record**<br />Evidence, causal reasoning, alternatives, policy gates, prerequisites, and bounded outcome in one incident detail. | **04 — Audit and metrics**<br />Append-only audit verification and explicitly-qualified operational metrics. |
-| `docs/screenshots/03-ai-decision-record.png` | `docs/screenshots/04-audit-and-metrics.png` |
-
-The four screenshot paths above are intentional capture targets for the deployed experience. They keep the submission deck, product walkthrough, and repository showcase aligned as UI evolves; see [`docs/screenshots/README.md`](docs/screenshots/README.md) for capture requirements.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>01 — Command center</strong><br />
+      The landing surface explains the operating model before a merchant opens the product.<br /><br />
+      <img src="docs/screenshots/01-command-center.png" alt="PayScope landing page" />
+    </td>
+    <td width="50%" valign="top">
+      <strong>02 — Incident feed</strong><br />
+      A readable timeline of payment incidents, lifecycle, risk level, and at-risk amount.<br /><br />
+      <img src="docs/screenshots/02-incident-feed.png" alt="PayScope incident feed" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>03 — AI decision record</strong><br />
+      Evidence, causal reasoning, alternatives, policy gates, prerequisites, and bounded outcome in one incident detail.<br /><br />
+      <img src="docs/screenshots/03-ai-decision-record.png" alt="PayScope AI decision record" />
+    </td>
+    <td width="50%" valign="top">
+      <strong>04 — Autonomous execution</strong><br />
+      An incident becomes a real command, provider receipt, reconciled callback, and verified outcome.<br /><br />
+      <img src="docs/screenshots/04-autonomous-execution.png" alt="PayScope autonomous execution engine" />
+    </td>
+  </tr>
+</table>
 
 ## Buildathon submission
 
@@ -35,8 +51,8 @@ The four screenshot paths above are intentional capture targets for the deployed
 | **Track selection** | AI agents for payment operations |
 | **Project name / title** | **PayScope — Autonomous Payment Operations Agent** |
 | **GitHub repository** | [github.com/Drix10/payscope](https://github.com/Drix10/payscope) |
-| **Project objective** | Detect payment incidents from signed Razorpay events, reason over evidence using bounded AI, enforce deterministic safety policy, and give a merchant an auditable record of what the system concluded. |
-| **What it solves** | Payment failure signals are noisy, scattered, and hard to triage. PayScope correlates them into incidents, distinguishes infrastructure and customer risk, preserves evidence, records a safe next-step simulation, and makes the reasoning inspectable. |
+| **Project objective** | Detect payment incidents from signed Razorpay events, reason over evidence using structured AI, autonomously execute the best merchant-authorized recovery path, and give a merchant an auditable record of the result. |
+| **What it solves** | Payment failure signals are noisy, scattered, and hard to resolve. PayScope correlates them into incidents, distinguishes infrastructure and customer risk, executes the appropriate recovery operation, and makes the reasoning and provider result inspectable. |
 
 ### Build challenges and technical obstacles
 
@@ -44,7 +60,7 @@ The four screenshot paths above are intentional capture targets for the deployed
 |---|---|
 | A language model can sound certain without having sufficient evidence. | Each agent returns a strict schema containing evidence priorities, confidence rationale, alternatives, constraints, and no-action criteria. Invalid output is safely terminalized and audited. |
 | Payment webhooks can arrive more than once or out of order. | HMAC verification, durable idempotent intake, queue leases, retries, correlation rules, and idempotent action recording converge duplicate work onto the same incident. |
-| AI autonomy must not become unbounded execution. | The model cannot call tools directly or create action types. A deterministic policy engine enforces contact caps, fraud/dispute stops, merchant opt-in, evidence requirements, and an allowlist before a simulation is recorded. |
+| Autonomous decisions need dependable provider execution. | The model chooses only typed capabilities. A deterministic policy validates canonical payment state, amount, consent, capability, idempotency, and retry/compensation rules before it emits a provider command. |
 | A dashboard can hide uncertainty behind polished numbers. | Metrics include an exception list, recovery attribution needs a causal correlation chain, and every screen exposes source labels, evidence gaps, policy gates, and audit integrity. |
 | Sensitive payment context must not leak to the browser or model. | The data path is organization-scoped, PII is minimized and hashed, model prompts use a reduced context, and the frontend receives presentation-safe read models only. |
 
@@ -63,35 +79,35 @@ Enrichment + correlation
 Structured AI investigation
    │  Supervisor → Risk Analyst → Recovery Planner
    ▼
-Deterministic policy evaluator
-   │  hard stops · contact rules · allowlist · outcome gates
+Deterministic execution policy
+   │  canonical payment · amount · consent · idempotency · provider gates
    ▼
-Simulation / autonomous no-action
-   │  append-only audit entry · lifecycle update
+Provider command + receipt reconciliation
+   │  delivery / capture / refund / evidence result · lifecycle update
    ▼
 Read-only React dashboard
 ```
 
 ### The agent stack
 
-| Layer | Produces | Cannot do |
+| Layer | Produces | Authority |
 |---|---|---|
-| **Supervisor** | objectives, evidence priorities, bounded plan, constraints, no-action criteria | access tools, PII, or select an action |
-| **Risk Analyst** | causal narrative, confidence rationale, alternative hypotheses, evidence gaps | use anything except four tenant-scoped read tools; recommend execution |
-| **Recovery Planner** | finite action proposals, prerequisites, expected outcome, optional Hinglish script | invent actions, contacts, links, or payment operations |
-| **Policy Evaluator** | deterministic gate trace and permit/restrict/no-action result | call a model or override stopping rules |
-| **Simulation adapter** | idempotent simulated action record | send communications or execute financial operations |
+| **Supervisor** | objectives, evidence priorities, bounded plan, constraints, no-action criteria | directs analysis only |
+| **Risk Analyst** | causal narrative, confidence rationale, alternative hypotheses, evidence gaps | reads tenant-scoped facts only |
+| **Recovery Planner** | finite action proposals, prerequisites, expected receipt, optional Hinglish intent | selects from configured capabilities |
+| **Execution Policy** | deterministic permit/restrict/no-action result and command parameters | emits a command only after all execution gates pass |
+| **Execution adapters** | idempotent provider command, receipt, retry/compensation state | perform configured Razorpay and communications operations |
 
-The model sees data, never instructions hidden inside webhook payloads. Prompts require JSON only, explicitly treat payload content as untrusted, prohibit PII and execution, demand alternatives and uncertainty, and require a safe no-action route when the evidence is degraded.
+The model sees data, never instructions hidden inside webhook payloads. Prompts require JSON only, explicitly treat payload content as untrusted, demand alternatives and uncertainty, and require validated capability arguments, expected receipts, and an explicit no-action route when evidence is degraded.
 
 ### What an incident can become
 
 ```text
-OPEN → enrichment / correlation → investigation → policy
-                                           ├── RESOLVED          (full recovery signal)
-                                           ├── MONITORING        (partial recovery)
-                                           ├── DISPUTE_OPENED    (terminal safeguard)
-                                           └── DISMISSED         (bounded no-action)
+OPEN → enrichment / correlation → investigation → execution policy → provider command
+                                                             ├── RESOLVED          (verified recovery)
+                                                             ├── MONITORING        (partial recovery)
+                                                             ├── DISPUTE_OPENED    (evidence/reconciliation path)
+                                                             └── DISMISSED         (terminal no-action)
 ```
 
 The legacy `ESCALATED` and `HUMAN_RESOLVED` states are retired. PayScope does not place work in an invisible manual queue: if it cannot safely proceed, it records the reason and ends in a bounded autonomous state.
@@ -101,9 +117,9 @@ The legacy `ESCALATED` and `HUMAN_RESOLVED` states are retired. PayScope does no
 - **Tenant isolation:** every event, job, query, incident, audit entry, and agent context is organization-scoped; Supabase RLS and RPC boundaries enforce it.
 - **Evidence integrity:** every enrichment fact names its source. Missing evidence stays missing—no fabricated completion or confidence.
 - **Auditability:** database rules make audit entries append-only and hash-chain them per organization. Verification detects a broken chain.
-- **Safe metrics:** attributed recovery requires a simulated proposal and a correlated later payment event within the valid window. It is labelled simulation evidence, not merchant revenue.
-- **Browser safety:** the dashboard API is read-only. It exposes neither provider payloads, secrets, contact data, nor any approval/action endpoint.
-- **Failure behavior:** invalid model output, unavailable evidence, queue retry exhaustion, duplicate delivery, policy blocks, fraud, and disputes resolve to explicit, auditable outcomes rather than unsafe execution.
+- **Verified outcomes:** recovery attribution requires a causal PayScope action, provider receipt, and correlated Razorpay event within the valid window.
+- **Browser integrity:** the dashboard API is read-only. It exposes neither provider payloads, secrets, contact data, nor action credentials.
+- **Execution resilience:** invalid model output, unavailable evidence, queue retry exhaustion, duplicate delivery, provider timeouts, callback replay, policy blocks, fraud, and disputes resolve through explicit audited reconciliation paths.
 
 ## Repository map
 
@@ -117,7 +133,7 @@ backend/
 frontend/
   src/                   landing experience and read-only operations dashboard
   CHECKPOINTS.md         UX, accessibility, and deployment gates
-Plan.md                  canonical product, safety, and agent specification
+Plan.md                  canonical product, execution, and agent specification
 ```
 
 ## Run locally
@@ -193,10 +209,6 @@ npm audit --omit=dev --audit-level=high
 
 The repository’s canonical implementation details and remaining environment-level proof steps live in [`Plan.md`](Plan.md), [`backend/CHECKPOINTS.md`](backend/CHECKPOINTS.md), and [`frontend/CHECKPOINTS.md`](frontend/CHECKPOINTS.md).
 
-## Product boundary
-
-PayScope is built as a high-integrity autonomous operations layer, not a payment executor. Before enabling any real customer communication or financial write, the product would require a separately designed consent model, recipient resolution, delivery provider, regulatory review, live-action idempotency model, reconciliation, kill switch, and independent security assessment. None of those capabilities are hidden behind an environment variable in this repository.
-
 ---
 
-Designed for the Razorpay AI Buildathon — make payment operations explainable, bounded, and genuinely autonomous.
+Designed for the Razorpay AI Buildathon — make payment resolution autonomous, verifiable, and explainable.

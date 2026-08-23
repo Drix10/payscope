@@ -1,75 +1,86 @@
-# PayScope — autonomous payment operations
+# PayScope — autonomous payment resolution
 
 ## Product contract
 
-PayScope is an autonomous payment-operations system for Razorpay merchants. It consumes signed Razorpay events, turns related payment signals into tenant-scoped incidents, investigates them with bounded AI agents, applies deterministic safety policy, and records the outcome in a tamper-evident audit chain.
+PayScope is an autonomous payment-resolution agent for Razorpay merchants. It receives signed payment signals, correlates them into tenant-scoped incidents, investigates their cause, chooses the best permitted recovery path, executes that path through provider adapters, verifies the resulting provider receipts, and records the entire decision and execution trail.
 
-The dashboard is deliberately read-only. It answers: **what happened, what the AI concluded, why that conclusion was safe, and what the system recorded**. It is not an operator inbox and contains no approval, manual-resolution, outreach, or financial-action controls.
+The dashboard is an execution ledger, not an operations inbox. A merchant uses it to understand what the AI did, what happened next, and the current result. The agent owns investigation, decisioning, outreach, recovery operations, dispute evidence, reconciliation, retries, and terminal incident handling. There is no approval queue or manual-resolution workflow.
 
-Razorpay credentials may target either `live` or `test` environments. This changes only the source of incoming webhook and enrichment data. It does not change PayScope's safety boundary: this version never sends a customer message, calls a customer, stores customer contact details, captures or refunds money, changes a Razorpay resource, or claims simulated recovery as merchant revenue.
+## What autonomous execution means
 
-## End-to-end operation
+For each incident, PayScope may autonomously:
+
+1. Create or recover a Razorpay Payment Link with a causal PayScope reference.
+2. Resolve the recipient in a server-side vault and deliver the selected WhatsApp, SMS, voice, email, or merchant-webhook communication.
+3. Retry a transient provider delivery with the same idempotency key and stop once a provider receipt is final.
+4. Capture an authorized payment, issue a refund, cancel an obsolete link, or create a new recovery link when the deterministic execution policy authorizes that Razorpay operation.
+5. Prepare and submit a dispute-evidence package where the configured provider API supports submission.
+6. Switch an incident into monitoring, resolved, dismissed, or dispute lifecycle states based on verified provider evidence.
+7. Reconcile asynchronous Razorpay and communications callbacks back to the original action, then retry, compensate, or terminalize without waiting for an operator.
+
+All external operations are merchant-authorized, tenant-scoped, idempotent, receipt-verified, and recorded with a concrete provider outcome. The model selects from structured capabilities; it never invents a recipient, an API operation, an amount, or an execution credential.
+
+## End-to-end flow
 
 ```text
 Razorpay event
-  → HMAC verification + allowlist + size limit
-  → tenant-scoped idempotent durable intake
-  → leased queue job with bounded retries/backoff
-  → enrichment + correlation
-  → structured AI investigation
-  → deterministic policy evaluation
-  → simulated action record or autonomous no-action outcome
-  → append-only hash-chained audit trail
-  → read-only API and dashboard
+  → HMAC verification + allowlist + durable tenant-scoped intake
+  → leased queue job + enrichment + correlation
+  → Supervisor → Risk Analyst → Recovery Planner (strict structured outputs)
+  → deterministic execution policy
+  → idempotent action command
+  → Razorpay / communications provider adapter
+  → provider receipt + callback reconciliation
+  → execution audit, lifecycle update, metrics, dashboard
 ```
 
-1. **Intake** verifies the raw-body HMAC before parsing, accepts only the supported event allowlist, deduplicates the provider event, normalizes a privacy-reduced payload, and atomically persists an event and queue job.
-2. **Enrichment** reads documented Razorpay fields and the downtime endpoint. Each fact carries its source (`razorpay_fields_heuristic`, `vulcan_direct`, `fixture_signed`, or `unavailable`); unavailable enrichment remains explicit evidence, never a fabricated fact.
-3. **Correlation** joins only same-organization events into an incident and handles duplicate delivery, late capture, partial recovery, full recovery, dispute transitions, and terminal cancellation.
-4. **Investigation** runs the Supervisor, Risk Analyst, and Recovery Planner. Their outputs are strict schemas, not free-form instructions.
-5. **Policy** is the final authority. AI output cannot bypass contact limits, fraud/dispute stops, merchant opt-in, evidence requirements, auto-resolution ceiling, or the finite action allowlist.
-6. **Execution** is idempotent and non-financial: a permitted action becomes an automatically recorded simulation. Blocked or degraded cases become an audited autonomous no-action outcome; PayScope never waits for manual approval.
-7. **Audit and display** expose presentation-safe facts, model reasoning, policy gates, action result, lifecycle, and chain integrity without raw provider payloads or customer identifiers.
+1. **Intake** verifies the raw-body HMAC, deduplicates provider events, normalizes privacy-reduced payment facts, and enqueues work atomically.
+2. **Enrichment and correlation** record the provenance of every fact and join only same-organization events into one incident, including late capture, partial recovery, disputes, and duplicate delivery.
+3. **Agent planning** turns a bounded incident context into a structured plan, causal risk analysis, alternative hypotheses, concrete action prerequisites, expected outcome, and no-action criteria.
+4. **Policy** evaluates merchant configuration, payment state, fraud/dispute rules, contact consent, value limits, retry budget, provider capability, and execution idempotency. It is deterministic and is the authority that issues an action command.
+5. **Execution** uses a typed adapter with an immutable idempotency key. Every operation stores a request fingerprint, provider request ID, receipt, status, next reconciliation time, and compensation rule.
+6. **Reconciliation** consumes Razorpay and delivery-provider callbacks, verifies their signatures, matches them to an action, and decides whether the action is complete, needs a bounded retry, needs compensation, or has reached a terminal failure.
+7. **Audit and dashboard** distinguish evidence, AI inference, policy decision, dispatched command, provider receipt, reconciliation result, and incident lifecycle. The browser remains read-only.
 
-## Autonomous lifecycle
+## Agent system and structured outputs
 
-```text
-signed event → OPEN → enrich / correlate → investigate → policy
-                                  │                         │
-                                  ├─ full capture ───────────┴→ RESOLVED
-                                  ├─ partial recovery ───────┴→ MONITORING
-                                  ├─ dispute ────────────────┴→ DISPUTE_OPENED
-                                  └─ unsafe / insufficient ─┴→ DISMISSED
-```
-
-`ESCALATED` and `HUMAN_RESOLVED` are retired. Historical rows remain readable only to preserve audit history; new pipeline writes never create those states.
-
-## Agent system
-
-| Layer | Structured responsibility | Hard boundary |
+| Layer | Required structured output | Authority |
 |---|---|---|
-| Supervisor | objectives, evidence priorities, bounded sub-agent plan, constraints, no-action criteria | cannot access tools, PII, tenant identity, or choose an action |
-| Risk Analyst | causal narrative, confidence rationale, alternatives, evidence gaps, risk category | only four server-scoped read tools; no customer data or action recommendation |
-| Recovery Planner | finite action proposals, preconditions, expected outcomes, Hinglish copy when applicable | cannot invent action types, transmit communications, or execute money movement |
-| Policy Evaluator | deterministic permit/restrict/no-action decision and gate trace | cannot call a model or override stopping rules |
-| Simulation adapter | idempotent action-result record and audit event | cannot reach Razorpay write APIs or customer channels |
+| Supervisor | objectives, evidence priorities, sub-agent plan, constraints, no-action criteria | directs bounded analysis only |
+| Risk Analyst | causal narrative, confidence rationale, alternatives, evidence gaps, risk class, tool trace | reads tenant-scoped facts only |
+| Recovery Planner | finite action type, prerequisites, expected outcome, amount/reference requirements, copy intent, compensation strategy | chooses from capability enum only |
+| Execution Policy | exact permit/restrict/no-action result, validated action parameters, budget and consent gates | emits an executable command only when all gates pass |
+| Execution Adapter | provider operation, idempotency key, provider receipt, normalized status | performs one configured provider capability |
+| Reconciler | callback verification, action match, retry/compensation/final lifecycle result | closes the execution loop |
 
-### Prompt and output requirements
+Every model call uses provider-enforced JSON Schema plus local Zod validation. Webhook fields, message text, gateway responses, and attached evidence are untrusted data—not instructions. Prompts must separate facts from inference, list alternatives, explain confidence, respect action preconditions, and return an explicit no-action plan when necessary information is unavailable.
 
-Every model call receives only a minimum, presentation-safe incident context. Payload text is treated as untrusted data, never as instructions. Prompts explicitly require the model to:
+### Prompt contract
 
-- output strict JSON matching the supplied schema and nothing else;
-- separate observed evidence from inference and list meaningful alternatives;
-- name confidence rationale and missing evidence instead of manufacturing certainty;
-- select only supplied finite enums and never create tools, tenants, recipients, links, or financial actions;
-- return a bounded no-action plan when policy-relevant evidence is absent, conflicting, fraudulent, disputed, or unsafe;
-- omit PII, raw payloads, secrets, payment credentials, and customer outreach targets.
+- The model cannot select a tenant, recipient identifier, secret, credential, arbitrary URL, arbitrary payment amount, or arbitrary API endpoint.
+- The Recovery Planner receives a capability catalogue and returns only valid enum values with arguments whose schemas are defined in code.
+- Recipient resolution occurs after policy approval in a server-side encrypted contact adapter. The model receives only capability eligibility and delivery state.
+- Financial commands require canonical payment/order/link IDs from verified Razorpay evidence, amount rules derived by policy, and an idempotency key bound to the incident/action.
+- The model must state a recovery hypothesis, evidence supporting it, alternative explanations, prerequisites, expected provider receipt, and compensation path for every proposed action.
 
-Schema validation occurs at the model boundary. Invalid output produces an audited safe no-action lifecycle outcome, not a retry that silently changes the decision. Existing persisted investigations are normalized through a compatibility reader so the dashboard remains available during staged deployments.
+## Execution capabilities
 
-## Deterministic stopping rules
+| Capability | Adapter operation | Completion evidence | Compensation / terminal rule |
+|---|---|---|---|
+| `create_recovery_link` | Razorpay Payment Link create/reuse with `ps:<action-id>` reference | link ID and provider receipt | cancel unused/expired link; reconcile `payment_link.*` events |
+| `deliver_retry_link_whatsapp` / `deliver_retry_link_sms` | configured delivery provider send | accepted provider message ID and delivery callback | bounded retry with the same idempotency key; terminal delivery failure |
+| `place_hinglish_recovery_call` | configured voice provider call | call ID and terminal call status | bounded redial policy; terminal no-contact result |
+| `notify_merchant_email` / `notify_merchant_webhook` | merchant channel delivery | provider receipt or signed webhook acknowledgement | retry according to provider semantics |
+| `capture_authorized_payment` | Razorpay authorized-payment capture | Razorpay capture receipt and `payment.captured` reconciliation | no duplicate capture; terminal provider refusal |
+| `refund_payment` | Razorpay refund create | refund ID, amount, and `refund.*` reconciliation | no duplicate refund; reconcile pending/failed refund |
+| `submit_dispute_evidence` | configured dispute-evidence submission | provider case/receipt | retry only before provider deadline; preserve immutable evidence package |
+| `record_risk_signal` / `resolve_infrastructure` | internal lifecycle command | durable audit entry and lifecycle update | terminal internal action |
 
-`backend/src/config/stopping-rules.ts` is the single source of truth:
+The retired `flag_for_review` name is replaced by `record_risk_signal`; it does not create a human task.
+
+## Autonomous execution policy
+
+`backend/src/config/stopping-rules.ts` remains the source of truth for contact caps and organization automation budget. The direct-execution policy extends it with merchant-specific operation permissions, consent/quiet-hour configuration, maximum financial amount, currency constraints, provider availability, dispute deadlines, retry/compensation policies, and an organization emergency pause.
 
 ```ts
 MAX_CONTACT_ATTEMPTS_PER_INCIDENT: 2
@@ -81,39 +92,47 @@ NO_CONTACT_WITHOUT_MERCHANT_OPT_IN: true
 AUTO_RESOLVE_RATE_CEILING_PER_ORG_PER_DAY: 0.90
 ```
 
-The former human-review floor is removed. A policy block records its exact reason and moves to a bounded autonomous outcome; it never creates an invisible manual queue.
+A policy block is still an autonomous decision: the agent records the reason, schedules the relevant reconciliation when appropriate, and sets a final lifecycle state. It does not create hidden manual work.
 
-## Permitted action records
+## Lifecycle and execution state
 
-The Recovery Planner can propose only these records:
+```text
+OPEN → enriched / correlated → investigating → policy evaluated → EXECUTING
+                                                            │
+              ┌─────────────────────────────────────────────┼────────────────────────────────────────────┐
+              ▼                                             ▼                                            ▼
+          DELIVERED / PENDING_RECEIPT                 MONITORING                                  TERMINAL NO-ACTION
+              │                                             │                                            │
+              ├─ verified recovery ───────────────→ RESOLVED                                      DISMISSED
+              ├─ partial recovery ────────────────→ MONITORING                                    DISPUTE_OPENED
+              └─ provider failure ──→ retry / compensate / FAILED_EXECUTION
+```
 
-- `retry_link_whatsapp`, `retry_link_sms`, `hinglish_voice_script`
-- `merchant_email_notification`, `merchant_webhook_notification`
-- `flag_for_review`, `prepare_chargeback_evidence`, `auto_resolve_infrastructure`
-
-Each is a simulated record in this version. Action content, evidence, policy rationale, preconditions, expected outcome, and simulation result are visible in the incident detail. No record implies delivery, financial execution, or a real recovery.
+Provider-facing action state is independent from incident lifecycle: `queued`, `dispatching`, `accepted`, `delivered`, `confirmed`, `retry_scheduled`, `compensating`, `failed`, or `cancelled`. Every transition is append-only audited and keyed by action ID and provider receipt.
 
 ## Data, tenancy, and audit invariants
 
-- Every database query, queue job, incident, audit entry, and model context is organization-scoped.
-- RLS and tenant-filtered RPCs are the persistence boundary; browser routes are read-only.
-- Payload storage is minimized; frontend responses use reduced presentation models and hashed identifiers.
-- Queue claims use leases and bounded retries. Duplicate jobs and duplicate webhooks converge on the same durable records.
-- Audit entries are append-only under database rules and hash-chained per organization. `verify_audit_chain()` detects mutation or sequence breaks. This is tamper-evident, not blockchain and not a claim of cryptographic signing by PayScope.
-- Recovery metrics require a causal chain: simulated proposal → correlated later payment event in the valid window. They are labelled simulation evidence and never real-revenue proof.
+- Every event, queue job, agent context, action, provider receipt, callback, query, and audit entry is organization-scoped under RLS.
+- Secrets, recipient details, and provider credentials remain server-only. The dashboard exposes only presentation-safe status and redacted execution evidence.
+- Database-level idempotency prevents duplicate external commands when workers retry, restart, or receive duplicate webhooks.
+- A durable outbox separates policy approval from provider dispatch; an inbox records and deduplicates callbacks before reconciliation.
+- Audit entries are append-only and hash-chained per organization. `verify_audit_chain()` detects mutation or sequence breaks.
+- Recovery metrics use a causal action → provider receipt → Razorpay payment/refund/capture chain. They report verified merchant outcome, unknown where evidence is incomplete, and never treat an uncorrelated event as recovery.
 
-## Deployment contract
+## Implementation sequence
 
-- **Backend:** Node.js 20+ VPS process using `npm run build` then `npm run start`, behind HTTPS. `PAYSCOPE_PIPELINE_ENABLED=true` enables durable work only after database migrations are applied.
-- **Frontend:** Vite static build on Vercel, configured only with the public API origin.
-- **Database:** Supabase migration history is applied deliberately with `npx supabase db push`; migrations are never run automatically at application boot.
-- **Secrets:** Razorpay key, webhook secret, Supabase service key, and Mesh credentials remain server-only. No frontend environment variable may contain any of them.
+1. Apply and verify the existing durable queue/lifecycle migrations, then add direct-execution action, outbox, receipt, callback-inbox, and reconciliation migrations.
+2. Replace the current internal action recorder with typed Razorpay, communications, and voice adapters; add encrypted server-side recipient resolution.
+3. Extend contracts, Mesh prompts, policy evaluator, model tests, and fixtures for capability selection, amount/reference validation, provider receipts, retries, and compensation.
+4. Add webhook/callback verification for each configured provider and reconcile all asynchronous state transitions.
+5. Rebuild dashboard cards, metrics, landing copy, and API projections around dispatched, delivered, confirmed, retried, compensated, and failed execution states.
+6. Prove each capability end-to-end against dedicated merchant configuration, including duplicate delivery, provider timeout, partial success, late callback, callback replay, canceled link, refund failure, capture race, dispute deadline, and worker restart.
 
 ## Completion gates
 
-Source implementation is complete only when the following remain true together:
+The direct-execution release is complete only when:
 
-1. TypeScript builds, contract tests, adversarial fixture tests, CORS test, dependency audit, and dead-code search pass.
-2. The hosted environment proves signed event → durable queue → correlation → schema-validated agent pipeline → policy → simulation/no-action → intact audit chain.
-3. Browser QA proves every dashboard interaction is read-only and desktop/mobile layouts preserve the evidence, decision, policy, and audit record.
-4. The README, deployment guide, environment examples, and both checkpoints accurately describe the same bounded autonomous system.
+1. Every action capability has a typed adapter, policy gate, idempotency key, durable outbox, provider receipt model, callback verifier, reconciliation path, retry policy, compensation rule, and adversarial test.
+2. The hosted environment proves signed event → investigation → action command → provider receipt → callback reconciliation → final lifecycle → intact audit chain for each configured capability.
+3. The dashboard clearly presents what the AI executed and its final provider-confirmed result without exposing secrets or recipient data.
+4. The README, deployment guide, environment examples, and both checkpoints describe the same autonomous execution model.

@@ -4,7 +4,7 @@ import { AnimatedNetworkLines } from './AnimatedNetworkLines'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { MobileShowcasePanel } from '../components/showcase/MobileShowcasePanel'
 import { BlurFadeWords } from '../BlurFadeWords'
-import { Sparkles, Play, Database, ArrowRight, ShieldCheck, Bot } from 'lucide-react'
+import { ArrowRight, BadgeCheck, Bot, CreditCard, Database, RefreshCw, Send, ShieldCheck, Webhook } from 'lucide-react'
 
 const MAGIC_BORDER_WHITE = 'conic-gradient(from 0deg, transparent 0%, transparent 35%, rgba(255,255,255,0.12) 42%, #ffffff 50%, rgba(255,255,255,0.12) 58%, transparent 65%, transparent 100%)'
 
@@ -78,7 +78,27 @@ export function Section4({
 
   if (isMobile) {
     return (
-       <MobileShowcasePanel eyebrow="04 / AI Activity Dashboard" title="One dashboard. Full visibility." description="Browse incidents and inspect the evidence, policy decision, and bounded action record the AI created automatically." accentClass="text-[#00ff87]">
+       <MobileShowcasePanel eyebrow="04 / Autonomous execution" title="From incident to confirmed outcome." description="The agent plans the recovery, clears execution policy, dispatches the provider command, and reconciles the result automatically." accentClass="text-[#00ff87]">
+         <div className="mt-7 grid grid-cols-3 gap-2">
+           {[
+             ['Signal', 'Verified'],
+             ['Plan', 'AI-ready'],
+             ['Dispatch', 'Live'],
+             ['Receipt', 'Matched'],
+             ['Reconcile', 'Running'],
+             ['Outcome', 'Confirmed'],
+           ].map(([label, state]) => (
+             <div key={label} className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5">
+               <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#86f4bd]">{label}</p>
+               <p className="mt-1 text-[11px] font-semibold text-white">{state}</p>
+             </div>
+           ))}
+         </div>
+         <div className="mt-4 rounded-2xl border border-[#00ff87]/25 bg-[#00ff87]/[0.06] p-4">
+           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Current execution</p>
+           <p className="mt-2 text-sm font-semibold text-white">Recovery link dispatched</p>
+           <p className="mt-1 text-xs leading-5 text-neutral-300">Razorpay receipt accepted · callback reconciliation in progress</p>
+         </div>
          <button type="button" onClick={onOpenDashboard} className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ff87] px-4 py-3 text-sm font-bold text-black shadow-[0_0_24px_rgba(0,255,135,0.25)] hover:bg-[#00ff87]/90">
            Open the PayScope Dashboard <ArrowRight className="h-4 w-4" />
          </button>
@@ -118,86 +138,69 @@ export function Section4({
         }}
       />
 
-      {/* Main Section Header */}
-      <div style={{ position: 'absolute', top: '35px', left: '55px', right: '55px', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
-        <motion.div
-          initial={{ opacity: 0, x: 30 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          style={{ position: 'relative', marginBottom: '12px' }}
-        >
-          <div className="inline-flex items-center gap-2.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 backdrop-blur-xl shadow-[0_0_20px_rgba(255,183,3,0.2)]">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400"></span>
-            </span>
-            <span className="font-mono text-xs font-bold tracking-widest text-amber-300">04 / 04</span>
+      <div style={{ position: 'absolute', inset: '30px 48px 32px', zIndex: 20 }}>
+        <motion.div initial={{ opacity: 0, y: 14 }} animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }} transition={{ delay: 0.2, duration: 0.55 }}>
+          <div className="inline-flex items-center gap-2.5 rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-4 py-1.5 backdrop-blur-xl shadow-[0_0_20px_rgba(0,255,135,0.16)]">
+            <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00ff87] opacity-70" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#00ff87]" /></span>
+            <span className="font-mono text-xs font-bold tracking-widest text-[#86f4bd]">04 / 04</span>
             <span className="text-neutral-500">•</span>
-            <span className="text-[11px] font-semibold text-neutral-300">Autonomous action records</span>
+            <span className="text-[11px] font-semibold text-neutral-200">Autonomous execution engine</span>
+          </div>
+          <div className="mt-4 flex items-end justify-between gap-8">
+            <div>
+              <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '42px', fontWeight: 300, color: '#ffffff', margin: 0, lineHeight: 1.05 }}><BlurFadeWords text="Autonomy that closes the loop." baseDelay={0.35} isInView={isInView} /></h1>
+              <p className="mt-2 text-[15px] font-light text-neutral-300">The agent investigates, dispatches the right provider command, and reconciles the outcome.</p>
+            </div>
+            <div className="mb-1 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-right backdrop-blur-xl">
+              <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-neutral-500">Execution state</p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-[#86f4bd]"><BadgeCheck className="h-3.5 w-3.5" /> Provider connected</p>
+            </div>
           </div>
         </motion.div>
 
-        <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '46px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '6px' }}>
-          <BlurFadeWords text="Autonomous. Fully Traceable." baseDelay={0.4} isInView={isInView} />
-        </h1>
-
-        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '17px', fontWeight: 300, color: 'rgba(255,255,255,0.7)', margin: 0, marginBottom: '18px' }}>
-           <BlurFadeWords text="Set stopping rules once — the agent investigates, applies policy, and records every permitted bounded action automatically." baseDelay={0.7} isInView={isInView} />
-        </p>
-
-        {/* User Guidance Step Pills */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 15 }}
-          transition={{ delay: 0.9, duration: 0.5 }}
-          className="mb-5 grid grid-cols-3 gap-3"
-        >
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-[#00ff87]">
-              <Database className="h-3.5 w-3.5" /> 1. Verified Incidents
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }} transition={{ delay: 0.5, duration: 0.55 }} className="relative mt-5 grid grid-cols-6 gap-2">
+          <div className="absolute left-[7%] right-[7%] top-[19px] h-px bg-gradient-to-r from-[#00ff87]/20 via-[#00ff87]/65 to-[#00ff87]/20" />
+          {[
+            ['Signal', Database, 'Verified'],
+            ['Plan', Bot, 'AI ready'],
+            ['Policy', ShieldCheck, 'Cleared'],
+            ['Dispatch', Send, 'Accepted'],
+            ['Receipt', CreditCard, 'Matched'],
+            ['Outcome', BadgeCheck, 'Confirmed'],
+          ].map(([label, Icon, state], index) => {
+            const StageIcon = Icon as typeof Database
+            return <div key={label as string} className="relative z-10 rounded-xl border border-white/10 bg-[#101218]/90 px-2.5 py-2.5 text-center backdrop-blur-xl">
+              <div className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full border ${index < 4 ? 'border-[#00ff87]/35 bg-[#00ff87]/10 text-[#86f4bd]' : 'border-white/15 bg-white/[0.05] text-neutral-200'}`}><StageIcon className="h-4 w-4" /></div>
+              <p className="mt-1.5 text-[10px] font-bold text-white">{label as string}</p>
+              <p className="mt-0.5 text-[9px] text-neutral-500">{state as string}</p>
             </div>
-            <p className="mt-1 text-[11px] text-neutral-400">
-               Correlated Razorpay signals with evidence and amount-at-risk.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-400">
-              <Bot className="h-3.5 w-3.5" /> 2. Bounded Investigation
-            </div>
-            <p className="mt-1 text-[11px] text-neutral-400">
-              Rules + optional model explain evidence without inventing facts.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-400">
-                <ShieldCheck className="h-3.5 w-3.5" /> 3. Automatic Simulation
-             </div>
-             <p className="mt-1 text-[11px] text-neutral-400">
-                The worker records every policy-permitted action as a simulation; no customer message is sent.
-             </p>
-          </div>
+          })}
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.96 }}
-          transition={{ delay: 1.1, duration: 0.6 }}
-          className="relative z-30 flex items-center justify-between gap-5 rounded-2xl border border-[#00ff87]/30 bg-[#090a0f]/90 p-5 shadow-2xl backdrop-blur-2xl"
-        >
-          <div>
-            <p className="text-xs font-bold text-[#00ff87]">One dashboard. One clear flow.</p>
-            <p className="mt-1 text-[11px] text-neutral-400">Review incidents, inspect investigations, and approve decisions — all in one place.</p>
-          </div>
-          <button type="button" onClick={onOpenDashboard} className="flex shrink-0 items-center gap-2 rounded-xl bg-[#00ff87] px-4 py-2.5 text-xs font-bold text-black shadow-[0_0_20px_rgba(0,255,135,0.25)] hover:bg-[#00ff87]/90">
-            Open Dashboard <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+        <div className="mt-4 grid grid-cols-[1.14fr_.86fr] gap-4">
+          <motion.div initial={{ opacity: 0, x: -18 }} animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -18 }} transition={{ delay: 0.72, duration: 0.55 }} className="relative overflow-hidden rounded-2xl border border-[#00ff87]/25 bg-[#090d0e]/90 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
+            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#00ff87]/[0.07] blur-3xl" />
+            <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#86f4bd]">Current command</p><p className="mt-1 text-lg font-semibold text-white">Create recovery link</p></div><span className="rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2.5 py-1 text-[10px] font-bold text-[#86f4bd]">DISPATCHED</span></div>
+            <div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Provider</p><p className="mt-1 text-xs font-semibold text-white">Razorpay</p></div><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">At risk</p><p className="mt-1 text-xs font-semibold text-white">₹1,250</p></div><div className="rounded-xl border border-white/10 bg-white/[0.035] p-2.5"><p className="text-[9px] uppercase tracking-wider text-neutral-500">Reference</p><p className="mt-1 font-mono text-[10px] font-semibold text-[#86f4bd]">ps:8a2f…</p></div></div>
+            <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-3 text-[11px] text-neutral-400"><Webhook className="h-3.5 w-3.5 text-[#86f4bd]" /><span>Idempotency key bound · waiting for a verified provider callback</span></div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, x: 18 }} animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 18 }} transition={{ delay: 0.84, duration: 0.55 }} className="rounded-2xl border border-white/10 bg-[#090a0f]/90 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
+            <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">Receipt reconciliation</p><p className="mt-1 text-sm font-semibold text-white">Provider evidence, not guesses.</p></div><RefreshCw className="h-4 w-4 text-sky-300" /></div>
+            <div className="mt-3 space-y-2">
+              {[['Command accepted', 'rzp_req_7b…', 'text-[#86f4bd]'], ['Delivery callback', 'Awaiting receipt', 'text-amber-200'], ['Outcome attribution', 'Ready to reconcile', 'text-neutral-300']].map(([label, value, accent]) => <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2"><span className="text-[10px] text-neutral-400">{label}</span><span className={`text-[10px] font-semibold ${accent}`}>{value}</span></div>)}
+            </div>
+          </motion.div>
+        </div>
+
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }} transition={{ delay: 0.98, duration: 0.5 }} className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 px-4 py-3 backdrop-blur-2xl">
+          <div className="flex items-center gap-5"><div><p className="text-[10px] uppercase tracking-[0.15em] text-neutral-500">Autonomous loop</p><p className="mt-0.5 text-xs font-semibold text-white">Plan → command → receipt → reconciled outcome</p></div><div className="h-7 w-px bg-white/10" /><p className="text-[11px] text-neutral-400">Every provider transition is recorded in the audit chain.</p></div>
+          <button type="button" onClick={onOpenDashboard} className="flex shrink-0 items-center gap-2 rounded-xl bg-[#00ff87] px-4 py-2.5 text-xs font-bold text-black shadow-[0_0_20px_rgba(0,255,135,0.25)] hover:bg-[#00ff87]/90">Open Dashboard <ArrowRight className="h-3.5 w-3.5" /></button>
         </motion.div>
       </div>
 
       {/* Network Lines */}
-      <div style={{ position: 'absolute', left: '35px', bottom: '-25px', width: '570px', height: '358px', zIndex: 10, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', left: '35px', bottom: '-25px', width: '570px', height: '358px', zIndex: 10, pointerEvents: 'none', opacity: 0.24 }}>
         <AnimatedNetworkLines isInView={isInView} color="#ffffff" />
       </div>
 
