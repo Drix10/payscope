@@ -22,7 +22,7 @@ const toJsonSchema = zodToJsonSchema as unknown as (schema: unknown, options: { 
 export class MeshModelAdapter implements ModelProvider {
   constructor(
     private readonly apiKey: string,
-    private readonly modelId = process.env.MESH_MODEL?.trim() || 'openai/gpt-4o-mini-2024-07-18',
+    private readonly modelId = process.env.MESH_MODEL?.trim() || 'nex-agi/nex-n2-mini',
     private readonly timeoutMs = 3_000,
     private readonly endpoint = 'https://api.meshapi.ai/v1/chat/completions',
     private readonly fetcher: Fetcher = fetch,
