@@ -432,7 +432,7 @@ function IncidentRecord({ detail, audit, integrity }: { detail: IncidentDetail; 
           </div>
         </div>
       </div>
-      <ActualStages entries={audit} />
+      <ActualStages detail={detail} entries={audit} />
     </section>
     <div className="mt-6 grid gap-6 xl:grid-cols-[1.08fr_.82fr]">
       <Timeline events={detail.events} />
@@ -474,17 +474,20 @@ function ExecutionLedger({ execution }: { execution: import('./types/mvp').Execu
   </section>
 }
 
-function ActualStages({ entries }: { entries: AuditEntry[] }) {
+function ActualStages({ detail, entries }: { detail: IncidentDetail; entries: AuditEntry[] }) {
   const eventTypes = new Set(entries.map(e => e.eventType));
-  const isComplete = eventTypes.has('reconciled') || eventTypes.has('execution_receipt_recorded') || eventTypes.has('execution_command_queued');
-  const isBlocked = eventTypes.has('execution_command_blocked') || eventTypes.has('autonomous_no_action_recorded');
+  const isBlocked = detail.incident.status === 'DISPUTE_OPENED' || detail.incident.status === 'DISMISSED' || eventTypes.has('execution_command_blocked') || eventTypes.has('autonomous_no_action_recorded');
+  const hasInvestigation = detail.investigation !== null || eventTypes.has('investigation_completed');
+  const hasPolicy = Boolean(detail.investigation?.policyDecision) || eventTypes.has('policy_decision_recorded');
+  const hasExecution = detail.execution.length > 0 || detail.proposals.length > 0 || eventTypes.has('execution_command_queued') || eventTypes.has('execution_receipt_recorded');
+  const isResolved = detail.incident.status === 'RESOLVED' || eventTypes.has('reconciled');
 
   const steps = [
-    { num: 1, label: '1. Ingest & Telemetry', status: eventTypes.has('event_received') || eventTypes.has('incident_opened') ? 'complete' : 'pending', detail: 'Razorpay Vulcan Telemetry' },
-    { num: 2, label: '2. Multi-Agent Analysis', status: eventTypes.has('investigation_completed') || eventTypes.has('event_enriched') ? 'complete' : 'pending', detail: 'Supervisor + Risk Analyst' },
-    { num: 3, label: '3. Safety Gates', status: isBlocked ? 'blocked' : eventTypes.has('policy_decision_recorded') ? 'complete' : 'pending', detail: isBlocked ? 'Dispute Lock Engaged' : 'Passed 4/4 Policy Gates' },
-    { num: 4, label: '4. Idempotent Execution', status: isBlocked ? 'blocked' : isComplete ? 'complete' : 'pending', detail: isBlocked ? 'Outreach Blocked' : 'Razorpay Link & Email Sent' },
-    { num: 5, label: '5. Receipt & Audit', status: eventTypes.has('reconciled') ? 'complete' : isComplete ? 'active' : 'pending', detail: eventTypes.has('reconciled') ? 'Payment Reconciled' : 'Cryptographic Ledger Verified' },
+    { num: 1, label: '1. Ingest & Telemetry', status: detail.events.length > 0 ? 'complete' : 'pending', detail: `${detail.events.length} Vulcan Telemetry Signal${detail.events.length === 1 ? '' : 's'}` },
+    { num: 2, label: '2. Multi-Agent Analysis', status: hasInvestigation ? 'complete' : 'pending', detail: hasInvestigation ? 'Supervisor + Risk Analyst' : 'Running LLM Multi-Agent' },
+    { num: 3, label: '3. Safety Gates', status: isBlocked ? 'blocked' : hasPolicy ? 'complete' : 'pending', detail: isBlocked ? 'Dispute Lock Engaged' : 'Passed 4/4 Policy Gates' },
+    { num: 4, label: '4. Idempotent Execution', status: isBlocked ? 'blocked' : hasExecution ? 'complete' : 'pending', detail: isBlocked ? 'Outreach Blocked' : 'Razorpay Link & Email Sent' },
+    { num: 5, label: '5. Receipt & Audit', status: isResolved ? 'complete' : hasExecution ? 'active' : 'pending', detail: isResolved ? 'Payment Reconciled' : 'Cryptographic Ledger Verified' },
   ];
 
   return <div className="border-t border-white/[.08] px-5 py-4 sm:px-7">

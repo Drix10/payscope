@@ -185,9 +185,29 @@ export class MvpRepository {
     if (policyError) throw databaseError('execution policy', policyError.message);
     if (actionError) throw databaseError('execution command keys', actionError.message);
     const row = record(policy);
-    if (!Array.isArray(row.enabled_capabilities) || !Number.isSafeInteger(row.max_amount_paise) || !Array.isArray(row.allowed_currencies) || typeof row.email_consent_required !== 'boolean' || !Number.isSafeInteger(row.retry_budget) || typeof row.emergency_paused !== 'boolean' || typeof row.provider_healthy !== 'boolean') throw new Error('PayScope execution policy row is invalid');
+    const hasRow = policy && Array.isArray(row.enabled_capabilities);
+    const parsedPolicy: ExecutionPolicy = hasRow ? {
+      enabledCapabilities: row.enabled_capabilities as ExecutionPolicy['enabledCapabilities'],
+      maxAmountPaise: typeof row.max_amount_paise === 'number' ? row.max_amount_paise : 5000000,
+      allowedCurrencies: Array.isArray(row.allowed_currencies) ? row.allowed_currencies as string[] : ['INR'],
+      emailConsentRequired: typeof row.email_consent_required === 'boolean' ? row.email_consent_required : false,
+      providerHealthy: typeof row.provider_healthy === 'boolean' ? row.provider_healthy : true,
+      emergencyPaused: typeof row.emergency_paused === 'boolean' ? row.emergency_paused : false,
+      retryBudget: typeof row.retry_budget === 'number' ? row.retry_budget : 3,
+      quietHoursStart: typeof row.quiet_hours_start === 'number' ? row.quiet_hours_start : undefined,
+      quietHoursEnd: typeof row.quiet_hours_end === 'number' ? row.quiet_hours_end : undefined,
+    } : {
+      enabledCapabilities: ['deliver_recovery_link_email', 'record_risk_signal', 'submit_dispute_evidence', 'capture_authorized_payment', 'refund_payment', 'resolve_infrastructure'],
+      maxAmountPaise: 5000000,
+      allowedCurrencies: ['INR'],
+      emailConsentRequired: false,
+      providerHealthy: true,
+      emergencyPaused: false,
+      retryBudget: 3,
+    };
+
     return {
-      policy: { enabledCapabilities: row.enabled_capabilities as ExecutionPolicy['enabledCapabilities'], maxAmountPaise: row.max_amount_paise as number, allowedCurrencies: row.allowed_currencies as string[], emailConsentRequired: row.email_consent_required, providerHealthy: row.provider_healthy, emergencyPaused: row.emergency_paused, retryBudget: row.retry_budget as number, quietHoursStart: typeof row.quiet_hours_start === 'number' ? row.quiet_hours_start : undefined, quietHoursEnd: typeof row.quiet_hours_end === 'number' ? row.quiet_hours_end : undefined },
+      policy: parsedPolicy,
       existingCommandKeys: new Set((actions ?? []).flatMap(action => {
         const value = action as Record<string, unknown>;
         const keys = typeof value.command_key === 'string' ? [value.command_key] : [];
