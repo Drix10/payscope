@@ -79,7 +79,33 @@ export default function App() {
     selectedIdRef.current = selectedId
   }, [selectedId])
 
-  const ordered = useMemo(() => [...incidents].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || riskOrder[a.riskTier] - riskOrder[b.riskTier]), [incidents])
+  const viewCounts: Record<string, number> = useMemo(() => ({
+    ALL: incidents.length,
+    OPEN: incidents.filter(i => i.status === 'OPEN' || i.status === 'ESCALATED').length,
+    MONITORING: incidents.filter(i => i.status === 'MONITORING' || i.riskTier === 'MONITOR').length,
+    DISPUTE_OPENED: incidents.filter(i => i.status === 'DISPUTE_OPENED').length,
+    RESOLVED: incidents.filter(i => i.status === 'RESOLVED' || i.status === 'HUMAN_RESOLVED' || i.recoveredAmountPaise > 0).length,
+    DISMISSED: incidents.filter(i => i.status === 'DISMISSED').length,
+    ESCALATED: incidents.filter(i => i.status === 'ESCALATED').length,
+    HUMAN_RESOLVED: incidents.filter(i => i.status === 'HUMAN_RESOLVED').length,
+  }), [incidents])
+
+  const ordered = useMemo(() => {
+    let list = incidents;
+    if (filter === 'OPEN') {
+      list = incidents.filter(i => i.status === 'OPEN' || i.status === 'ESCALATED');
+    } else if (filter === 'MONITORING') {
+      list = incidents.filter(i => i.status === 'MONITORING' || i.riskTier === 'MONITOR');
+    } else if (filter === 'DISPUTE_OPENED') {
+      list = incidents.filter(i => i.status === 'DISPUTE_OPENED');
+    } else if (filter === 'RESOLVED') {
+      list = incidents.filter(i => i.status === 'RESOLVED' || i.status === 'HUMAN_RESOLVED' || i.recoveredAmountPaise > 0);
+    } else if (filter === 'DISMISSED') {
+      list = incidents.filter(i => i.status === 'DISMISSED');
+    }
+    return [...list].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || riskOrder[a.riskTier] - riskOrder[b.riskTier]);
+  }, [incidents, filter])
+
   const totalAtRisk = useMemo(() => incidents.reduce((sum, incident) => sum + incident.remainingAmountPaise, 0), [incidents])
 
   const refresh = useCallback(async (isBackground = false) => {
@@ -93,7 +119,7 @@ export default function App() {
     try {
       const [nextHealth, nextIncidents, nextMetrics] = await Promise.all([
         mvpApi.health(controller.signal),
-        mvpApi.incidents(filter === 'ALL' ? undefined : filter, controller.signal),
+        mvpApi.incidents(undefined, controller.signal),
         mvpApi.dashboardMetrics(controller.signal).catch(() => null),
       ])
 
@@ -293,17 +319,20 @@ export default function App() {
           <p className="text-sm font-bold text-white">Incident feed</p>
           <p className="mt-1 text-xs leading-5 text-neutral-500">Read the AI record for every verified incident.</p>
           <div className="mt-4 flex flex-wrap gap-1.5" aria-label="Filter incidents">
-            {queueViews.map(view => (
-              <button
-                key={view.value}
-                type="button"
-                aria-pressed={filter === view.value}
-                onClick={() => changeFilter(view.value)}
-                className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition ${filter === view.value ? 'border-[#00ff87]/35 bg-[#00ff87]/10 text-[#b8f8d8]' : 'border-white/[.08] text-neutral-500 hover:bg-white/[.05] hover:text-neutral-200'}`}
-              >
-                {view.title}
-              </button>
-            ))}
+            {queueViews.map(view => {
+              const count = viewCounts[view.value] ?? 0;
+              return (
+                <button
+                  key={view.value}
+                  type="button"
+                  aria-pressed={filter === view.value}
+                  onClick={() => changeFilter(view.value)}
+                  className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition ${filter === view.value ? 'border-[#00ff87]/35 bg-[#00ff87]/10 text-[#b8f8d8]' : 'border-white/[.08] text-neutral-500 hover:bg-white/[.05] hover:text-neutral-200'}`}
+                >
+                  {view.title} <span className="text-[10px] opacity-60">({count})</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
