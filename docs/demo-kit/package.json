@@ -13,6 +13,7 @@
         "preflight": "node --env-file=.env scripts/demo-preflight.mjs",
         "demo": "node --env-file=.env scripts/run-demo.mjs",
         "verify": "node --env-file=.env scripts/verify-demo.mjs",
-        "self-test": "node scripts/self-test.mjs"
+        "self-test": "node scripts/self-test.mjs",
+        "regen": "node scripts/generate-test-payments.mjs"
     }
 }

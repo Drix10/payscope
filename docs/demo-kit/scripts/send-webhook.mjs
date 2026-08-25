@@ -1,20 +1,23 @@
 import crypto from 'node:crypto';
 
+const SAMPLE_AMOUNTS = [85000, 149900, 249900, 399900, 450000, 799000, 1250000];
+const randomAmount = () => SAMPLE_AMOUNTS[Math.floor(Math.random() * SAMPLE_AMOUNTS.length)];
+
 const scenarios = {
-    'failed-payment': ({ payment, referenceId, customerId = payment?.customer_id ?? `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, orderId = payment?.order_id ?? `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount = payment?.amount ?? 125000, currency = payment?.currency ?? 'INR' }) => ({
+    'failed-payment': ({ payment, referenceId, customerId = payment?.customer_id ?? `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, orderId = payment?.order_id ?? `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount = payment?.amount ?? randomAmount(), currency = payment?.currency ?? 'INR' }) => ({
         event: 'payment.failed', created_at: Math.floor(Date.now() / 1000), payload: {
             payment: { entity: { ...(payment ?? {}), id: payment?.id ?? `pay_demo_failed_${Date.now()}`, order_id: orderId, customer_id: customerId, amount, currency, status: 'failed', method: payment?.method ?? 'card', created_at: payment?.created_at ?? Math.floor(Date.now() / 1000), error_reason: payment?.error_reason ?? 'payment_failed' } },
             order: { entity: { id: orderId, customer_id: customerId, amount, currency, status: 'attempted', created_at: Math.floor(Date.now() / 1000) } },
         },
     }),
     'eligible-failure': ({ ...input }) => scenarios['failed-payment']({ ...input, orderId: input.orderId ?? `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}` }),
-    dispute: ({ customerId = `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, orderId = `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount = 125000, currency = 'INR' }) => ({
+    dispute: ({ customerId = `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, orderId = `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount = randomAmount(), currency = 'INR' }) => ({
         event: 'payment.dispute.created', created_at: Math.floor(Date.now() / 1000), payload: {
             payment: { entity: { id: `pay_demo_dispute_${Date.now()}`, order_id: orderId, customer_id: customerId, amount, currency, status: 'disputed', method: 'card', created_at: Math.floor(Date.now() / 1000) } },
             order: { entity: { id: orderId, customer_id: customerId, amount, currency, status: 'paid', created_at: Math.floor(Date.now() / 1000) } },
         },
     }),
-    'payment-link-paid': ({ referenceId, payment, customerId = payment?.customer_id ?? `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount = payment?.amount ?? 125000, currency = payment?.currency ?? 'INR' }) => {
+    'payment-link-paid': ({ referenceId, payment, customerId = payment?.customer_id ?? `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount = payment?.amount ?? randomAmount(), currency = payment?.currency ?? 'INR' }) => {
         const validRef = (referenceId && /^ps_[a-f0-9]{32}$/i.test(referenceId)) ? referenceId.toLowerCase() : `ps_${crypto.randomBytes(16).toString('hex')}`;
         return {
             event: 'payment_link.paid', created_at: Math.floor(Date.now() / 1000), payload: {
