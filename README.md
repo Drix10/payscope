@@ -1,7 +1,7 @@
 # PayScope
 
 <p align="center">
-  <strong>An autonomous payment-operations agent for Razorpay merchants.</strong><br />
+  <strong>An autonomous payment-operations platform for Razorpay merchants.</strong><br />
   From a signed payment signal to an evidence-backed, policy-bounded incident record.
 </p>
 
@@ -14,28 +14,16 @@
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-RLS%20%2B%20Audit-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
 </p>
 
-PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution loop. Its multi-agent AI system investigates evidence under strict structured-output contracts (`json_schema: { strict: true }`); deterministic policy issues an idempotent provider command, verifies the provider receipt, reconciles callbacks, and records the final merchant outcome.
+PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution loop. It correlates raw payment signals into unified incident timelines, runs multi-agent root-cause analysis, and executes policy-bounded recovery actions with verified Razorpay callback reconciliation.
 
-## Key Architectural Pillars
+---
 
-1. **⚡ Razorpay Vulcan AI Foundation Model Integration:**
-   - PayScope directly ingests **Razorpay Vulcan** real-time payment intelligence (trained on 3T data points across 4B transactions with 29ms inference latency).
-   - Ingests Vulcan's real-time acquirer health scores (`gatewayHealthScore`), network fraud detection, and failure attributions (`gateway_degraded`, `issuer_timeout`, `fraud_block`, `customer_drop`).
-   - Tagged as `vulcan_direct` across the enrichment layer and dashboard UI.
+## Key Pillars
 
-2. **🕸️ Mesh API Structured Multi-Agent Stack:**
-   - Powered by **Mesh API** (`https://api.meshapi.ai/v1/chat/completions`) using strict JSON Schema enforcement (`response_format: { type: 'json_schema', json_schema: { strict: true } }`).
-   - **Supervisor Agent:** Directs evidence priorities, incident risk tiers (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), and constraints.
-   - **Risk Analyst Agent:** Evaluates causal attribution narratives, confidence rationale, alternative hypotheses, and evidence gaps.
-   - **Recovery Planner Agent:** Formulates finite, idempotent action proposals (e.g. Razorpay Payment Links).
-
-3. **🛡️ Non-LLM Deterministic Policy Safety Engine:**
-   - Hard-coded non-LLM policy engine validates canonical payment state, amount caps, customer consent, dispute status, and contact limit ceilings **before** emitting provider commands.
-   - Prevents unauthorized outreach, legal risks on open disputes, or spamming customers during active acquiring bank outages.
-
-4. **🔄 Idempotent Execution & Callback Reconciliation:**
-   - Generates unique tracking references (`ps_...`) embedded directly in Razorpay Payment Links.
-   - Reconciles signed `payment_link.paid` webhooks to confirm payment recovery into an immutable append-only audit trail.
+1. **Razorpay Vulcan Intelligence Ingestion:** Directly ingests Razorpay Vulcan real-time payment telemetry, extracting acquirer health metrics, failure attributions, and network risk flags across the enrichment layer and dashboard UI.
+2. **Multi-Agent Root-Cause Analysis:** Uses dedicated agent roles (Supervisor, Risk Analyst, Recovery Planner) via Mesh API to evaluate causal narratives, alternative hypotheses, and evidence confidence without speculative execution.
+3. **Deterministic Policy Safety Engine:** Hard-coded policy rules validate merchant consent, dispute locks, amount caps, and contact frequency limits before any provider command is dispatched.
+4. **Idempotent Execution & Callback Reconciliation:** Emits traceable recovery actions (e.g. Razorpay Payment Links) with unique reference tracking (`ps_...`), confirming recovery only upon signed callback verification.
 
 ---
 
@@ -44,26 +32,26 @@ PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution
 <table>
   <tr>
     <td width="50%" valign="top">
-      <strong>01 — Command center</strong><br />
-      The landing surface explains the operating model before a merchant opens the product.<br /><br />
-      <img src="docs/screenshots/01-command-center.png" alt="PayScope landing page" />
+      <strong>01 — Spatial Showcase Canvas</strong><br />
+      An interactive spatial scrolling overview presenting system architecture, signal telemetry, and policy controls.<br /><br />
+      <img src="docs/screenshots/01-command-center.png" alt="PayScope landing showcase" />
     </td>
     <td width="50%" valign="top">
-      <strong>02 — Incident feed</strong><br />
-      A readable timeline of payment incidents, lifecycle, risk level, and at-risk amount.<br /><br />
+      <strong>02 — Real-Time Incident Feed</strong><br />
+      Unified incident records sorted by risk tier, current status, and total monetary value at risk.<br /><br />
       <img src="docs/screenshots/02-incident-feed.png" alt="PayScope incident feed" />
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <strong>03 — AI decision record</strong><br />
-      Evidence, causal reasoning, alternatives, policy gates, prerequisites, and bounded outcome in one incident detail.<br /><br />
+      <strong>03 — AI Decision Record</strong><br />
+      Detailed evidence breakdown, causal attributions, alternative hypotheses, and policy evaluation gates.<br /><br />
       <img src="docs/screenshots/03-ai-decision-record.png" alt="PayScope AI decision record" />
     </td>
     <td width="50%" valign="top">
-      <strong>04 — Autonomous execution</strong><br />
-      An incident becomes a real command, provider receipt, reconciled callback, and verified outcome by our AI Agent system.<br /><br />
-      <img src="docs/screenshots/04-autonomous-execution.png" alt="PayScope autonomous execution engine" />
+      <strong>04 — Autonomous Execution Ledger</strong><br />
+      Provider commands, delivery receipts, and verified callback reconciliation tracked in an immutable audit trail.<br /><br />
+      <img src="docs/screenshots/04-autonomous-execution.png" alt="PayScope execution ledger" />
     </td>
   </tr>
 </table>
@@ -77,101 +65,98 @@ PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution
 | **Track selection** | AI agents for payment operations |
 | **Project name / title** | **PayScope — Autonomous Payment Operations Agent** |
 | **GitHub repository** | [github.com/Drix10/payscope](https://github.com/Drix10/payscope) |
-| **Project objective** | Detect payment incidents from signed Razorpay events, enrich with Razorpay Vulcan AI signals, reason over evidence using Mesh API multi-agent stack, autonomously execute merchant-authorized recovery paths, and record verified reconciliation proof. |
-| **What it solves** | Payment failure signals are noisy, scattered, and hard to resolve. PayScope correlates them into unified incidents, distinguishes bank infrastructure downtimes from customer drops, executes the appropriate recovery link, and makes the reasoning and provider results 100% explainable. |
+| **Project objective** | Ingest signed Razorpay events, enrich with Razorpay Vulcan intelligence, analyze evidence using a structured multi-agent pipeline, execute authorized recovery actions, and verify outcomes via signed callbacks. |
+| **What it solves** | Payment failures are noisy and hard to resolve manually. PayScope correlates raw webhooks into unified incidents, distinguishes bank outages from customer drops, executes recovery links, and makes every action 100% audit-verifiable. |
 
 ---
 
-## Technical Architecture
+## System Architecture
 
 ```text
 Razorpay Webhook (HMAC SHA-256 Signed)
    │
    ▼
-Razorpay Vulcan AI Foundation Model (29ms Network Intelligence & Attribution)
+Razorpay Vulcan Intelligence Layer (Acquirer Health & Failure Attribution)
    │
    ▼
-PayScope Durable Queue & Correlation Engine (Order ID, Customer ID, 15-min Window)
+Correlation & Deduplication Engine (Order ID, Customer Hash, Time Window)
    │
    ▼
-Mesh API Multi-Agent Investigation Stack (Supervisor → Risk Analyst → Recovery Planner)
+Multi-Agent Analysis Engine (Supervisor → Risk Analyst → Recovery Planner)
    │
    ▼
-Non-LLM Deterministic Policy Safety Engine (Consent, Dispute Blocks, Contact Limits)
+Deterministic Policy Engine (Safety Gates, Dispute Locks, Contact Ceilings)
    │
    ▼
-Provider Command Dispatch & Receipt Reconciliation (Razorpay Payment Link + SMTP)
+Provider Execution Adapters (Razorpay Payment Links & Notification Delivery)
    │
    ▼
-Read-Only React Command Dashboard (`⚡ Razorpay Vulcan AI Direct` Badge + Audit Trail)
+Callback Reconciliation & Append-Only Audit Trail
 ```
 
 ---
 
-## Agent Hierarchy & Authority
+## System Components & Authority Boundaries
 
-| Layer | Produces | Authority Boundary |
+| Component | Function | Authority Boundary |
 |---|---|---|
-| **Supervisor Agent** | Incident objectives, evidence priorities, risk tiering, constraints | Directs analysis only; cannot execute commands |
-| **Risk Analyst Agent** | Causal narrative, confidence rationale, alternative hypotheses, evidence gaps | Reads tenant-scoped facts only; no side effects |
-| **Recovery Planner Agent** | Action proposals, prerequisites, expected receipts, email copy intent | Selects from configured capabilities only |
-| **Deterministic Policy Engine** | Hard permit / restrict / block result and command parameters | Non-LLM authority gatekeeper before execution |
-| **Provider Adapters** | Idempotent Razorpay Payment Link + SMTP command & receipt state | Executes configured Razorpay and SMTP operations |
+| **Supervisor Agent** | Synthesizes incident context, sets investigation objectives, and establishes risk constraints. | Analytical only; cannot execute commands or alter policies. |
+| **Risk Analyst Agent** | Analyzes payment failure telemetry, merchant metrics, and causal factors. | Analytical only; reads tenant data without side effects. |
+| **Recovery Planner Agent** | Recommends recovery options based on failure attribution and customer state. | Formulates proposals only; subject to policy approval. |
+| **Deterministic Policy Engine** | Evaluates hard business rules, dispute blocks, and outreach ceilings. | Gatekeeper; holds final execution authority. |
+| **Execution Workers** | Dispatches authorized provider commands and tracks provider receipts. | Executes approved actions idempotently. |
 
 ---
 
-## Run Locally & Demo Operator Studio
+## Local Setup & Demo Studio
 
 ### Prerequisites
-- Node.js 20 or newer
+- Node.js 20+
 - npm
-- Supabase Project (SQL migrations provided in `backend/supabase/migrations`)
+- PostgreSQL / Supabase instance (SQL migrations located in `backend/supabase/migrations`)
 
-### Backend Setup
+### 1. Backend Setup
 ```bash
 cd backend
-copy .env.example .env
+cp .env.example .env
 npm install
 npm run build
 npm run start
 ```
 
-### Frontend Setup
+### 2. Frontend Setup
 ```bash
 cd frontend
-copy .env.example .env
+cp .env.example .env
 npm install
 npm run build
 npm run dev
 ```
 
-### Demo Operator Studio (5-Minute Standalone Kit)
-To run the visual cyber terminal operator kit for video recording:
+### 3. Demo Operator Studio
+A standalone local harness for triggering signed webhook payloads and inspecting live scenarios:
 ```bash
 cd docs/demo-kit
 npm start
 ```
-- Open `http://127.0.0.1:3050` to trigger signed Razorpay webhooks live.
-- Helper script to generate real Razorpay Test payment IDs:
-  ```bash
-  node docs/demo-kit/scripts/generate-test-payments.mjs
-  ```
+Access the operator UI at `http://127.0.0.1:3050`.
 
----
-
-## Verification
-
+To generate real Razorpay Test payment references for live testing:
 ```bash
-# Backend unit & ETE agent suite (16/16 tests)
-cd backend && npm run test
-
-# Frontend production build
-cd frontend && npm run build
-
-# Demo kit HMAC self-test
-node docs/demo-kit/scripts/self-test.mjs
+node docs/demo-kit/scripts/generate-test-payments.mjs
 ```
 
 ---
 
-Designed for the **Razorpay AI Buildathon** — making payment operations autonomous, verifiable, and 100% explainable.
+## Verification & Testing
+
+```bash
+# Backend unit & integration test suite (16 tests)
+cd backend && npm run test
+
+# Frontend TypeScript compilation & build check
+cd frontend && npm run build
+
+# Demo kit HMAC signature & replay test
+node docs/demo-kit/scripts/self-test.mjs
+```

@@ -50,7 +50,8 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     } : undefined;
     output = { plan: supervisor, risk, recovery, policy: PolicyDecisionSchema.parse(evaluatePolicy(detail.incident, risk.analysis, recovery.plan, [policyContext.policy], policyContext.stats, policyContext.contact, directOptions)) };
   } catch (error) {
-    await repository.recordInvestigationUnavailable(job.organizationId, job.incidentId, job.triggerEventId, `Agent investigation unavailable: ${error instanceof Error ? error.name : 'unknown_error'}`);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    await repository.recordInvestigationUnavailable(job.organizationId, job.incidentId, job.triggerEventId, `Agent investigation unavailable: ${errorMsg}`);
     return;
   }
   const proposals = output.policy.permittedActions.map(action => {

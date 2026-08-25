@@ -430,7 +430,16 @@ function ExecutionLedger({ execution }: { execution: import('./types/mvp').Execu
 }
 
 function ActualStages({ entries }: { entries: AuditEntry[] }) {
-  const stages = entries.filter(entry => ['event_received', 'event_enriched', 'incident_opened', 'policy_decision_recorded', 'execution_command_queued', 'execution_receipt_recorded', 'execution_command_blocked', 'autonomous_action_simulated', 'autonomous_no_action_recorded', 'investigation_completed', 'callback_verified', 'reconciled'].includes(entry.eventType)).slice(-4);
+  const allowed = ['event_received', 'event_enriched', 'incident_opened', 'policy_decision_recorded', 'execution_command_queued', 'execution_receipt_recorded', 'execution_command_blocked', 'autonomous_action_simulated', 'autonomous_no_action_recorded', 'investigation_completed', 'callback_verified', 'reconciled'];
+  const matched = entries.filter(entry => allowed.includes(entry.eventType));
+  const map = new Map<string, AuditEntry>();
+  for (const entry of matched) {
+    map.set(entry.eventType, entry);
+  }
+  const stages = Array.from(map.values())
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-4);
+
   return <div className="border-t border-white/[.08] px-5 py-4 sm:px-7">
     <p className="text-[10px] font-bold uppercase tracking-[.16em] text-neutral-500">Execution stages — investigation → policy → command → receipt → reconciliation</p>
     {stages.length ? (
@@ -525,6 +534,17 @@ function DecisionRow({ icon, title, detail }: { icon: React.ReactNode; title: st
 }
 
 function AuditTrail({ entries, integrity }: { entries: AuditEntry[]; integrity: AuditIntegrity | null }) {
+  const grouped: Array<{ entry: AuditEntry; count: number }> = [];
+  for (const entry of entries) {
+    const last = grouped[grouped.length - 1];
+    if (last && last.entry.eventType === entry.eventType && last.entry.decision === entry.decision && last.entry.rationale === entry.rationale) {
+      last.count += 1;
+      last.entry = entry;
+    } else {
+      grouped.push({ entry, count: 1 });
+    }
+  }
+
   return <section className="mt-6 rounded-2xl border border-white/[.08] bg-white/[.015] p-5 sm:p-6">
     <div className="flex items-center justify-between">
       <div>
@@ -534,13 +554,20 @@ function AuditTrail({ entries, integrity }: { entries: AuditEntry[]; integrity: 
       <span className={`text-xs ${integrity?.status === 'intact' ? 'text-[#aaffd5]' : 'text-amber-100'}`}>{integrity?.status ?? 'checking'}</span>
     </div>
     <ol className="mt-5 space-y-3">
-      {entries.length ? entries.map(entry => (
+      {grouped.length ? grouped.map(({ entry, count }) => (
         <li key={entry.id} className="border-l border-[#00ff87]/35 pl-4">
           <div className="flex flex-wrap justify-between gap-2">
-            <p className="text-sm font-semibold text-neutral-100">{label(entry.decision)}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-neutral-100">{label(entry.decision)}</p>
+              {count > 1 && (
+                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-neutral-400">
+                  {count}x repeated
+                </span>
+              )}
+            </div>
             <span className="text-[11px] text-neutral-500">{stamp(entry.createdAt)}</span>
           </div>
-          <p className="mt-1 text-xs leading-5 text-neutral-400">{entry.rationale}</p>
+          <p className="mt-1 text-xs leading-5 text-neutral-400">{entry.rationale || entry.decision}</p>
         </li>
       )) : <li className="text-sm text-neutral-500">No audit entries were returned for this incident.</li>}
     </ol>
@@ -599,12 +626,26 @@ function EmptyDetail({ loading }: { loading: boolean }) {
 }
 
 function outcomeText(status: Incident['status'], proposal: Proposal | undefined) {
-  if (!proposal) return label(status)
+  if (!proposal) {
+    if (status === 'DISPUTE_OPENED') return 'Dispute Open — Outreach Blocked'
+    if (status === 'RESOLVED') return 'Payment Recovered & Reconciled'
+    if (status === 'MONITORING') return 'Monitoring Active Signals'
+    if (status === 'DISMISSED') return 'No Action Required (Policy Blocked)'
+    if (status === 'OPEN') return 'AI Investigating & Evaluating'
+    return label(status)
+  }
   const state = ('state' in proposal ? proposal.state : proposal.status) as string
   const m: Record<string, string> = {
-    simulated: 'Legacy simulation (not executed)', accepted: 'SMTP accepted — not delivered', confirmed: 'Confirmed recovery',
-    unreconciled: 'Unreconciled — no blind resend', queued: 'Queued', dispatching: 'Dispatching', retry_scheduled: 'Retry scheduled',
-    compensating: 'Compensating', cancelled: 'Cancelled', failed: 'Failed'
+    simulated: 'Simulation Mode (Not Executed)',
+    accepted: 'SMTP Accepted — Awaiting Callback',
+    confirmed: 'Confirmed Payment Recovery',
+    unreconciled: 'Unreconciled — Awaiting Razorpay Proof',
+    queued: 'Execution Command Queued',
+    dispatching: 'Dispatching Provider Command',
+    retry_scheduled: 'Retry Scheduled',
+    compensating: 'Compensating Action Recorded',
+    cancelled: 'Outreach Cancelled by Policy',
+    failed: 'Command Execution Failed',
   }
   return m[state] ?? label(state)
 }
