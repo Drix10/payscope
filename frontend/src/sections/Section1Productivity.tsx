@@ -131,9 +131,9 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
       <div
         style={{
           position: 'absolute',
-          top: '40px',
-          left: '65px',
-          width: '480px',
+          top: '36px',
+          left: '48px',
+          width: '445px',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 10,
@@ -144,7 +144,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          style={{ position: 'relative', marginBottom: '20px' }}
+          style={{ position: 'relative', marginBottom: '18px' }}
         >
           <div className="inline-flex items-center gap-2.5 rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-4 py-1.5 backdrop-blur-xl shadow-[0_0_20px_rgba(0,255,135,0.2)]">
             <span className="relative flex h-2 w-2">
@@ -160,7 +160,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
         <h1
           style={{
             fontFamily: 'var(--font-jakarta)',
-            fontSize: '48px',
+            fontSize: '44px',
             fontWeight: 300,
             lineHeight: 1.08,
             letterSpacing: '-1.2px',
@@ -175,12 +175,12 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
         <p
           style={{
             fontFamily: 'var(--font-jakarta)',
-            fontSize: '24px',
+            fontSize: '22px',
             fontWeight: 300,
             lineHeight: 1.25,
             letterSpacing: '-0.5px',
             margin: 0,
-            marginBottom: '16px',
+            marginBottom: '14px',
           }}
         >
           <BlurFadeWords
@@ -198,12 +198,12 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
         <p
           style={{
             fontFamily: 'var(--font-jakarta)',
-            fontSize: '15px',
+            fontSize: '14px',
             fontWeight: 300,
             lineHeight: 1.45,
             color: 'rgba(255,255,255,0.68)',
             margin: 0,
-            maxWidth: '430px',
+            maxWidth: '420px',
           }}
         >
           <BlurFadeWords text="Instant Protection: Every webhook is verified for authenticity before processing." baseDelay={0.9} isInView={isInView} />
@@ -216,9 +216,9 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
       <div
         style={{
           position: 'absolute',
-          left: '35px',
+          left: '25px',
           bottom: '-25px',
-          width: '570px',
+          width: '540px',
           height: '358px',
           zIndex: 10,
           pointerEvents: 'none',
@@ -227,38 +227,37 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
         <AnimatedNetworkLines isInView={isInView} color="#24FF95" />
       </div>
 
-      {/* ── Right Half Snappy Lightweight Cards ── */}
+      {/* ── Right Half Cards Container ── */}
       <div
         style={{
           position: 'absolute',
-          top: 0,
-          right: 0,
-          width: '50%',
-          height: '100%',
+          top: '32px',
+          bottom: '32px',
+          left: '518px',
+          right: '48px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px',
-          padding: '24px 28px 24px 73px',
+          gap: '14px',
           boxSizing: 'border-box',
           perspective: '1000px',
           zIndex: 15,
         }}
       >
         {/* Top Card: Cryptographic Verification */}
-        <div style={{ flex: 0.93, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
           <motion.div
-            initial={{ opacity: 0, x: -60, scale: 0.95 }}
-            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: -60, scale: 0.95 }}
+            initial={{ opacity: 0, x: 30, scale: 0.96 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 30, scale: 0.96 }}
             transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9 } : { duration: 0 }}
             style={{ willChange: 'transform, opacity' }}
-            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-[#00ff87]/30 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
+            className="smoked-glass relative h-full w-full rounded-2xl p-5 flex flex-col justify-between border border-[#00ff87]/30 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
           >
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#00ff87] uppercase tracking-wider">
-                  <Zap className="h-3.5 w-3.5" /> Instant Webhook Verification
+                  <Zap className="h-3.5 w-3.5 shrink-0" /> Instant Webhook Verification
                 </span>
-                <span className="rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2 py-0.5 text-[9px] font-bold text-[#b8ffd9]">
+                <span className="shrink-0 rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2 py-0.5 text-[9px] font-bold text-[#b8ffd9]">
                   HMAC SHA-256
                 </span>
               </div>
@@ -267,12 +266,12 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
                 Verifies secret Razorpay HMAC signatures instantly. Blocks fake webhooks and duplicate retries before they touch your database.
               </p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
-              <div className="flex justify-between text-xs">
+            <div className="rounded-xl border border-white/10 bg-black/40 p-3 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
                 <span className="text-neutral-400">Razorpay Signature</span>
                 <span className="font-mono font-bold text-[#00ff87]">VERIFIED (200 OK)</span>
               </div>
-              <div className="mt-2 flex justify-between text-xs">
+              <div className="flex items-center justify-between text-xs">
                 <span className="text-neutral-400">Duplicate Protection</span>
                 <span className="font-mono text-neutral-300">Durable Lease Lock</span>
               </div>
@@ -281,20 +280,20 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
         </div>
 
         {/* Bottom Card: At-Risk Money */}
-        <div style={{ flex: 1.07, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
           <motion.div
-            initial={{ opacity: 0, x: -60, scale: 0.95 }}
-            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: -60, scale: 0.95 }}
+            initial={{ opacity: 0, x: 30, scale: 0.96 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 30, scale: 0.96 }}
             transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9, delay: 0.15 } : { duration: 0 }}
             style={{ willChange: 'transform, opacity' }}
-            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-white/10 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
+            className="smoked-glass relative h-full w-full rounded-2xl p-5 flex flex-col justify-between border border-white/10 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
           >
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-neutral-300 uppercase tracking-wider">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#00ff87]" /> Real-Time Merchant Visibility
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#00ff87]" /> Real-Time Merchant Visibility
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-neutral-400">
+                <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-neutral-400">
                   Live Feed
                 </span>
               </div>

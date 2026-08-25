@@ -128,12 +128,12 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
       />
 
       {/* ── Text block ── */}
-      <div style={{ position: 'absolute', top: '40px', left: '65px', width: '480px', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
+      <div style={{ position: 'absolute', top: '36px', left: '48px', width: '445px', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
         <motion.div
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          style={{ position: 'relative', marginBottom: '20px' }}
+          style={{ position: 'relative', marginBottom: '18px' }}
         >
           <div className="inline-flex items-center gap-2.5 rounded-full border border-[#4C6DFF]/30 bg-[#4C6DFF]/10 px-4 py-1.5 backdrop-blur-xl shadow-[0_0_20px_rgba(76,109,255,0.2)]">
             <span className="relative flex h-2 w-2">
@@ -146,10 +146,10 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
           </div>
         </motion.div>
 
-        <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '48px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '8px' }}>
+        <h1 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '44px', fontWeight: 300, color: '#ffffff', margin: 0, marginBottom: '8px' }}>
           <BlurFadeWords text="Smart AI. Zero Risk." baseDelay={0.5} isInView={isInView} />
         </h1>
-        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '24px', fontWeight: 300, margin: 0, marginBottom: '16px' }}>
+        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '22px', fontWeight: 300, margin: 0, marginBottom: '14px' }}>
           <BlurFadeWords
              text="Multi-agent AI investigates causes under strict safety guardrails."
             baseDelay={0.8}
@@ -161,7 +161,7 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
             }}
           />
         </p>
-        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '15px', fontWeight: 300, color: 'rgba(255,255,255,0.68)', margin: 0, maxWidth: '420px', lineHeight: 1.45 }}>
+        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '14px', fontWeight: 300, color: 'rgba(255,255,255,0.68)', margin: 0, maxWidth: '420px', lineHeight: 1.45 }}>
           <BlurFadeWords text="Multi-Agent Hierarchy: Supervisor, Analyst & Planner diagnose gateway downtime vs customer drops." baseDelay={1.1} isInView={isInView} />
           <br />
           <BlurFadeWords text="Deterministic Policy: Enforces customer consent, contact limits & dispute blocks before any action." baseDelay={1.45} isInView={isInView} />
@@ -169,42 +169,41 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
       </div>
 
       {/* ── Diagram block ── */}
-      <div style={{ position: 'absolute', left: '35px', bottom: '-25px', width: '570px', height: '358px', zIndex: 10, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', left: '25px', bottom: '-25px', width: '540px', height: '358px', zIndex: 10, pointerEvents: 'none' }}>
         <AnimatedNetworkLines isInView={isInView} color="#4C6DFF" />
       </div>
 
-      {/* ── Right Half Snappy Lightweight Cards ── */}
+      {/* ── Right Half Cards Container ── */}
       <div
         style={{
           position: 'absolute',
-          top: 0,
-          right: 0,
-          width: '50%',
-          height: '100%',
+          top: '32px',
+          bottom: '32px',
+          left: '518px',
+          right: '48px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px',
-          padding: '24px 28px 24px 73px',
+          gap: '14px',
           boxSizing: 'border-box',
           perspective: '1000px',
           zIndex: 15,
         }}
       >
         {/* Top Card: Agent Stack */}
-        <div style={{ flex: 0.93, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
           <motion.div
-            initial={{ opacity: 0, x: -60, scale: 0.95 }}
-            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: -60, scale: 0.95 }}
+            initial={{ opacity: 0, x: 30, scale: 0.96 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 30, scale: 0.96 }}
             transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9 } : { duration: 0 }}
             style={{ willChange: 'transform, opacity' }}
-            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-[#4C6DFF]/30 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
+            className="smoked-glass relative h-full w-full rounded-2xl p-5 flex flex-col justify-between border border-[#4C6DFF]/30 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
           >
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#A8C4FF] uppercase tracking-wider">
-                  <Bot className="h-3.5 w-3.5 text-[#4C6DFF]" /> Multi-Agent AI Hierarchy
+                  <Bot className="h-3.5 w-3.5 shrink-0 text-[#4C6DFF]" /> Multi-Agent AI Hierarchy
                 </span>
-                <span className="rounded-full border border-[#4C6DFF]/30 bg-[#4C6DFF]/10 px-2 py-0.5 text-[9px] font-bold text-[#A8C4FF]">
+                <span className="shrink-0 rounded-full border border-[#4C6DFF]/30 bg-[#4C6DFF]/10 px-2 py-0.5 text-[9px] font-bold text-[#A8C4FF]">
                   Structured AI
                 </span>
               </div>
@@ -213,12 +212,12 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
                 Specialized sub-agents return structured JSON outputs detailing evidence gaps, confidence rationale, and alternative hypotheses.
               </p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/40 p-3 space-y-1.5">
-              <div className="flex justify-between text-xs">
+            <div className="rounded-xl border border-white/10 bg-black/40 p-3 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
                 <span className="text-neutral-400">Root Cause Diagnosis</span>
                 <span className="font-mono text-[#A8C4FF]">Gateway Degraded / Timeout</span>
               </div>
-              <div className="flex justify-between text-xs">
+              <div className="flex items-center justify-between text-xs">
                 <span className="text-neutral-400">Zero Hallucination</span>
                 <span className="font-mono text-neutral-300">Terminal Schema Contracts</span>
               </div>
@@ -227,20 +226,20 @@ export function Section3({ isInView: propIsInView }: { isInView?: boolean } = {}
         </div>
 
         {/* Bottom Card: Policy Gates */}
-        <div style={{ flex: 1.07, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
           <motion.div
-            initial={{ opacity: 0, x: -60, scale: 0.95 }}
-            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: -60, scale: 0.95 }}
+            initial={{ opacity: 0, x: 30, scale: 0.96 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 30, scale: 0.96 }}
             transition={isInView ? { type: 'spring', stiffness: 50, damping: 20, mass: 0.9, delay: 0.15 } : { duration: 0 }}
             style={{ willChange: 'transform, opacity' }}
-            className="smoked-glass relative h-full w-full rounded-3xl p-6 flex flex-col justify-between border border-white/10 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
+            className="smoked-glass relative h-full w-full rounded-2xl p-5 flex flex-col justify-between border border-white/10 bg-[#090a0f]/90 shadow-2xl backdrop-blur-xl"
           >
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-neutral-300 uppercase tracking-wider">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#4C6DFF]" /> Deterministic Policy Engine
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#4C6DFF]" /> Deterministic Policy Engine
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-neutral-400">
+                <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-neutral-400">
                   Strict Safety
                 </span>
               </div>
