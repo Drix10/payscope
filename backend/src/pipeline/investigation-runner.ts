@@ -9,7 +9,7 @@ import { runRiskAnalyst } from './risk-analyst';
 import { paymentLinkReferenceForProposalDirect } from '../evaluation/attribution';
 import { logger } from '../observability';
 
-const AGENT_PIPELINE_DEADLINE_MS = 20_000;
+const AGENT_PIPELINE_DEADLINE_MS = 35_000;
 
 /** Executes only bounded agents and persists either a validated result or a safe escalation. */
 export async function runDurableInvestigation(repository: MvpRepository, provider: ModelProvider, job: QueueJob, options: { directExecution?: boolean } = {}): Promise<void> {

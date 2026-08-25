@@ -19,6 +19,6 @@ export const ENRICHMENT_TIMEOUT_MS = 5_000;
 // Mesh may take several seconds to honor a provider-side JSON Schema. Keep
 // the end-to-end agent run under the MVP's 10-second target without treating
 // normal gateway latency as a failed payment investigation.
-export const MODEL_TIMEOUT_MS = 15_000;
-export const QUEUE_LOCK_TIMEOUT_MS = 30_000;
+export const MODEL_TIMEOUT_MS = 25_000;
+export const QUEUE_LOCK_TIMEOUT_MS = 45_000;
 export const QUEUE_RETRY_DELAYS_MS = [1_000, 5_000, 30_000] as const;

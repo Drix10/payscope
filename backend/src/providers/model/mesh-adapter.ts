@@ -23,7 +23,7 @@ export class MeshModelAdapter implements ModelProvider {
   constructor(
     private readonly apiKey: string,
     private readonly modelId = process.env.MESH_MODEL?.trim() || 'nex-agi/nex-n2-mini',
-    private readonly timeoutMs = 3_000,
+    private readonly timeoutMs = 25_000,
     private readonly endpoint = 'https://api.meshapi.ai/v1/chat/completions',
     private readonly fetcher: Fetcher = fetch,
   ) {}
@@ -32,7 +32,7 @@ export class MeshModelAdapter implements ModelProvider {
     if (!Number.isSafeInteger(request.maxTokens) || request.maxTokens < 1 || request.maxTokens > 768) throw new Error('Model output token budget must be between 1 and 768');
     if (request.timeoutMs !== undefined && (!Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1)) throw new Error('Model request timeout must be a positive integer');
     assertInputWithinBudget(`${request.systemPrompt}\n\n${request.userContent}`, request.maxInputTokens);
-    const timeoutMs = request.timeoutMs === undefined ? this.timeoutMs : Math.min(this.timeoutMs, request.timeoutMs);
+    const timeoutMs = request.timeoutMs !== undefined ? request.timeoutMs : this.timeoutMs;
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.apiKey}`, 'content-type': 'application/json' },
