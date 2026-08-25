@@ -36,7 +36,7 @@ export class PipelineJobProcessor {
     } catch (error) {
       // An unavailable/malformed external signal is an auditable degraded mode,
       // not a reason to discard the verified payment event.
-      logger.warn({ eventId: event.id, errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope enrichment unavailable');
+      logger.warn({ eventId: event.id, errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope enrichment unavailable');
     }
     await this.repository.completeEnrichmentAndEnqueueCorrelation(event, enrichment);
   }

@@ -65,7 +65,10 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
     let payment: RazorpayPayment = {};
     let downtimes: RazorpayDowntimes = {};
     if (this.client && event.paymentId) {
-      [payment, downtimes] = await Promise.all([this.client.fetchPayment(event.paymentId), this.client.fetchDowntimes()]);
+      [payment, downtimes] = await Promise.all([
+        this.client.fetchPayment(event.paymentId).catch(() => ({})),
+        this.client.fetchDowntimes().catch(() => ({})),
+      ]);
     }
     const source = { ...event.providerData, ...allowlistedPaymentFields(payment) };
     const errorSource = string(source.error_source)?.toLowerCase();
