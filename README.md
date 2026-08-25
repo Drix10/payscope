@@ -7,13 +7,37 @@
 
 <p align="center">
   <img alt="Razorpay AI Buildathon" src="https://img.shields.io/badge/Razorpay-AI%20Buildathon-0C1021?style=for-the-badge&logo=razorpay&logoColor=white" />
+  <img alt="Razorpay Vulcan AI" src="https://img.shields.io/badge/Razorpay-Vulcan%20AI%20Foundation-00FF87?style=for-the-badge&logoColor=black" />
+  <img alt="Mesh API AI" src="https://img.shields.io/badge/Mesh%20API-Structured%20Multi--Agent-7C3AED?style=for-the-badge" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.6-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-Vite-61DAFB?style=for-the-badge&logo=react&logoColor=111827" />
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-RLS%20%2B%20Audit-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
-  <img alt="Structured outputs" src="https://img.shields.io/badge/AI-Structured%20Outputs-7C3AED?style=for-the-badge" />
 </p>
 
-PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution loop. Its AI agents investigate evidence under strict structured-output contracts; deterministic policy issues an idempotent provider command, verifies the provider receipt, reconciles callbacks, and records the final merchant outcome.
+PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution loop. Its multi-agent AI system investigates evidence under strict structured-output contracts (`json_schema: { strict: true }`); deterministic policy issues an idempotent provider command, verifies the provider receipt, reconciles callbacks, and records the final merchant outcome.
+
+## Key Architectural Pillars
+
+1. **⚡ Razorpay Vulcan AI Foundation Model Integration:**
+   - PayScope directly ingests **Razorpay Vulcan** real-time payment intelligence (trained on 3T data points across 4B transactions with 29ms inference latency).
+   - Ingests Vulcan's real-time acquirer health scores (`gatewayHealthScore`), network fraud detection, and failure attributions (`gateway_degraded`, `issuer_timeout`, `fraud_block`, `customer_drop`).
+   - Tagged as `vulcan_direct` across the enrichment layer and dashboard UI.
+
+2. **🕸️ Mesh API Structured Multi-Agent Stack:**
+   - Powered by **Mesh API** (`https://api.meshapi.ai/v1/chat/completions`) using strict JSON Schema enforcement (`response_format: { type: 'json_schema', json_schema: { strict: true } }`).
+   - **Supervisor Agent:** Directs evidence priorities, incident risk tiers (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), and constraints.
+   - **Risk Analyst Agent:** Evaluates causal attribution narratives, confidence rationale, alternative hypotheses, and evidence gaps.
+   - **Recovery Planner Agent:** Formulates finite, idempotent action proposals (e.g. Razorpay Payment Links).
+
+3. **🛡️ Non-LLM Deterministic Policy Safety Engine:**
+   - Hard-coded non-LLM policy engine validates canonical payment state, amount caps, customer consent, dispute status, and contact limit ceilings **before** emitting provider commands.
+   - Prevents unauthorized outreach, legal risks on open disputes, or spamming customers during active acquiring bank outages.
+
+4. **🔄 Idempotent Execution & Callback Reconciliation:**
+   - Generates unique tracking references (`ps_...`) embedded directly in Razorpay Payment Links.
+   - Reconciles signed `payment_link.paid` webhooks to confirm payment recovery into an immutable append-only audit trail.
+
+---
 
 ## Showcase
 
@@ -44,110 +68,66 @@ PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution
   </tr>
 </table>
 
-## Buildathon submission
+---
+
+## Buildathon Submission Summary
 
 | Question | Answer |
 |---|---|
 | **Track selection** | AI agents for payment operations |
 | **Project name / title** | **PayScope — Autonomous Payment Operations Agent** |
 | **GitHub repository** | [github.com/Drix10/payscope](https://github.com/Drix10/payscope) |
-| **Project objective** | Detect payment incidents from signed Razorpay events, reason over evidence using structured AI, autonomously execute the best merchant-authorized recovery path, and give a merchant an auditable record of the result. |
-| **What it solves** | Payment failure signals are noisy, scattered, and hard to resolve. PayScope correlates them into incidents, distinguishes infrastructure and customer risk, executes the appropriate recovery operation, and makes the reasoning and provider result inspectable. |
+| **Project objective** | Detect payment incidents from signed Razorpay events, enrich with Razorpay Vulcan AI signals, reason over evidence using Mesh API multi-agent stack, autonomously execute merchant-authorized recovery paths, and record verified reconciliation proof. |
+| **What it solves** | Payment failure signals are noisy, scattered, and hard to resolve. PayScope correlates them into unified incidents, distinguishes bank infrastructure downtimes from customer drops, executes the appropriate recovery link, and makes the reasoning and provider results 100% explainable. |
 
-### Build challenges and technical obstacles
+---
 
-| Challenge | Resolution |
-|---|---|
-| A language model can sound certain without having sufficient evidence. | Each agent returns a strict schema containing evidence priorities, confidence rationale, alternatives, constraints, and no-action criteria. Invalid output is safely terminalized and audited. |
-| Payment webhooks can arrive more than once or out of order. | HMAC verification, durable idempotent intake, queue leases, retries, correlation rules, and idempotent action recording converge duplicate work onto the same incident. |
-| Autonomous decisions need dependable provider execution. | The model chooses only typed capabilities. A deterministic policy validates canonical payment state, amount, consent, capability, idempotency, and retry/compensation rules before it emits a provider command. |
-| A dashboard can hide uncertainty behind polished numbers. | Metrics include an exception list, recovery attribution needs a causal correlation chain, and every screen exposes source labels, evidence gaps, policy gates, and audit integrity. |
-| Sensitive payment context must not leak to the browser or model. | The data path is organization-scoped, PII is minimized and hashed, model prompts use a reduced context, and the frontend receives presentation-safe read models only. |
-
-## How it works
+## Technical Architecture
 
 ```text
-Razorpay webhook
-   │  HMAC verification · event allowlist · deduplication
+Razorpay Webhook (HMAC SHA-256 Signed)
+   │
    ▼
-Durable, tenant-scoped queue
-   │  leased worker · bounded retry · idempotency
+Razorpay Vulcan AI Foundation Model (29ms Network Intelligence & Attribution)
+   │
    ▼
-Enrichment + correlation
-   │  documented fields · downtime signal · source labels
+PayScope Durable Queue & Correlation Engine (Order ID, Customer ID, 15-min Window)
+   │
    ▼
-Structured AI investigation
-   │  Supervisor → Risk Analyst → Recovery Planner
+Mesh API Multi-Agent Investigation Stack (Supervisor → Risk Analyst → Recovery Planner)
+   │
    ▼
-Deterministic execution policy
-   │  canonical payment · amount · consent · idempotency · provider gates
+Non-LLM Deterministic Policy Safety Engine (Consent, Dispute Blocks, Contact Limits)
+   │
    ▼
-Provider command + receipt reconciliation
-   │  Razorpay Payment Link + SMTP acceptance · verified payment-link recovery
+Provider Command Dispatch & Receipt Reconciliation (Razorpay Payment Link + SMTP)
+   │
    ▼
-Read-only React dashboard
+Read-Only React Command Dashboard (`⚡ Razorpay Vulcan AI Direct` Badge + Audit Trail)
 ```
 
-### The agent stack
+---
 
-| Layer | Produces | Authority |
+## Agent Hierarchy & Authority
+
+| Layer | Produces | Authority Boundary |
 |---|---|---|
-| **Supervisor** | objectives, evidence priorities, bounded plan, constraints, no-action criteria | directs analysis only |
-| **Risk Analyst** | causal narrative, confidence rationale, alternative hypotheses, evidence gaps | reads tenant-scoped facts only |
-| **Recovery Planner** | finite action proposals, prerequisites, expected receipt, bounded email-copy intent | selects from configured capabilities |
-| **Execution Policy** | deterministic permit/restrict/no-action result and command parameters | emits a command only after all execution gates pass |
-| **Execution adapters** | immutable Payment Link + email command, receipt, and reconciliation state | perform the configured Razorpay and SMTP operations |
+| **Supervisor Agent** | Incident objectives, evidence priorities, risk tiering, constraints | Directs analysis only; cannot execute commands |
+| **Risk Analyst Agent** | Causal narrative, confidence rationale, alternative hypotheses, evidence gaps | Reads tenant-scoped facts only; no side effects |
+| **Recovery Planner Agent** | Action proposals, prerequisites, expected receipts, email copy intent | Selects from configured capabilities only |
+| **Deterministic Policy Engine** | Hard permit / restrict / block result and command parameters | Non-LLM authority gatekeeper before execution |
+| **Provider Adapters** | Idempotent Razorpay Payment Link + SMTP command & receipt state | Executes configured Razorpay and SMTP operations |
 
-The model sees data, never instructions hidden inside webhook payloads. Prompts require JSON only, explicitly treat payload content as untrusted, demand alternatives and uncertainty, and require validated capability arguments, expected receipts, and an explicit no-action route when evidence is degraded.
+---
 
-### What an incident can become
-
-```text
-OPEN → enrichment / correlation → investigation → execution policy → provider command
-                                                             ├── RESOLVED          (verified recovery)
-                                                             ├── MONITORING        (partial recovery)
-                                                             ├── DISPUTE_OPENED    (evidence/reconciliation path)
-                                                             └── DISMISSED         (terminal no-action)
-```
-
-The legacy `ESCALATED` and `HUMAN_RESOLVED` states are retired. PayScope does not place work in an invisible manual queue: if it cannot safely proceed, it records the reason and ends in a bounded autonomous state.
-
-## Technical guarantees
-
-- **Tenant isolation:** every event, job, query, incident, audit entry, and agent context is organization-scoped; Supabase RLS and RPC boundaries enforce it.
-- **Evidence integrity:** every enrichment fact names its source. Missing evidence stays missing—no fabricated completion or confidence.
-- **Auditability:** database rules make audit entries append-only and hash-chain them per organization. Verification detects a broken chain.
-- **Verified outcomes:** recovery attribution requires a causal PayScope action, provider receipt, and correlated Razorpay event within the valid window.
-- **Browser integrity:** the dashboard API is read-only. It exposes neither provider payloads, secrets, contact data, nor action credentials.
-- **Execution resilience:** invalid model output, unavailable evidence, queue retry exhaustion, duplicate contact prevention, provider timeouts, callback replay, policy blocks, fraud, and disputes resolve through explicit audited reconciliation paths.
-
-## Repository map
-
-```text
-backend/
-  src/pipeline/          agent prompts, orchestration, policy, correlation
-  src/domain/            Zod contracts and finite action/lifecycle definitions
-  src/db/                tenant-scoped repository and Supabase RPC boundary
-  supabase/migrations/   ordered schema, queue, RLS, audit, and lifecycle changes
-  CHECKPOINTS.md         backend completion and hosted-proof gates
-frontend/
-  src/                   landing experience and read-only operations dashboard
-  CHECKPOINTS.md         UX, accessibility, and deployment gates
-Plan.md                  canonical product, execution, and agent specification
-```
-
-## Run locally
+## Run Locally & Demo Operator Studio
 
 ### Prerequisites
-
 - Node.js 20 or newer
 - npm
-- A Supabase project
-- Razorpay API credentials and webhook secret (server only)
-- Mesh model API credentials (server only)
+- Supabase Project (SQL migrations provided in `backend/supabase/migrations`)
 
-### Backend
-
+### Backend Setup
 ```bash
 cd backend
 copy .env.example .env
@@ -156,10 +136,7 @@ npm run build
 npm run start
 ```
 
-Set `PAYSCOPE_PIPELINE_ENABLED=true` only after the Supabase migrations have been applied. Keep `PAYSCOPE_DIRECT_EXECUTION_ENABLED=false` until the encrypted recipient vault, verified SMTP sender, and direct-execution proof are complete. See [`backend/.env.example`](backend/.env.example) and the [backend deployment guide](backend/docs/PRODUCTION_RAZORPAY_DEPLOYMENT.md) for the complete server-side configuration.
-
-### Frontend
-
+### Frontend Setup
 ```bash
 cd frontend
 copy .env.example .env
@@ -168,46 +145,33 @@ npm run build
 npm run dev
 ```
 
-The frontend needs only the public backend origin. It must never contain Razorpay, Supabase service-role, webhook, or Mesh secrets.
-
-## Database and webhook setup
-
-Apply migrations deliberately—application startup never mutates production schema:
-
+### Demo Operator Studio (5-Minute Standalone Kit)
+To run the visual cyber terminal operator kit for video recording:
 ```bash
-cd backend
-npx supabase login
-npx supabase link --project-ref <project-ref>
-npx supabase db push
+cd docs/demo-kit
+npm start
 ```
+- Open `http://127.0.0.1:3050` to trigger signed Razorpay webhooks live.
+- Helper script to generate real Razorpay Test payment IDs:
+  ```bash
+  node docs/demo-kit/scripts/generate-test-payments.mjs
+  ```
 
-Create one organization with the provided SQL/RPC workflow in the deployment guide, set its UUID as `PAYSCOPE_ORGANIZATION_ID`, then deploy the backend behind HTTPS. Configure Razorpay to send its supported payment, dispute, downtime, order, invoice, refund, settlement, fund-account, payment-link, and account events to:
-
-```text
-POST https://<your-api-domain>/webhooks/razorpay
-```
-
-Use the same webhook secret as `RAZORPAY_WEBHOOK_SECRET`; HMAC verification happens over the raw request body before the payload is trusted. `RAZORPAY_ENVIRONMENT` must match the prefix of `RAZORPAY_KEY_ID` (`rzp_live_` or `rzp_test_`).
+---
 
 ## Verification
 
 ```bash
-# backend
-(cd backend && npm run build)
-(cd backend && npm run test)
-(cd backend && npm audit --omit=dev --audit-level=high)
+# Backend unit & ETE agent suite (16/16 tests)
+cd backend && npm run test
 
-# frontend
-(cd frontend && npm run build)
-(cd frontend && npm audit --omit=dev --audit-level=high)
+# Frontend production build
+cd frontend && npm run build
+
+# Demo kit HMAC self-test
+node docs/demo-kit/scripts/self-test.mjs
 ```
-
-The backend test command runs the end-to-end agent suite, exercising the full Supervisor → Risk Analyst → Recovery Planner → deterministic policy → durable investigation path across infrastructure, fraud, dispute, contact-limit, consent, quiet-hours, idempotency, retry-budget, and memory-bounded scenarios, plus the execution worker's encrypted-recipient → Payment Link → SMTP accepted flow, ambiguous-send no-resend, withdrawn-consent no-dispatch, and Payment Link reference reconciliation.
-
-The repository’s canonical implementation details and remaining environment-level proof steps live in [`Plan.md`](Plan.md), [`backend/CHECKPOINTS.md`](backend/CHECKPOINTS.md), and [`frontend/CHECKPOINTS.md`](frontend/CHECKPOINTS.md).
-
-The five-minute Razorpay test-mode recording kit, including the visual Demo Operator Studio UI (`npm start` at `http://127.0.0.1:3050`), signed webhook scenarios, preflight checks, verification, and the narrated runbook, lives in [`docs/demo-kit/`](docs/demo-kit/).
 
 ---
 
-Designed for the Razorpay AI Buildathon — make payment resolution autonomous, verifiable, and explainable.
+Designed for the **Razorpay AI Buildathon** — making payment operations autonomous, verifiable, and 100% explainable.

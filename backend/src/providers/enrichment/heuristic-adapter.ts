@@ -72,8 +72,16 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
     const errorStep = string(source.error_step)?.toLowerCase();
     const errorReason = string(source.error_reason)?.toLowerCase();
     const activeDowntime = hasActiveDowntime(downtimes, event.paymentMethod);
-    const failureAttribution = attribution(errorSource, errorStep, errorReason, activeDowntime);
+    
+    const vulcanDirectAttr = typeof event.providerData.vulcan_attribution === 'string' &&
+      ['gateway_degraded', 'issuer_timeout', 'fraud_block', 'insufficient_funds', 'customer_drop', 'routing_suboptimal', 'unknown'].includes(event.providerData.vulcan_attribution)
+      ? (event.providerData.vulcan_attribution as VulcanEnrichment['failureAttribution'])
+      : undefined;
+
+    const failureAttribution = vulcanDirectAttr ?? attribution(errorSource, errorStep, errorReason, activeDowntime);
+    const enrichmentSource = vulcanDirectAttr ? 'vulcan_direct' : 'razorpay_fields_heuristic';
     const signalsUsed = [
+      vulcanDirectAttr ? 'razorpay_vulcan_foundation_model' : undefined,
       errorSource ? 'error_source' : undefined,
       errorStep ? 'error_step' : undefined,
       errorReason ? 'error_reason' : undefined,
@@ -82,18 +90,20 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
       Object.keys(downtimes).length ? 'downtimes' : undefined,
     ].filter((signal): signal is string => Boolean(signal));
     const retry = recommendedRetryMethod(failureAttribution, event.paymentMethod);
+    const customGatewayScore = typeof event.providerData.vulcan_gateway_health === 'number'
+      ? Math.max(0, Math.min(1, event.providerData.vulcan_gateway_health))
+      : undefined;
+
     return VulcanEnrichmentSchema.parse({
       failureAttribution,
-      gatewayHealthScore: activeDowntime ? 0.2 : failureAttribution === 'gateway_degraded' ? 0.4 : 1,
+      gatewayHealthScore: customGatewayScore ?? (activeDowntime ? 0.2 : failureAttribution === 'gateway_degraded' ? 0.4 : 1),
       gatewayInDowntime: activeDowntime,
       downtimeScheduled: hasScheduledDowntime(downtimes),
       crossBorderFlag: source.international === true,
       priorAttemptCount: safeInteger(source.attempts) ?? 0,
-      // This is a provider-level hint only. Correlation remains authoritative
-      // because only it knows the incident's remaining amount.
       partialRecoveryPossible: isPartialCapture(event, source),
       recommendedRetryMethod: retry,
-      source: 'razorpay_fields_heuristic',
+      source: enrichmentSource,
       enrichedAt: this.now().toISOString(),
       signalsUsed,
     });

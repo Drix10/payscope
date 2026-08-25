@@ -1,78 +1,89 @@
-# Five-minute Recording Runbook & Operator Guide
+# Five-minute Video Recording Script & Operator Guide
 
-## Story
+## Narrative Core
 
-> PayScope is not an unpaid-invoice emailer. It is an evidence-backed payment-operations agent that handles duplicate events, unsafe situations, uncertain provider outcomes, and delayed proof without duplicating commands or inventing recovery.
+> **PayScope** is an autonomous payment-operations agent built for Razorpay merchants. It ingests **Razorpay Vulcan AI** foundation signals, uses **Mesh API structured multi-agent reasoning** to evaluate evidence, enforces non-LLM deterministic policy gates, and reconciles Razorpay Payment Links into verified merchant outcomes.
 
-Use the deployed PayScope React Dashboard as your main screen. Open the **Demo Operator Studio UI (`http://127.0.0.1:3050`)** in a secondary window or side-by-side view to trigger signed webhooks live.
+Use your PayScope React Dashboard as the main screen. Open the **Demo Operator Studio UI (`http://127.0.0.1:3050`)** in a side-by-side browser window to trigger signed webhooks live during your 5-minute recording.
 
 ---
 
-## Setup & Launch Procedure
+## Setup & Preflight Procedure
 
-1. Navigate to `docs/demo-kit` and launch the visual studio:
+1. **Launch the Demo Operator Studio:**
    ```powershell
    Set-Location docs/demo-kit
    npm start
    ```
-2. Open `http://127.0.0.1:3050` in your browser.
-3. Confirm the preflight header shows **`API Preflight Ready`**.
-4. (Optional) Enter real Razorpay Test Payment IDs (`pay_...`) and click **Save Credentials & Test IDs**.
-5. Open your deployed PayScope frontend dashboard in the primary browser window.
+2. Open `http://127.0.0.1:3050` in your secondary window.
+3. Confirm the top status badge reads **`API Preflight Ready`**.
+4. (Optional) Generate or refresh your Razorpay Test IDs:
+   ```powershell
+   node scripts/generate-test-payments.mjs
+   ```
+5. Open your PayScope frontend dashboard (`https://temp.coslynx.com` or local dev) in your primary recording window.
 
 ---
 
-## 5-Minute Video Timeline & Visual Triggers
+## 5-Minute Video Recording Script & Narration Guide
 
-### 0:00 - 0:30 | Frame the Hard Problem
-- **Screen:** PayScope Dashboard (Command Center & Incident Feed)
+### ⏱️ 0:00 - 0:45 | Frame the Problem & Showcase Slides
+- **Screen:** Scroll smoothly through the 4 Showcase Slides.
 - **Narration:**
-  > Routine notifications are easy. The hard cases are duplicate webhooks, fraud or disputes, withdrawn consent, ambiguous provider responses, and callbacks that arrive late. PayScope is built around those failure modes.
-- **Action:** Point out the read-only ledger, evidence timeline, policy gates, provider receipt, and reconciliation state.
-
-### 0:30 - 1:10 | Signed Duplicate Webhook & Correlation
-- **Action:** On the Demo Studio UI (`http://127.0.0.1:3050`), click **"Trigger Failure Event"**, then click **"Re-send Duplicate Event"**.
-- **Narration:**
-  > The payload is HMAC-verified before it is trusted. Replaying the exact same provider event returns a 200 duplicate response without creating another incident or outreach action.
-- **Evidence:** Show `duplicate: true` in the UI log and single incident grouping on the dashboard.
-
-### 1:10 - 1:55 | Dispute Hard Stop
-- **Action:** On the Demo Studio UI, click **"Trigger Dispute Event"**.
-- **Narration:**
-  > A technically possible email is still unsafe when an open dispute exists. The agent records the reason and refuses external outreach.
-- **Evidence:** Highlight `DISPUTE_OPENED`, policy gate status `dispute: blocked`, and zero execution actions.
-
-### 1:55 - 2:35 | Consent Withdrawn Pre-Dispatch
-- **Action:** In your demo organization, suppress recipient consent and dispatch an eligible failure event via CLI:
-  ```powershell
-  node scripts/send-webhook.mjs --scenario eligible-failure --event-id demo-consent-001
-  ```
-- **Narration:**
-  > Eligibility is checked at execution time, not just when the plan was created. A withdrawn recipient cannot produce an external side effect.
-- **Evidence:** Point out policy check failure and zero Payment Link / email creation.
-
-### 2:35 - 3:35 | Ambiguous Email Boundary
-- **Action:** Pause execution worker after durable send marker.
-- **Narration:**
-  > The durable send marker is the ambiguity boundary. After it, retrying could duplicate customer contact, so PayScope reconciles instead of blindly resending.
-- **Evidence:** Show action status `unreconciled` with reason `SMTP_RESULT_AMBIGUOUS_NO_RESEND`.
-
-### 3:35 - 4:25 | Verified Razorpay Reconciliation
-- **Action:** On the Demo Studio UI, click **"Trigger Reconciliation"** (linked to PayScope Payment Link reference `ps_...`).
-- **Narration:**
-  > SMTP acceptance is not recovery. Recovery is confirmed only by a verified Razorpay event linked to the original PayScope action.
-- **Evidence:** Show causal chain: `PayScope action ID -> Payment Link reference -> receipt -> signed paid event -> confirmed outcome`.
-
-### 4:25 - 5:00 | Close on Proof, Not Spectacle
-- **Screen:** Execution Ledger & Audit Chain
-- **Narration:**
-  > PayScope's speciality is controlled autonomy: it acts when evidence and policy allow it, refuses unsafe actions, and preserves enough provider evidence to explain the result later.
+  > *"Payment failures are a massive hidden revenue leak for online merchants. PayScope is an autonomous payment operations agent designed for Razorpay. It pairs Razorpay Vulcan's 29ms payment foundation model with Mesh API structured multi-agent reasoning to turn noisy error signals into verified, policy-bounded recoveries."*
+- **Action:** Click the green **"Open Dashboard"** button on Slide 4.
 
 ---
 
-## Fallbacks & Rules
+### ⏱️ 0:45 - 1:40 | Segment 1: Webhook Ingestion & Razorpay Vulcan Intelligence
+- **Screen:** Side-by-side view (Studio UI on left, PayScope Dashboard on right).
+- **Action:** On the Demo Studio UI (`http://127.0.0.1:3050`), click **`[ > DISPATCH EVENT ]`** under **01: FAILED PAYMENT**.
+- **Narration:**
+  > *"When a customer payment fails, Razorpay sends an HMAC SHA-256 signed webhook. PayScope verifies the signature, extracts Razorpay Vulcan AI foundation signals—such as failure attribution and gateway health scores—and passes them to our multi-agent stack."*
+- **Highlight on Screen:** Point out the live update on the dashboard:
+  - **Enrichment Badge:** `⚡ Razorpay Vulcan AI Direct`.
+  - **Multi-Agent Decision:** Supervisor goal, Risk Analyst causal narrative, and Recovery Planner proposal.
 
-- If a webhook is delayed, show the signed HTTP status in the Demo Studio console and state that the durable queue is processing.
-- Do not call SMTP acceptance *"email delivery"*—use **"SMTP accepted"**.
-- Do not claim *"payment recovered"* before the verified `payment_link.paid` callback.
-- Keep credentials and webhook secrets redacted on camera.
+---
+
+### ⏱️ 1:40 - 2:25 | Segment 2: Duplicate Replay Suppression
+- **Action:** On the Demo Studio UI, click **`[ > REPLAY DUPLICATE ]`** under **02: DUPLICATE REPLAY**.
+- **Narration:**
+  > *"Payment webhooks often arrive multiple times or out of order. PayScope uses durable queue leases and HMAC signature deduplication to aggregate retries onto the exact same incident record—preventing spam or double outreach."*
+- **Evidence:** Show `duplicate: true` in the UI log and point out that the Incident Feed retains **1 single incident** with audit entry `duplicate_suppressed`.
+
+---
+
+### 2:25 - 3:15 | Segment 3: Dispute Safety & Policy Gate Hard Stop
+- **Action:** On the Demo Studio UI, click **`[ > DISPATCH DISPUTE ]`** under **03: DISPUTE EVENT**.
+- **Narration:**
+  > *"Safety is paramount. If a customer opens a formal Razorpay dispute, PayScope's deterministic policy engine enforces a hard stop. Outreach is immediately blocked because contacting a customer with an active dispute creates legal and compliance risk."*
+- **Evidence:** Highlight `DISPUTE_OPENED`, policy gate status `dispute: blocked`, and zero outreach commands.
+
+---
+
+### ⏱️ 3:15 - 4:15 | Segment 4: Razorpay Payment Link Dispatch & Reconciliation
+- **Action:** On the Demo Studio UI, click **`[ > DISPATCH RECON ]`** under **04: RECONCILIATION**.
+- **Narration:**
+  > *"SMTP acceptance is not payment recovery. PayScope tracks the unique tracking reference (`ps_...`) embedded in the Razorpay Payment Link. Recovery is confirmed ONLY when Razorpay returns a signed `payment_link.paid` webhook matching the original action."*
+- **Evidence:** Point to the **Execution Ledger** showing action state `confirmed` and verified outcome `"Confirmed recovery"`.
+
+---
+
+### ⏱️ 4:15 - 5:00 | Segment 5: Audit Integrity & Operational Insights
+- **Screen:** Scroll down to **Audit Trail & Read-Only Operational Insights**.
+- **Narration:**
+  > *"PayScope operates under controlled autonomy: every decision, evidence item, and provider command is logged in an append-only, cryptographic audit chain. Merchants can also query operational insights in natural language."*
+- **Action:** Type `"show open high-risk incidents"` in Operational Insights box and click **Ask**.
+- **Closing:**
+  > *"That is PayScope: autonomous payment operations with zero guesswork, 100% audit safety, and verified Razorpay recovery."*
+
+---
+
+## Technical & Narration Rules
+
+- **Do not call SMTP acceptance "email delivery":** Always say *"SMTP accepted"*.
+- **Do not claim "payment recovered" before callback:** Say *"Payment Link dispatched"*, then *"Recovery confirmed upon signed callback"*.
+- **Highlight Vulcan AI:** Mention Razorpay Vulcan when pointing to the `⚡ Razorpay Vulcan AI Direct` badge on the timeline.
+- **Highlight Mesh API:** Mention Mesh API structured JSON outputs when showing the AI Decision Record.
+- **Redaction:** Keep private keys and secret tokens hidden on camera.

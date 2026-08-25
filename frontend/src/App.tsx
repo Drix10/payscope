@@ -465,7 +465,20 @@ function Timeline({ events }: { events: Event[] }) {
             </div>
             {event.event.amountPaise !== undefined && <span className="text-xs font-semibold text-neutral-300">{money(event.event.amountPaise)}</span>}
           </div>
-          {event.enrichment && <p className="mt-3 text-xs text-neutral-400">{label(event.enrichment.failureAttribution)} · source: {event.enrichment.source}</p>}
+          {event.enrichment && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+              <span>{label(event.enrichment.failureAttribution)}</span>
+              <span className="text-neutral-600">•</span>
+              {event.enrichment.source === 'vulcan_direct' ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2 py-0.5 text-[10px] font-bold text-[#86f4bd]">
+                  <Sparkles className="h-3 w-3 text-[#00ff87]" />
+                  Razorpay Vulcan AI Direct
+                </span>
+              ) : (
+                <span className="text-neutral-500">source: {event.enrichment.source}</span>
+              )}
+            </div>
+          )}
         </li>
       )) : <li className="rounded-xl border border-dashed border-white/[.12] p-4 text-sm text-neutral-500">No verified events are available for this record.</li>}
     </ol>

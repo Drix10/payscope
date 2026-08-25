@@ -64,8 +64,8 @@ export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: strin
   if (!occurredAt) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'Razorpay webhook event timestamp is required');
   const customerReference = text(payment.customer_id) ?? text(order.customer_id) ?? text(subscription.customer_id) ?? text(paymentLink.customer_id);
   const providerData: UnknownRecord = {};
-  for (const key of ['error_source', 'error_step', 'error_reason', 'error_code', 'attempts', 'international']) {
-    const value = payment[key];
+  for (const key of ['error_source', 'error_step', 'error_reason', 'error_code', 'attempts', 'international', 'vulcan_attribution', 'vulcan_score', 'vulcan_gateway_health']) {
+    const value = payment[key] ?? payload[key] ?? envelope[key];
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') providerData[key] = value;
   }
   const orderAmountPaise = number(order.amount);
