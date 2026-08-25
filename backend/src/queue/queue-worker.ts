@@ -104,7 +104,18 @@ export class QueueWorker {
       const row = (Array.isArray(data) ? data[0] : undefined) as ClaimedQueueRow | undefined;
       if (!row) return false;
       try {
-        const job = QueueJobSchema.parse({ ...asRecord(row.payload), attemptNumber: row.attempt_number });
+        const rawPayload = asRecord(row.payload);
+        const jobData = {
+          jobId: String(rawPayload.jobId ?? rawPayload.job_id ?? row.id),
+          organizationId: String(rawPayload.organizationId ?? rawPayload.organization_id ?? ''),
+          type: String(rawPayload.type ?? 'investigate_incident'),
+          attemptNumber: row.attempt_number ?? Number(rawPayload.attemptNumber ?? 1),
+          createdAt: String(rawPayload.createdAt ?? rawPayload.created_at ?? new Date().toISOString()),
+          eventId: rawPayload.eventId ?? rawPayload.event_id ? String(rawPayload.eventId ?? rawPayload.event_id) : undefined,
+          incidentId: rawPayload.incidentId ?? rawPayload.incident_id ? String(rawPayload.incidentId ?? rawPayload.incident_id) : undefined,
+          triggerEventId: rawPayload.triggerEventId ?? rawPayload.trigger_event_id ? String(rawPayload.triggerEventId ?? rawPayload.trigger_event_id) : undefined,
+        };
+        const job = QueueJobSchema.parse(jobData);
         await this.processJob(job);
         const { data: completed, error: completeError } = await this.client
           .from('payscope_queue_jobs')
@@ -143,7 +154,7 @@ export class QueueWorker {
       .maybeSingle();
     if (failureError) throw new Error(`PayScope queue failure update failed: ${failureError.message}`);
     if (!failed) throw new Error('PayScope queue failure update lost its lease');
-    logger.error({ jobId: row.id, attempt: row.attempt_number, dead: decision.status === 'dead', errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope queue job failed');
+    logger.error({ jobId: row.id, attempt: row.attempt_number, dead: decision.status === 'dead', errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope queue job failed');
   }
 }
 

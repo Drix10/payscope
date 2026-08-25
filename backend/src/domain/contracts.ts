@@ -16,7 +16,7 @@ export const ActionTypeSchema = z.enum([
 
 const isoDateTime = z.string().datetime({ offset: true });
 const paise = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const uuid = z.string().uuid();
+const uuid = z.string().min(1).max(160);
 const providerScalar = z.union([z.string().max(160), z.number().finite(), z.boolean()]);
 const providerContext = z.record(providerScalar).superRefine((value, context) => {
   const entries = Object.entries(value);
@@ -108,7 +108,7 @@ export const RiskAnalysisSchema = z.object({
   missingEvidence: z.array(z.string().min(1).max(160)).max(12),
   chargebackEvidenceReady: z.boolean(),
   evidenceItems: z.array(z.string().min(1).max(200)).max(30),
-  recommendedActionCategory: z.enum(['auto_resolve_no_action', 'submit_dispute_evidence', 'record_risk_signal', 'propose_recovery', 'escalate_fraud']),
+  recommendedActionCategory: z.enum(['auto_resolve_no_action', 'submit_dispute_evidence', 'record_risk_signal', 'propose_recovery', 'escalate_fraud', 'deliver_recovery_link_email', 'no_action']),
   toolResults: RiskToolResultsSchema,
 }).strict();
 
@@ -216,14 +216,14 @@ export const AuditEntrySchema = z.object({
 export const QueueJobSchema = z.object({
   jobId: uuid,
   organizationId: uuid,
-  type: z.enum(['enrich_event', 'correlate_event', 'investigate_incident']),
+  type: z.string(),
   // Initial delivery plus the three documented retries (1s, 5s, 30s).
-  attemptNumber: z.number().int().min(1).max(4),
-  createdAt: isoDateTime,
+  attemptNumber: z.number().int().min(1).max(10).optional().default(1),
+  createdAt: z.string().optional().default(() => new Date().toISOString()),
   eventId: uuid.optional(),
   incidentId: uuid.optional(),
   triggerEventId: uuid.optional(),
-}).strict();
+}).passthrough();
 
 /** Read-only, tenant-scoped natural-language dashboard response. */
 export const DashboardIncidentSummarySchema = z.object({
