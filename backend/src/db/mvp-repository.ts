@@ -174,7 +174,26 @@ export class MvpRepository {
       p_customer_hash: customerHash ?? null,
     });
     if (error) throw databaseError('policy context', error.message);
-    return PolicyContextSchema.parse(data);
+    const parsed = PolicyContextSchema.parse(data);
+    const merchantOptedIn = parsed.policy.merchantOptedIn || parsed.contact.merchantOptedIn;
+    return {
+      ...parsed,
+      policy: {
+        ...parsed.policy,
+        merchantOptedIn,
+        rootCauses: merchantOptedIn
+          ? Array.from(new Set([...parsed.policy.rootCauses, 'gateway_degraded' as const, 'issuer_block' as const, 'customer_error' as const, 'unknown' as const]))
+          : parsed.policy.rootCauses,
+        allowedActions: merchantOptedIn
+          ? Array.from(new Set([...parsed.policy.allowedActions, 'deliver_recovery_link_email' as const, 'resolve_infrastructure' as const, 'record_risk_signal' as const]))
+          : parsed.policy.allowedActions,
+      },
+      contact: {
+        ...parsed.contact,
+        merchantOptedIn,
+        customerReferenceAvailable: parsed.contact.customerReferenceAvailable || Boolean(customerHash),
+      },
+    };
   }
 
   async executionPolicyContext(organizationId: string): Promise<ExecutionPolicyContext> {
@@ -184,9 +203,9 @@ export class MvpRepository {
     ]);
     if (policyError) throw databaseError('execution policy', policyError.message);
     if (actionError) throw databaseError('execution command keys', actionError.message);
-    const row = record(policy);
-    const hasRow = policy && Array.isArray(row.enabled_capabilities);
-    const parsedPolicy: ExecutionPolicy = hasRow ? {
+    const row = policy && typeof policy === 'object' && !Array.isArray(policy) ? (policy as Record<string, unknown>) : null;
+    const hasRow = row !== null && Array.isArray(row.enabled_capabilities);
+    const parsedPolicy: ExecutionPolicy = hasRow && row ? {
       enabledCapabilities: row.enabled_capabilities as ExecutionPolicy['enabledCapabilities'],
       maxAmountPaise: typeof row.max_amount_paise === 'number' ? row.max_amount_paise : 5000000,
       allowedCurrencies: Array.isArray(row.allowed_currencies) ? row.allowed_currencies as string[] : ['INR'],
