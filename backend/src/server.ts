@@ -82,10 +82,10 @@ async function start(): Promise<void> {
     const modelKey = process.env.MESH_API_KEY?.trim();
     const model = modelKey ? new MeshModelAdapter(modelKey, process.env.MESH_MODEL?.trim() || undefined, pipeline.config.modelTimeoutMs) : undefined;
     const enrichment = new HeuristicEnrichmentAdapter(keyId && keySecret ? new RazorpayHttpEnrichmentClient(keyId, keySecret, pipeline.config.enrichmentTimeoutMs) : undefined);
+    const fallbackProvider = { async complete<T>(): Promise<never> { throw new Error('MESH_API_KEY is not configured on server'); } };
     const processor = new PipelineJobProcessor(pipeline.repository, enrichment, async job => {
       if (!job.incidentId) throw new Error('Investigation job is missing incidentId');
-      if (model) return runDurableInvestigation(pipeline.repository, model, job, { directExecution: pipeline.config.directExecutionEnabled });
-      await pipeline.repository.recordInvestigationUnavailable(job.organizationId, job.incidentId, job.triggerEventId, 'MESH_API_KEY is not configured; autonomous no-action outcome recorded.');
+      return runDurableInvestigation(pipeline.repository, model ?? fallbackProvider, job, { directExecution: pipeline.config.directExecutionEnabled });
     });
     worker = new QueueWorker(pipeline.client, pipeline.config.workerId, job => processor.process(job));
     worker.start();

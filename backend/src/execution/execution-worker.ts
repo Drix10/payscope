@@ -55,7 +55,7 @@ export class ExecutionWorker {
         } finally { span.end(); }
       });
     } catch (error) {
-      logger.error({ errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope execution worker error');
+      logger.error({ errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope execution worker error');
       return false;
     } finally { this.processing = false; }
   }
