@@ -6,11 +6,53 @@ const randomAmount = () => SAMPLE_AMOUNTS[Math.floor(Math.random() * SAMPLE_AMOU
 const scenarios = {
     'failed-payment': ({ payment, referenceId, customerId = payment?.customer_id ?? `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, orderId = payment?.order_id ?? `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount = payment?.amount ?? randomAmount(), currency = payment?.currency ?? 'INR' }) => ({
         event: 'payment.failed', created_at: Math.floor(Date.now() / 1000), payload: {
-            payment: { entity: { ...(payment ?? {}), id: payment?.id ?? `pay_demo_failed_${Date.now()}`, order_id: orderId, customer_id: customerId, amount, currency, status: 'failed', method: payment?.method ?? 'card', created_at: payment?.created_at ?? Math.floor(Date.now() / 1000), error_reason: payment?.error_reason ?? 'payment_failed' } },
+            payment: {
+                entity: {
+                    ...(payment ?? {}),
+                    id: payment?.id ?? `pay_demo_failed_${Date.now()}`,
+                    order_id: orderId,
+                    customer_id: customerId,
+                    amount,
+                    currency,
+                    status: 'failed',
+                    method: payment?.method ?? 'upi',
+                    created_at: payment?.created_at ?? Math.floor(Date.now() / 1000),
+                    error_code: 'BAD_REQUEST_ERROR',
+                    error_description: 'Payment failed due to customer checkout drop-off',
+                    error_source: 'customer',
+                    error_step: 'payment_authentication',
+                    error_reason: 'customer_drop',
+                    vulcan_attribution: 'customer_drop',
+                    vulcan_gateway_health: 0.98
+                }
+            },
             order: { entity: { id: orderId, customer_id: customerId, amount, currency, status: 'attempted', created_at: Math.floor(Date.now() / 1000) } },
         },
     }),
-    'eligible-failure': ({ ...input }) => scenarios['failed-payment']({ ...input, orderId: input.orderId ?? `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}` }),
+    'eligible-failure': ({ ...input }) => ({
+        event: 'payment.failed', created_at: Math.floor(Date.now() / 1000), payload: {
+            payment: {
+                entity: {
+                    id: `pay_demo_gateway_${Date.now()}`,
+                    order_id: input.orderId ?? `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+                    customer_id: input.customerId ?? `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+                    amount: input.amount ?? randomAmount(),
+                    currency: 'INR',
+                    status: 'failed',
+                    method: 'card',
+                    created_at: Math.floor(Date.now() / 1000),
+                    error_code: 'GATEWAY_ERROR',
+                    error_description: 'Temporary payment gateway downtime',
+                    error_source: 'gateway',
+                    error_step: 'payment_authorization',
+                    error_reason: 'gateway_degraded',
+                    vulcan_attribution: 'gateway_degraded',
+                    vulcan_gateway_health: 0.45
+                }
+            },
+            order: { entity: { id: input.orderId ?? `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, customer_id: input.customerId ?? `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount: input.amount ?? randomAmount(), currency: 'INR', status: 'attempted', created_at: Math.floor(Date.now() / 1000) } },
+        },
+    }),
     dispute: ({ customerId = `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, orderId = `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount = randomAmount(), currency = 'INR' }) => ({
         event: 'payment.dispute.created', created_at: Math.floor(Date.now() / 1000), payload: {
             payment: { entity: { id: `pay_demo_dispute_${Date.now()}`, order_id: orderId, customer_id: customerId, amount, currency, status: 'disputed', method: 'card', created_at: Math.floor(Date.now() / 1000) } },
