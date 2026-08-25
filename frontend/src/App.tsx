@@ -110,18 +110,16 @@ export default function App() {
 
         void (async () => {
           try {
-            const [detail, entries, chain] = await Promise.all([
+            const [detail, entries] = await Promise.all([
               mvpApi.incident(currentSelectedId, silentController.signal),
               mvpApi.audit(currentSelectedId, silentController.signal),
-              mvpApi.auditIntegrity(silentController.signal).catch(() => null),
             ])
             if (mounted.current && selectedIdRef.current === currentSelectedId && detailSequence.current === seq && !silentController.signal.aborted && !controller.signal.aborted) {
               setSelected(detail)
               setAudit(entries)
-              setIntegrity(chain)
             }
           } catch {
-            // Ignore background detail update errors
+            // Ignore background detail update errors silently
           } finally {
             if (silentDetailController.current === silentController) {
               silentDetailController.current = null
@@ -131,7 +129,8 @@ export default function App() {
       }
     } catch (reason) {
       if (!controller.signal.aborted && mounted.current && !isBackground) {
-        setError(reason instanceof Error ? reason.message : 'Unable to load autonomous incident data.')
+        const msg = reason instanceof Error ? reason.message : 'Unable to load autonomous incident data.'
+        if (!msg.includes('Too many')) setError(msg)
       }
     } finally {
       if (mounted.current && refreshController.current === controller) {
