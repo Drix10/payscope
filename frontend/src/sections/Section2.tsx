@@ -121,7 +121,7 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
           width: '100%', height: '100%',
           objectFit: 'cover',
           pointerEvents: 'none',
-          zIndex: 999,
+          zIndex: 1,
           filter: 'drop-shadow(0 0 50px rgba(144, 106, 255, 0.75))',
         }}
       />
@@ -177,7 +177,7 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
         style={{
           position: 'absolute',
           top: 0,
-          right: '-1%',
+          right: 0,
           width: '50%',
           height: '100%',
           display: 'flex',

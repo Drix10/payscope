@@ -122,7 +122,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
           objectFit: 'cover',
           objectPosition: 'center',
           pointerEvents: 'none',
-          zIndex: 999,
+          zIndex: 1,
           filter: 'drop-shadow(0 0 50px rgba(36, 255, 149, 0.75))',
         }}
       />
@@ -232,7 +232,7 @@ export function Section1Productivity({ isInView: propIsInView }: { isInView?: bo
         style={{
           position: 'absolute',
           top: 0,
-          right: '-1%',
+          right: 0,
           width: '50%',
           height: '100%',
           display: 'flex',
