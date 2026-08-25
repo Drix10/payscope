@@ -482,10 +482,16 @@ function ActualStages({ detail, entries }: { detail: IncidentDetail; entries: Au
   const hasExecution = detail.execution.length > 0 || detail.proposals.length > 0 || eventTypes.has('execution_command_queued') || eventTypes.has('execution_receipt_recorded');
   const isResolved = detail.incident.status === 'RESOLVED' || eventTypes.has('reconciled');
 
+  const passedGates = detail.investigation?.policyDecision?.gates.filter(g => g.result === 'passed').length ?? 0;
+  const totalGates = detail.investigation?.policyDecision?.gates.length ?? 0;
+  const gateDetail = isBlocked
+    ? 'Dispute Lock Engaged'
+    : totalGates > 0 ? `Passed ${passedGates}/${totalGates} Policy Gates` : 'Deterministic Policy Clearance';
+
   const steps = [
     { num: 1, label: '1. Ingest & Telemetry', status: detail.events.length > 0 ? 'complete' : 'pending', detail: `${detail.events.length} Vulcan Telemetry Signal${detail.events.length === 1 ? '' : 's'}` },
     { num: 2, label: '2. Multi-Agent Analysis', status: hasInvestigation ? 'complete' : 'pending', detail: hasInvestigation ? 'Supervisor + Risk Analyst' : 'Running LLM Multi-Agent' },
-    { num: 3, label: '3. Safety Gates', status: isBlocked ? 'blocked' : hasPolicy ? 'complete' : 'pending', detail: isBlocked ? 'Dispute Lock Engaged' : 'Passed 4/4 Policy Gates' },
+    { num: 3, label: '3. Safety Gates', status: isBlocked ? 'blocked' : hasPolicy ? 'complete' : 'pending', detail: gateDetail },
     { num: 4, label: '4. Idempotent Execution', status: isBlocked ? 'blocked' : hasExecution ? 'complete' : 'pending', detail: isBlocked ? 'Outreach Blocked' : 'Razorpay Link & Email Sent' },
     { num: 5, label: '5. Receipt & Audit', status: isResolved ? 'complete' : hasExecution ? 'active' : 'pending', detail: isResolved ? 'Payment Reconciled' : 'Cryptographic Ledger Verified' },
   ];

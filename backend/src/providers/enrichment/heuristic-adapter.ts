@@ -81,10 +81,17 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
       ? (event.providerData.vulcan_attribution as VulcanEnrichment['failureAttribution'])
       : undefined;
 
-    const failureAttribution = vulcanDirectAttr ?? attribution(errorSource, errorStep, errorReason, activeDowntime);
+    const acquirerData = (event.providerData.acquirer_data ?? payment.acquirer_data) as Record<string, unknown> | undefined;
+    const hasAuthCode = typeof acquirerData?.auth_code === 'string' && acquirerData.auth_code.length > 0;
+    const hasRrn = typeof acquirerData?.rrn === 'string' && acquirerData.rrn.length > 0;
+
+    const failureAttribution = vulcanDirectAttr ?? attribution(errorSource, errorStep, errorReason, activeDowntime, Boolean(event.subscriptionId), hasAuthCode);
     const enrichmentSource = vulcanDirectAttr ? 'vulcan_direct' : 'razorpay_fields_heuristic';
     const signalsUsed = [
       vulcanDirectAttr ? 'razorpay_vulcan_foundation_model' : undefined,
+      event.subscriptionId ? 'subscription_mandate' : undefined,
+      hasAuthCode ? 'acquirer_auth_code' : undefined,
+      hasRrn ? 'acquirer_rrn' : undefined,
       errorSource ? 'error_source' : undefined,
       errorStep ? 'error_step' : undefined,
       errorReason ? 'error_reason' : undefined,
@@ -113,19 +120,21 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
   }
 }
 
-function attribution(errorSource: string | undefined, errorStep: string | undefined, errorReason: string | undefined, activeDowntime: boolean): VulcanEnrichment['failureAttribution'] {
+function attribution(errorSource: string | undefined, errorStep: string | undefined, errorReason: string | undefined, activeDowntime: boolean, isSubscription = false, hasAuthCode = false): VulcanEnrichment['failureAttribution'] {
+  if (isSubscription && (errorReason?.includes('mandate') || errorReason?.includes('lapse') || errorSource === 'customer')) return 'subscription_lapse';
   if (errorReason?.includes('fraud')) return 'fraud_block';
   if (errorReason?.includes('insufficient') || errorReason?.includes('balance')) return 'insufficient_funds';
   if (errorSource === 'bank' && (errorStep === 'authorization' || errorStep === 'payment_authorization')) return 'issuer_timeout';
   if (errorSource === 'customer') return 'customer_drop';
   if (errorSource === 'gateway' && activeDowntime) return 'gateway_degraded';
+  if (errorSource === 'gateway' && !hasAuthCode) return 'gateway_degraded';
   if (errorSource === 'gateway') return 'routing_suboptimal';
   return 'unknown';
 }
 
 function recommendedRetryMethod(failureAttribution: VulcanEnrichment['failureAttribution'], currentMethod: string | undefined): string | null {
   if (failureAttribution === 'gateway_degraded' || failureAttribution === 'routing_suboptimal') return currentMethod === 'upi' ? 'netbanking' : 'upi';
-  if (failureAttribution === 'issuer_timeout') return currentMethod ?? null;
+  if (failureAttribution === 'issuer_timeout' || failureAttribution === 'subscription_lapse') return currentMethod ?? null;
   return null;
 }
 

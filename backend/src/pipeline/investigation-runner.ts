@@ -28,15 +28,20 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       options.directExecution && typeof repository.executionPolicyContext === 'function' ? repository.executionPolicyContext(job.organizationId) : Promise.resolve(null),
     ]);
     const deadlineProvider = providerWithDeadline(provider, started + AGENT_PIPELINE_DEADLINE_MS);
-    const [supervisor, risk] = await Promise.all([
-      runInvestigationSupervisor(deadlineProvider, { incident: detail.incident, enrichment, merchantPolicyCount: 1, autoResolveBudgetRemaining: Math.max(0, 1 - policyContext.stats.autoResolveFraction) }, job.organizationId),
-      runRiskAnalyst(deadlineProvider, {
-        getIncidentTimeline: async () => detail.events.map(event => event.event),
-        getMerchantFailureRate: async () => metrics?.merchantFailureRate ?? null,
-        getNetworkFailureRate: async () => metrics?.networkFailureRate ?? null,
-        getCustomerIncidentCount: async () => metrics?.customerIncidentCount ?? null,
-      }, { incident: detail.incident, enrichment, customerHash: latest?.event.customerHash, gateway: latest?.event.paymentMethod ?? 'unknown' }, job.organizationId),
-    ]);
+    const supervisor = await runInvestigationSupervisor(deadlineProvider, {
+      incident: detail.incident,
+      enrichment,
+      merchantPolicyCount: policyContext.policy.enabled ? 1 : 0,
+      autoResolveBudgetRemaining: Math.max(0, 1 - policyContext.stats.autoResolveFraction)
+    }, job.organizationId);
+
+    const risk = await runRiskAnalyst(deadlineProvider, {
+      getIncidentTimeline: async () => detail.events.map(event => event.event),
+      getMerchantFailureRate: async () => metrics?.merchantFailureRate ?? null,
+      getNetworkFailureRate: async () => metrics?.networkFailureRate ?? null,
+      getCustomerIncidentCount: async () => metrics?.customerIncidentCount ?? null,
+    }, { incident: detail.incident, enrichment, customerHash: latest?.event.customerHash, gateway: latest?.event.paymentMethod ?? 'unknown' }, job.organizationId);
+
     const recovery = await runRecoveryPlanner(deadlineProvider, { incident: detail.incident, riskAnalysis: risk.analysis, merchantOptedInToRecovery: policyContext.policy.merchantOptedIn, memory, directExecution: Boolean(options.directExecution) }, job.organizationId);
     const directOptions = executionContext ? {
       executionPolicy: executionContext.policy,
@@ -122,7 +127,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       causalNarrative: detailedNarrative,
       evidenceConfidenceRationale: 'Verified by Razorpay Vulcan AI telemetry intake and real-time enrichment signals.',
       alternativeHypotheses: ['Issuer timeout', 'Customer drop'],
-      falsePositiveCostEstimatePaise: 0,
+      falsePositiveCostEstimatePaise: detail.incident.remainingAmountPaise,
       missingEvidence: [],
       chargebackEvidenceReady: attr === 'fraud_block',
       evidenceItems: [latest?.event.eventType ?? 'payment.failed'],

@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 export const EnrichmentSourceSchema = z.enum(['razorpay_fields_heuristic', 'fixture_signed', 'vulcan_direct', 'unavailable']);
-export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'DISPUTE_OPENED', 'RESOLVED', 'DISMISSED']);
+export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED']);
 export const RiskTierSchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'MONITOR']);
 export const ExecutionStateSchema = z.enum(['queued', 'dispatching', 'accepted', 'unreconciled', 'confirmed', 'retry_scheduled', 'compensating', 'failed', 'cancelled']);
-export const ProposalStatusSchema = z.enum(['pending', 'simulated', 'cancelled_by_dispute', 'cancelled_by_recovery', 'failed']);
+export const ProposalStatusSchema = z.enum(['pending', 'approved', 'simulated', 'cancelled_by_dispute', 'cancelled_by_recovery', 'failed']);
 export const ActionTypeSchema = z.enum([
   'deliver_recovery_link_email',
   'record_risk_signal',
@@ -46,7 +46,7 @@ export const NormalizedEventSchema = z.object({
 }).strict();
 
 export const VulcanEnrichmentSchema = z.object({
-  failureAttribution: z.enum(['gateway_degraded', 'issuer_timeout', 'fraud_block', 'insufficient_funds', 'customer_drop', 'routing_suboptimal', 'unknown']),
+  failureAttribution: z.enum(['gateway_degraded', 'issuer_timeout', 'fraud_block', 'insufficient_funds', 'customer_drop', 'routing_suboptimal', 'subscription_lapse', 'unknown']),
   gatewayHealthScore: z.number().min(0).max(1),
   gatewayInDowntime: z.boolean(),
   downtimeScheduled: z.boolean(),
@@ -201,7 +201,7 @@ export const AuditEntrySchema = z.object({
   incidentId: uuid.nullable(),
   sequenceNumber: z.number().int().nonnegative(),
   eventType: z.string().min(1).max(120),
-  actorType: z.enum(['system', 'legacy']),
+  actorType: z.enum(['system', 'human', 'legacy']),
   actorId: z.string().min(1).max(160),
   actorSessionHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   decision: z.string().min(1).max(240),

@@ -10,7 +10,7 @@ export type SupervisorInput = {
 };
 
 const SupervisorInputSchema = z.object({
-  incident: z.object({ id: z.string().uuid(), riskTier: z.string(), status: z.string(), totalFailedAmountPaise: z.number().int().nonnegative(), correlatedEventIds: z.array(z.string().uuid()).max(100), openedAt: z.string().datetime({ offset: true }) }),
+  incident: z.object({ id: z.string().min(1).max(160), riskTier: z.string(), status: z.string(), totalFailedAmountPaise: z.number().int().nonnegative(), correlatedEventIds: z.array(z.string().min(1).max(160)).max(100), openedAt: z.string().datetime({ offset: true }) }),
   enrichment: z.unknown().nullable(),
   merchantPolicyCount: z.number().int().nonnegative(),
   autoResolveBudgetRemaining: z.number().min(0).max(1),

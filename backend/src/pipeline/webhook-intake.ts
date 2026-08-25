@@ -71,7 +71,7 @@ export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: strin
   const orderAmountPaise = number(order.amount);
   if (orderAmountPaise !== undefined) providerData.order_amount_paise = orderAmountPaise;
   const paymentLinkReferenceId = text(paymentLink.reference_id);
-  if (paymentLinkReferenceId) providerData.payment_link_reference_id = paymentLinkReferenceId;
+  if (paymentLinkReferenceId && /^ps[_:]/i.test(paymentLinkReferenceId)) providerData.payment_link_reference_id = paymentLinkReferenceId;
   const acquirerData = allowlistedAcquirerData(object(payment.acquirer_data));
   if (Object.keys(acquirerData).length) providerData.acquirer_data = acquirerData;
   return NormalizedEventSchema.parse({

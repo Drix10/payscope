@@ -9,7 +9,7 @@ export class Reconciler {
   constructor(private readonly client: SupabaseClient) { }
 
   async reconcilePaymentLinkPaid(organizationId: string, referenceId: string, eventId: string, paymentId: string | null): Promise<void> {
-    if (!/^ps_[a-f0-9]{32}$/.test(referenceId)) return;
+    if (!/^ps_[a-f0-9]{32}$/i.test(referenceId)) return;
     if (!organizationId || !eventId || eventId.length > 320) return;
     // Organization-scoped lookup: prevents cross-tenant creation of a second action.
     const { data, error } = await this.client.from('payscope_execution_actions').select('id, state, updated_at').eq('organization_id', organizationId).eq('capability', 'deliver_recovery_link_email').eq('command_payload->>referenceId', referenceId).limit(1).maybeSingle();

@@ -93,7 +93,8 @@ export class ExecutionWorker {
       }
       const customerHash = text(action.commandPayload.customerHash, 64);
       const referenceId = text(action.commandPayload.referenceId, 40);
-      const copyIntent = text(action.commandPayload.copyIntent, 600);
+      // Supports copyIntent (written by DB migration RPC) and emailCopyIntent (written by LLM / recovery planner)
+      const copyIntent = text(action.commandPayload.copyIntent ?? action.commandPayload.emailCopyIntent, 600);
       if (!customerHash || !referenceId || !copyIntent) throw new ExecutionPreconditionError('invalid_command');
       if (action.amountPaise === null || action.currency === null) throw new ExecutionPreconditionError('invalid_command');
       // Resolve consented recipient before creating a Payment Link. This avoids

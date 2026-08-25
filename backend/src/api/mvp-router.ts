@@ -76,7 +76,7 @@ function parseLimit(value: unknown, res: { status(code: number): { json(value: u
 
 function parseStatus(value: unknown, res: { status(code: number): { json(value: unknown): void } }): IncidentStatus | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !['OPEN', 'MONITORING', 'DISPUTE_OPENED', 'RESOLVED', 'DISMISSED'].includes(value)) return invalidRequest(res, 'status must be a valid incident lifecycle state.');
+  if (typeof value !== 'string' || !['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED'].includes(value)) return invalidRequest(res, 'status must be a valid incident lifecycle state.');
   return value as IncidentStatus;
 }
 

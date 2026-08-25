@@ -83,7 +83,8 @@ export function paymentLinkReferenceForProposalDirect(proposalId: string): strin
 }
 export function isPaymentLinkReferenceForProposal(reference: string | null, proposalId: string): boolean {
   if (!reference) return false;
-  return reference === paymentLinkReferenceForProposal(proposalId) || reference === paymentLinkReferenceForProposalDirect(proposalId);
+  const refLower = reference.toLowerCase();
+  return refLower === paymentLinkReferenceForProposal(proposalId) || refLower === paymentLinkReferenceForProposalDirect(proposalId);
 }
 
 function isEligibleProposal(proposal: AttributionProposal, capturedAt: number): boolean {
