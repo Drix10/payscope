@@ -151,10 +151,10 @@ node docs/demo-kit/scripts/generate-test-payments.mjs
 ## Verification & Testing
 
 ```bash
-# Backend unit & integration test suite (16 tests)
+# Comprehensive test suite (21 tests across Multi-Agent Engine, Execution Outbox, Fixture Baselines, and Causal Attribution)
 cd backend && npm run test
 
-# Frontend TypeScript compilation & build check
+# Frontend TypeScript compilation & production build check
 cd frontend && npm run build
 
 # Demo kit HMAC signature & replay test

@@ -46,6 +46,6 @@ function validateRecoveryPlan(plan: RecoveryPlan, input: RecoveryPlannerInput): 
   if (!input.merchantOptedInToRecovery && actions.some(action => action === 'deliver_recovery_link_email')) throw new Error('Recovery planner cannot propose outreach without merchant opt-in');
   for (const action of plan.proposedActions) {
     if (action.scriptContent && action.scriptContent.trim().split(/\s+/).filter(Boolean).length > 75) throw new Error('Recovery planner script exceeds the 75-word limit');
-    if (action.actionType === 'deliver_recovery_link_email' && (!action.emailCopyIntent || !/\b(stop|opt\s*out|unsubscribe)\b/i.test(action.emailCopyIntent) || action.emailCopyIntent.trim().split(/\s+/).filter(Boolean).length > 75)) throw new Error('Recovery planner email copy must include an opt-out phrase and stay within 75 words');
+    if (action.actionType === 'deliver_recovery_link_email' && (!action.emailCopyIntent || !/\b(stop|opt[-\s]*out|unsubscribe)\b/i.test(action.emailCopyIntent) || action.emailCopyIntent.trim().split(/\s+/).filter(Boolean).length > 75)) throw new Error('Recovery planner email copy must include an opt-out phrase and stay within 75 words');
   }
 }

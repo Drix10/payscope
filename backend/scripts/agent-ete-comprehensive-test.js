@@ -10,6 +10,12 @@ const { ExecutionWorker } = require('../dist/execution/execution-worker');
 const { ExecutionPreconditionError } = require('../dist/execution/execution-repository');
 const { encryptEmail } = require('../dist/security/encryption');
 const { RazorpayExecutionClient } = require('../dist/providers/execution/razorpay-execution-client');
+const { createPhase2Fixtures } = require('../dist/fixtures/phase2-fixtures');
+const { createDevelopmentFixtures } = require('../dist/fixtures/development-fixtures');
+const { createHeldOutFixtures } = require('../dist/fixtures/held-out-fixtures');
+const { runFixtureEvaluation } = require('../dist/evaluation/run-evaluation');
+const { attributeRecoveries } = require('../dist/evaluation/attribution');
+const { FixtureEnrichmentAdapter } = require('../dist/providers/enrichment/fixture-adapter');
 
 const org = '00000000-0000-4000-8000-000000000001';
 let passed = 0; let failed = 0;
@@ -304,4 +310,61 @@ async function runExecutionWorkerScenarios() {
   await runWorkerScenario('execution-worker ambiguous send', ambiguousEmailScenario);
   await runWorkerScenario('execution-worker withdrawn recipient', withdrawnRecipientScenario);
   await runWorkerScenario('execution-worker payment-link reference', paymentLinkReferenceScenarios);
+
+  // 3. Evaluation & Attribution Test Suite
+  console.log('\nRunning Evaluation & Attribution Suite...');
+  const fixtureSecret = 'test_fixture_secret_32_bytes_long_ok';
+  const devFixtures = createDevelopmentFixtures(fixtureSecret);
+  const heldOutFixtures = createHeldOutFixtures(fixtureSecret);
+  const { setA } = createPhase2Fixtures(fixtureSecret);
+
+  // A. Synthetic Fixture Integrity & Evaluation Baseline
+  const reportA = runFixtureEvaluation(devFixtures, fixtureSecret, 'development');
+  assert.equal(reportA.split, 'development');
+  assert.equal(reportA.sampleCount, 300);
+  assert.ok(typeof reportA.precision === 'number');
+  assert.ok(typeof reportA.recall === 'number');
+  assert.ok(typeof reportA.f1 === 'number');
+  console.log(`✓ fixture-evaluation development baseline: ${reportA.sampleCount} samples, Precision: ${reportA.precision.toFixed(3)}, Recall: ${reportA.recall.toFixed(3)}, F1: ${reportA.f1.toFixed(3)}`);
+  passed++;
+
+  const reportB = runFixtureEvaluation(heldOutFixtures, fixtureSecret, 'held_out');
+  assert.equal(reportB.split, 'held_out');
+  assert.equal(reportB.sampleCount, 200);
+  assert.ok(typeof reportB.precision === 'number');
+  assert.ok(typeof reportB.recall === 'number');
+  assert.ok(typeof reportB.f1 === 'number');
+  console.log(`✓ fixture-evaluation held_out baseline: ${reportB.sampleCount} samples, Precision: ${reportB.precision.toFixed(3)}, Recall: ${reportB.recall.toFixed(3)}, F1: ${reportB.f1.toFixed(3)}`);
+  passed++;
+
+  // B. Fixture Enrichment Adapter
+  const fixtureMap = new Map([[setA[0].event.eventId, setA[0].enrichment]]);
+  const fixtureAdapter = new FixtureEnrichmentAdapter(fixtureMap);
+  const enriched = await fixtureAdapter.enrich({ eventId: setA[0].event.eventId });
+  assert.equal(enriched.source, 'fixture_signed');
+  assert.equal(enriched.failureAttribution, setA[0].enrichment.failureAttribution);
+  await assert.rejects(() => fixtureAdapter.enrich({ eventId: 'non_existent_event' }), /No signed fixture/);
+  console.log('✓ fixture-adapter enrichment lookup + missing fixture error handling');
+  passed++;
+
+  // C. Causal Recovery Attribution
+  const inc1 = { id: '00000000-0000-4000-8000-000000000011', totalFailedAmountPaise: 450000 };
+  const prop1 = { id: '00000000-0000-4000-8000-000000000001', incidentId: '00000000-0000-4000-8000-000000000011', actionType: 'deliver_recovery_link_email', status: 'simulated', simulatedAt: '2026-08-22T00:00:00.000Z' };
+  const cap1 = { eventId: 'cap_evt_1', incidentId: '00000000-0000-4000-8000-000000000011', capturedAt: '2026-08-22T02:00:00.000Z', amountPaise: 450000, paymentLinkReferenceId: 'ps_00000000000040008000000000000001', disputeOpenedBeforeCapture: false };
+  const attributed = attributeRecoveries([inc1], [prop1], [cap1]);
+  assert.equal(attributed.length, 1);
+  assert.equal(attributed[0].recoveredPaise, 450000);
+  assert.equal(attributed[0].incidentId, '00000000-0000-4000-8000-000000000011');
+  console.log('✓ causal-recovery-attribution: verified 1-click link payment matches incident');
+  passed++;
+
+  // D. Attribution Edge Case: Dispute Opened Before Capture rejects causal attribution
+  const capDisputed = { eventId: 'cap_evt_disputed', incidentId: '00000000-0000-4000-8000-000000000011', capturedAt: '2026-08-22T02:00:00.000Z', amountPaise: 450000, paymentLinkReferenceId: 'ps_00000000000040008000000000000001', disputeOpenedBeforeCapture: true };
+  const attributedDisputed = attributeRecoveries([inc1], [prop1], [capDisputed]);
+  assert.equal(attributedDisputed.length, 0);
+  console.log('✓ causal-recovery-attribution: dispute before capture blocks attribution');
+  passed++;
+
+  console.log(`\nFinal Test Suite Summary: ${passed} passed, ${failed} failed`);
+  if (failed > 0) process.exit(1);
 }

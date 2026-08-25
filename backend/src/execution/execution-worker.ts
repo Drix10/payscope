@@ -111,7 +111,7 @@ export class ExecutionWorker {
       let link = await this.repository.paymentLinkReceipt(action.organizationId, action.id);
       if (!link) {
         try {
-          const created = await this.razorpayConcurrency.run(() => this.razorpay.createPaymentLink({ referenceId, amountPaise: action.amountPaise as number, currency: action.currency as string, description: 'Complete your pending payment securely.' }));
+          const created = await this.razorpayConcurrency.run(() => this.razorpay.createPaymentLink({ referenceId, amountPaise: action.amountPaise as number, currency: action.currency as string, description: 'PayScope has generated a secure 1-click payment recovery link for your recent transaction.' }));
           link = { id: created.id, url: created.shortUrl };
         } catch (error) {
           this.razorpayBreaker.onFailure();
@@ -139,7 +139,7 @@ export class ExecutionWorker {
         return this.repository.completeOutbox(outbox, this.workerId);
       }
       try {
-        const result = await this.emailConcurrency.run(() => this.email.send({ to: recipient, paymentLinkUrl: link.url, incidentId: action.incidentId, subject: 'Complete your pending payment', copyIntent }));
+        const result = await this.emailConcurrency.run(() => this.email.send({ to: recipient, paymentLinkUrl: link.url, incidentId: action.incidentId, subject: 'Complete Your Payment — Secure Recovery Link from Razorpay', copyIntent }));
         this.emailBreaker.onSuccess();
         if (result.kind === 'accepted') {
           await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'smtp_accepted', payload: { messageId: result.messageId, acceptedCount: result.acceptedCount, rejectedCount: result.rejectedCount, response: result.response }, state: 'accepted' });

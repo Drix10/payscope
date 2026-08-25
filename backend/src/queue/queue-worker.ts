@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { QUEUE_RETRY_DELAYS_MS } from '../config/stopping-rules';
+import { QUEUE_LOCK_TIMEOUT_MS, QUEUE_RETRY_DELAYS_MS } from '../config/stopping-rules';
 import { QueueJob, QueueJobSchema } from '../domain/contracts';
 import { logger } from '../observability';
 
@@ -116,7 +116,13 @@ export class QueueWorker {
           triggerEventId: rawPayload.triggerEventId ?? rawPayload.trigger_event_id ? String(rawPayload.triggerEventId ?? rawPayload.trigger_event_id) : undefined,
         };
         const job = QueueJobSchema.parse(jobData);
-        await this.processJob(job);
+        const jobTimeout = AbortSignal.timeout(QUEUE_LOCK_TIMEOUT_MS);
+        await Promise.race([
+          this.processJob(job),
+          new Promise<never>((_, reject) => {
+            jobTimeout.addEventListener('abort', () => reject(new Error('PayScope queue job exceeded lock timeout')), { once: true });
+          }),
+        ]);
         const { data: completed, error: completeError } = await this.client
           .from('payscope_queue_jobs')
           .update({ status: 'complete', updated_at: new Date().toISOString() })
@@ -137,7 +143,8 @@ export class QueueWorker {
   }
 
   private async fail(row: ClaimedQueueRow, error: unknown): Promise<void> {
-    const retryDecision = queueFailureDecision(row.attempt_number);
+    const currentAttempt = Number.isSafeInteger(row.attempt_number) ? row.attempt_number : 1;
+    const retryDecision = queueFailureDecision(currentAttempt);
     const decision = isTerminalQueueJobError(error)
       ? { status: 'dead' as const, attemptNumber: row.attempt_number, nextAttemptAt: null }
       : retryDecision;

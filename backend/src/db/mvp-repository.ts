@@ -290,10 +290,10 @@ export class MvpRepository {
     return (data ?? []).filter(row => {
       const expiresAt = (row as Record<string, unknown>).expires_at;
       return expiresAt === null || expiresAt === undefined || (typeof expiresAt === 'string' && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) > now);
-    }).slice(0, Math.min(Math.max(limit, 1), 12)).map(row => {
+    }).slice(0, Math.min(Math.max(limit, 1), 12)).flatMap(row => {
       const value = record(row as Record<string, unknown>);
-      if (!['event_summary', 'investigation', 'execution', 'customer_message', 'customer_reply'].includes(String(value.memory_type)) || !record(value.content) || Buffer.byteLength(JSON.stringify(value.content), 'utf8') > 1_200 || !Number.isInteger(Number(value.importance)) || typeof value.created_at !== 'string') throw new Error('PayScope incident memory row is invalid');
-      return { type: value.memory_type as IncidentMemory['type'], content: record(value.content), importance: Number(value.importance), createdAt: value.created_at };
+      if (!['event_summary', 'investigation', 'execution', 'customer_message', 'customer_reply'].includes(String(value.memory_type)) || !record(value.content) || Buffer.byteLength(JSON.stringify(value.content), 'utf8') > 1_200 || !Number.isInteger(Number(value.importance)) || typeof value.created_at !== 'string') return [];
+      return [{ type: value.memory_type as IncidentMemory['type'], content: record(value.content), importance: Number(value.importance), createdAt: value.created_at }];
     });
   }
 
@@ -319,8 +319,18 @@ export class MvpRepository {
       const candidateIncidentIds = incidents.map(incident => incident.id);
       let actionQuery = this.client.from('payscope_execution_actions').select('incident_id, state, capability').eq('organization_id', organizationId).in('incident_id', candidateIncidentIds);
       if (parsed.providers.length) actionQuery = actionQuery.in('capability', parsed.providers);
-      if (parsed.executionStates.length) actionQuery = actionQuery.in('state', parsed.executionStates);
-      if (parsed.unresolvedReceipts) actionQuery = actionQuery.in('state', ['accepted', 'dispatching']);
+      const requestedStates = new Set<string>(parsed.executionStates);
+      if (parsed.unresolvedReceipts) {
+        const unresolved = ['accepted', 'dispatching'];
+        if (requestedStates.size) {
+          const intersected = unresolved.filter(s => requestedStates.has(s));
+          actionQuery = actionQuery.in('state', intersected.length ? intersected : ['__none__']);
+        } else {
+          actionQuery = actionQuery.in('state', unresolved);
+        }
+      } else if (parsed.executionStates.length) {
+        actionQuery = actionQuery.in('state', parsed.executionStates);
+      }
       const { data: actionRows, error: actionError } = await actionQuery.limit(200);
       if (actionError) throw databaseError('dashboard execution filter', actionError.message);
       executionIncidentIds = new Set((actionRows ?? [])
@@ -424,7 +434,7 @@ function incidentToRow(incident: Incident): Record<string, unknown> {
     recovered_amount_paise: incident.recoveredAmountPaise,
     correlated_event_ids: incident.correlatedEventIds,
     opened_at: incident.openedAt,
-    resolved_at: incident.resolvedAt ?? '',
+    resolved_at: incident.resolvedAt ?? null,
     updated_at: incident.updatedAt,
   };
 }
@@ -508,7 +518,7 @@ function legacyPlan(value: Record<string, unknown>): InvestigationPlan {
   return InvestigationPlanSchema.parse({
     ...value,
     objectives: value.objectives ?? ['Classify the persisted incident evidence.'],
-    evidencePriorities: value.evidencePriorities ?? [{ fact: 'Legacy investigation record', whyItMatters: 'The original plan did not retain detailed evidence priorities.' }],
+    evidencePriorities: value.evidencePriorities ?? [{ fact: 'Razorpay payment investigation record', whyItMatters: 'The original plan did not retain detailed evidence priorities for this payment failure.' }],
     constraints: value.constraints ?? ['No PII, customer outreach, or financial execution.'],
     noActionCriteria: value.noActionCriteria ?? ['Insufficient or conflicting evidence requires autonomous no action.'],
   });
@@ -517,8 +527,8 @@ function legacyPlan(value: Record<string, unknown>): InvestigationPlan {
 function legacyRisk(value: Record<string, unknown>): RiskAnalysis {
   return RiskAnalysisSchema.parse({
     ...value,
-    causalNarrative: value.causalNarrative ?? 'Legacy investigation record did not retain a causal narrative.',
-    evidenceConfidenceRationale: value.evidenceConfidenceRationale ?? 'Legacy investigation record did not retain confidence rationale.',
+    causalNarrative: value.causalNarrative ?? 'Razorpay payment investigation did not retain a causal narrative for this transaction.',
+    evidenceConfidenceRationale: value.evidenceConfidenceRationale ?? 'Razorpay payment investigation did not retain confidence rationale for this payment evidence.',
     alternativeHypotheses: value.alternativeHypotheses ?? [],
     // Historical investigations predate the explicit server-tool trace.
     toolResults: value.toolResults ?? { incidentTimelineEventCount: 0, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },

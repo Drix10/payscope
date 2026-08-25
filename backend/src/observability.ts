@@ -15,7 +15,8 @@ export const logger = pino({
       'email_envelope', '*.email_envelope', '*.*.email_envelope', 'emailEnvelope', '*.emailEnvelope', '*.*.emailEnvelope',
       'payload', '*.payload', '*.*.payload', 'normalized', '*.normalized', '*.*.normalized',
       'paymentLinkUrl', '*.paymentLinkUrl', '*.*.paymentLinkUrl', 'shortUrl', '*.shortUrl', '*.*.shortUrl',
-      'commandPayload', '*.commandPayload', '*.*.commandPayload', 'redacted_payload', '*.redacted_payload', '*.*.redacted_payload'
+      'commandPayload', '*.commandPayload', '*.*.commandPayload', 'redacted_payload', '*.redacted_payload', '*.*.redacted_payload',
+      'err.email', 'err.recipient', 'err.customerHash', 'err.customer_hash', 'err.authorization'
     ],
     censor: '[REDACTED]',
     remove: false,
