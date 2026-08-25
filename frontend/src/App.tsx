@@ -168,6 +168,7 @@ export default function App() {
     } catch (reason) {
       if (!controller.signal.aborted && mounted.current && detailSequence.current === seq) {
         setError(reason instanceof Error ? reason.message : 'Unable to load this incident.')
+        setSelectedId(null)
       }
     } finally {
       if (mounted.current && detailController.current === controller) {

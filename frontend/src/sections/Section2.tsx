@@ -267,26 +267,32 @@ export function Section2({ isInView: propIsInView }: { isInView?: boolean } = {}
     <section
       ref={sectionRef}
       style={{
-        position: 'relative',
-        width: '100%',
-        height: '100vh',
-        minHeight: '680px',
+        width: '100vw',
+        height: isMobile ? 'auto' : '100vh',
+        ...(isMobile ? { minHeight: '100svh', backgroundColor: '#040406', overflow: 'hidden' } : {}),
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        overflow: 'hidden',
-        background: '#040406',
+        contain: 'layout style paint',
       }}
     >
-      <div
-        style={{
+      <div style={{
+        position: 'relative',
+        flexShrink: 0,
+        width: NATIVE_W * scale,
+        height: NATIVE_H * scale,
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: NATIVE_W,
+          height: NATIVE_H,
           transform: `scale(${scale})`,
-          transformOrigin: 'center center',
-          transition: 'transform 0.1s ease-out',
-          willChange: 'transform',
-        }}
-      >
-        {card}
+          transformOrigin: 'top left',
+        }}>
+          {card}
+        </div>
       </div>
     </section>
   )
