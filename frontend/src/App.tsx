@@ -11,6 +11,11 @@ const money = (paise: number, currency = 'INR') => new Intl.NumberFormat('en-IN'
 const stamp = (value: string) => { const time = Date.parse(value); return Number.isFinite(time) ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(time) : 'Unknown time' }
 const label = (value: string | undefined) => {
   if (!value) return 'Unknown'
+  if (value === 'DISMISSED') return 'Policy Blocked'
+  if (value === 'MONITORING') return 'Monitoring'
+  if (value === 'DISPUTE_OPENED') return 'Dispute Open'
+  if (value === 'RESOLVED') return 'Recovered'
+  if (value === 'OPEN') return 'Investigating'
   if (value === 'record_risk_signal') return 'Risk signal recorded'
   if (value === 'deliver_recovery_link_email') return 'Recovery email'
   if (value === 'capture_authorized_payment') return 'Capture payment'
@@ -74,7 +79,7 @@ export default function App() {
     selectedIdRef.current = selectedId
   }, [selectedId])
 
-  const ordered = useMemo(() => [...incidents].sort((a, b) => riskOrder[a.riskTier] - riskOrder[b.riskTier] || Date.parse(b.updatedAt) - Date.parse(a.updatedAt)), [incidents])
+  const ordered = useMemo(() => [...incidents].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || riskOrder[a.riskTier] - riskOrder[b.riskTier]), [incidents])
   const totalAtRisk = useMemo(() => incidents.reduce((sum, incident) => sum + incident.remainingAmountPaise, 0), [incidents])
 
   const refresh = useCallback(async (isBackground = false) => {
@@ -320,7 +325,13 @@ export default function App() {
                       </span>
                       <span className="text-[10px] text-neutral-400">{stamp(incident.updatedAt).split(',')[0]}</span>
                     </div>
-                    <p className="mt-2 text-sm font-semibold text-neutral-100">{label(incident.status)} payment incident</p>
+                    <p className="mt-2 text-sm font-semibold text-neutral-100">
+                      {incident.status === 'DISMISSED' ? 'Policy Blocked — No Outreach' :
+                       incident.status === 'DISPUTE_OPENED' ? 'Dispute Open — Outreach Blocked' :
+                       incident.status === 'RESOLVED' ? 'Payment Recovered & Reconciled' :
+                       incident.status === 'MONITORING' ? 'Monitoring Active Telemetry' :
+                       'Payment Incident'}
+                    </p>
                     <p className="mt-1 text-xs text-neutral-400">{money(incident.remainingAmountPaise)} at risk</p>
                   </button>
                 </li>
@@ -374,7 +385,12 @@ function IncidentRecord({ detail, audit, integrity }: { detail: IncidentDetail; 
               </span>
             </div>
             <h2 className="mt-4 text-xl font-semibold text-white sm:text-2xl">
-              {detail.investigation?.plan?.hypothesis ?? `${label(detail.incident.status)} payment incident`}
+              {detail.investigation?.plan?.hypothesis ?? (
+                detail.incident.status === 'DISMISSED' ? 'Autonomous policy evaluated — outreach blocked by safety rules' :
+                detail.incident.status === 'DISPUTE_OPENED' ? 'Dispute created — automated outreach suspended' :
+                detail.incident.status === 'RESOLVED' ? 'Payment recovered and reconciled via Razorpay' :
+                'Payment failure signal under multi-agent investigation'
+              )}
             </h2>
             <p className="mt-2 text-sm text-neutral-400">
               {detail.events.length} verified signal{detail.events.length === 1 ? '' : 's'} · {money(detail.incident.remainingAmountPaise)} remains at risk
