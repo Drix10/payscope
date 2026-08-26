@@ -39,6 +39,7 @@ export type RevenueIntelligence = {
 type DemoOrganization = { id: string; customerHashSecret: string };
 type IngestResult = { eventId: string; duplicate: boolean };
 export type StoredEvent = CorrelationEvent & { organizationId: string; enrichmentSource: EnrichmentSource | null };
+export type WebhookIntakeResult = { eventId: string; duplicate: boolean; incidentId: string | null; createdNewIncident: boolean };
 export type ProposalDraft = { id: string; actionType: ActionProposal['actionType']; content: Record<string, unknown>; rationale: string };
 export type PolicyContext = { policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats };
 export type ExecutionPolicyContext = { policy: ExecutionPolicy; existingCommandKeys: Set<string> };
@@ -109,6 +110,21 @@ export class MvpRepository {
     const row = Array.isArray(data) ? data[0] : undefined;
     if (!row || typeof row.event_id !== 'string' || typeof row.duplicate !== 'boolean') throw new Error('PayScope durable database event intake returned an invalid response');
     return { eventId: row.event_id, duplicate: row.duplicate };
+  }
+
+  /**
+   * The webhook boundary only persists a verified event and its first durable
+   * job. Correlation (and therefore adaptive replanning) happens later in the
+   * leased job pipeline; claiming an incident here would race that transaction.
+   */
+  async recordWebhookIntake(organizationId: string, rawBody: Buffer, normalized: NormalizedEvent): Promise<WebhookIntakeResult> {
+    const result = await this.ingestEventWithEnrichmentJob(
+      organizationId,
+      normalized.eventId,
+      createHash('sha256').update(rawBody).digest('hex'),
+      normalized,
+    );
+    return { eventId: result.eventId, duplicate: result.duplicate, incidentId: null, createdNewIncident: false };
   }
 
   /** Reconciles a verified Payment Link completion to the immutable email action. */
@@ -632,7 +648,10 @@ export class MvpRepository {
   }
 
   async createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string> {
-    const actionId = randomUUID();
+    // Replans may only enqueue the capability backed by the transactional
+    // direct-execution RPC. Other ranked strategies remain no-action until
+    // they have their own provider contract and atomic outbox function.
+    if (capability !== 'deliver_recovery_link_email') throw new Error(`No direct execution contract exists for ${capability}`);
     const commandKey = `${organizationId}:${capability}:${incidentId}`;
     const detail = await this.incidentDetail(organizationId, incidentId).catch(() => null);
     const latestEvent = detail?.events.at(-1);
@@ -641,37 +660,20 @@ export class MvpRepository {
     const payload = { customerHash, referenceId, copyIntent: rationale };
     const payloadHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
-    try {
-      await this.client.from('payscope_execution_actions').insert({
-        id: actionId,
-        organization_id: organizationId,
-        incident_id: incidentId,
-        capability,
-        command_key: commandKey,
-        command_payload: payload,
-        command_payload_hash: payloadHash,
-        policy_version: '1.0.0',
-        capability_version: '1.0.0',
-        amount_paise: amountPaise,
-        currency: 'INR',
-        state: 'queued',
-        created_at: new Date().toISOString(),
-      });
-
-      await this.client.from('payscope_execution_outbox').insert({
-        id: randomUUID(),
-        organization_id: organizationId,
-        action_id: actionId,
-        command_type: capability,
-        status: 'pending',
-        attempt_number: 1,
-        created_at: new Date().toISOString(),
-      });
-    } catch (error) {
-      logger.error({ organizationId, incidentId, capability, error: error instanceof Error ? error.message : String(error) }, 'PayScope failed to create execution action for saga');
-    }
-
-    return actionId;
+    const { data, error } = await this.client.rpc('payscope_enqueue_recovery_email_action', {
+      p_organization_id: organizationId,
+      p_incident_id: incidentId,
+      p_proposal_id: null,
+      p_command_key: commandKey,
+      p_command_payload: payload,
+      p_command_payload_hash: payloadHash,
+      p_payment_id: latestEvent?.event.paymentId ?? null,
+      p_order_id: latestEvent?.event.orderId ?? null,
+      p_amount_paise: amountPaise,
+      p_currency: latestEvent?.event.currency ?? 'INR',
+    });
+    if (error || typeof data !== 'string') throw databaseError('atomic replan action enqueue', error?.message ?? 'invalid action id');
+    return data;
   }
 
   async updateIncidentStatus(incidentId: string, organizationId: string, status: IncidentStatus, recoveredAmountPaise: number, remainingAmountPaise: number): Promise<void> {

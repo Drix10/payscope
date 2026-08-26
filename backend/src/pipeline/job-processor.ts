@@ -9,6 +9,7 @@ export interface DurablePipelineRepository {
   completeEnrichmentAndEnqueueCorrelation(event: StoredEvent, enrichment: VulcanEnrichment | null): Promise<void>;
   correlationCandidates(organizationId: string, incoming: StoredEvent): Promise<IncidentCandidate[]>;
   persistCorrelation(event: StoredEvent, incident: Incident | undefined, enqueueInvestigation: boolean): Promise<void>;
+  reconcileDirectPaymentLinkEvent?(organizationId: string, event: StoredEvent['event']): Promise<void>;
 }
 
 export type InvestigationDispatcher = (job: QueueJob) => Promise<void>;
@@ -48,6 +49,12 @@ export class PipelineJobProcessor {
     const result = correlateEvent(event, candidates, job.organizationId);
     const shouldInvestigate = Boolean(result && ['risk_event_opened_incident', 'linked_risk_event', 'dispute_opened'].includes(result.reason));
     await this.repository.persistCorrelation(event, result?.incident, shouldInvestigate);
+    // Reconciliation is downstream of durable event/correlation persistence.
+    // A repeated worker delivery is safe because the reconciler has its own
+    // organization-scoped provider-event inbox guard.
+    if (event.event.eventType === 'payment_link.paid') {
+      await this.repository.reconcileDirectPaymentLinkEvent?.(job.organizationId, event.event);
+    }
   }
 }
 

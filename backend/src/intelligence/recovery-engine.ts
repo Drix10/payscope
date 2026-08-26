@@ -1,4 +1,5 @@
-import { ActionType, AutonomyPolicy, Incident, RiskAnalysis, VulcanEnrichment } from '../domain/contracts';
+import { ActionType, AutonomyPolicy, Incident, RecoveryPlanSchema, RiskAnalysis, VulcanEnrichment } from '../domain/contracts';
+import { evaluatePolicy, ExecutionPolicy, MerchantPolicy, OrgDailyStats, CustomerContactStats } from '../pipeline/policy-evaluator';
 
 export type CustomerProfile = {
   organizationId: string;
@@ -56,6 +57,12 @@ const ATTRIBUTION_STRATEGY_SCORES: Record<string, Record<string, number>> = {
   },
 };
 
+const INFRASTRUCTURE_EVIDENCE_MAX_AGE_MS = 10 * 60 * 1_000;
+// A strategy may only enter the autonomous path when it has an end-to-end
+// provider adapter, receipt, reconciliation, and atomic outbox contract.
+// Infrastructure routing is diagnostic-only until such a contract exists.
+const DIRECTLY_EXECUTABLE_STRATEGIES = new Set(['deliver_recovery_link_email']);
+
 function strategyDisplayName(name: string): string {
   switch (name) {
     case 'deliver_recovery_link_email': return '1-Click Razorpay Payment Link Email';
@@ -104,8 +111,12 @@ export function rankStrategies(
   const dataSource = 'razorpay_fields_heuristic';
 
   const strategies: RecoveryStrategy[] = [];
+  const enrichmentAgeMs = enrichment ? Date.now() - Date.parse(enrichment.enrichedAt) : Number.POSITIVE_INFINITY;
+  const infrastructureEvidenceFresh = Number.isFinite(enrichmentAgeMs) && enrichmentAgeMs >= 0 && enrichmentAgeMs <= INFRASTRUCTURE_EVIDENCE_MAX_AGE_MS;
 
   for (const [name, baseScore] of Object.entries(scores)) {
+    if (!DIRECTLY_EXECUTABLE_STRATEGIES.has(name)) continue;
+    if (name === 'resolve_infrastructure' && !infrastructureEvidenceFresh) continue;
     let adjustment = 0;
 
     if (enrichment?.recommendedRetryMethod) {
@@ -186,12 +197,14 @@ export function adaptRecoveryStrategy(
 export type ReplanRepository = {
   incidentDetail(organizationId: string, incidentId: string): Promise<{
     incident: Incident;
-    events: Array<{ id: string; event: { customerHash?: string; eventType: string }; enrichment?: VulcanEnrichment | null }>;
+    events: Array<{ id: string; event: { customerHash?: string; eventType: string; currency?: string }; enrichment?: VulcanEnrichment | null }>;
     investigation: { riskAnalysis: RiskAnalysis } | null;
     execution: Array<{ capability: ActionType; command_key?: string }>;
   } | null>;
   customerProfile(organizationId: string, customerHash: string): Promise<CustomerProfile | null>;
   autonomyPolicy(organizationId: string): Promise<AutonomyPolicy | null>;
+  policyContext?(organizationId: string, incidentId: string, customerHash?: string): Promise<{ policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats }>;
+  executionPolicyContext?(organizationId: string): Promise<{ policy: ExecutionPolicy; existingCommandKeys: Set<string> }>;
   createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string>;
 };
 
@@ -230,6 +243,37 @@ export async function replanIncidentStrategy(
 
   const adapted = adaptRecoveryStrategy(tried, detail.incident, enrichment, realRiskAnalysis, customerProfile, autonomyPolicy);
   if (!adapted) return { adaptedStrategy: null, actionId: null };
+
+  // Replanning has exactly the same authorization boundary as initial
+  // execution.  A repository that cannot supply fresh durable policy context
+  // fails closed rather than creating an outbox command from strategy ranking.
+  if (!repository.policyContext || !repository.executionPolicyContext) return { adaptedStrategy: null, actionId: null };
+  const policyContext = await repository.policyContext(organizationId, incidentId, latest?.event.customerHash);
+  const executionContext = await repository.executionPolicyContext(organizationId);
+  const replan = RecoveryPlanSchema.parse({
+    proposedActions: adapted.capabilities.map(actionType => ({
+      actionType,
+      rationale: `Adaptive recovery strategy selected after ${reason}.`,
+      preconditions: ['Fresh deterministic policy clearance'],
+      expectedOutcome: adapted.displayName,
+      estimatedRecoveryPaise: adapted.heuristicRecoveryEstimatePaise,
+      requiresAutonomousExecution: true,
+    })),
+    noActionReason: undefined,
+    heuristicRecoveryScore: adapted.recoveryValueScore / 100,
+    confidence: realRiskAnalysis.confidence,
+  });
+  const decision = evaluatePolicy(detail.incident, realRiskAnalysis, replan, [policyContext.policy], policyContext.stats, policyContext.contact, {
+    executionPolicy: executionContext.policy,
+    existingCommandKeys: executionContext.existingCommandKeys,
+    commandKeyForAction: actionType => `${organizationId}:${actionType}:${incidentId}`,
+    currentRetryCount: (detail.execution || []).filter(action => action.capability === 'deliver_recovery_link_email').length,
+    amountPaise: detail.incident.remainingAmountPaise,
+    currency: latest?.event.currency ?? 'INR',
+  });
+  if (decision.outcome !== 'auto_with_proposals' || decision.permittedActions.length !== 1 || decision.permittedActions[0].actionType !== adapted.capabilities[0]) {
+    return { adaptedStrategy: null, actionId: null };
+  }
 
   // Idempotency check: Ensure we do not create duplicate actions for the same capability/incident
   const canonicalKey = `${organizationId}:${adapted.capabilities[0]}:${incidentId}`;

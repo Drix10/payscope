@@ -64,7 +64,7 @@ async function main() {
   await runScenario('Policy Evaluator enforces 13 deterministic safety gates', async () => {
     const incident = { id: 'inc_002', organizationId: org, riskTier: 'HIGH', status: 'OPEN', totalFailedAmountPaise: 500000, recoveredAmountPaise: 0, remainingAmountPaise: 500000, correlatedEventIds: ['evt_2'], openedAt: new Date().toISOString(), resolvedAt: null, updatedAt: new Date().toISOString() };
     const risk = { failureRootCause: 'customer_error', evidenceStrength: 'moderate', confidence: 0.88, causalNarrative: 'Customer drop', evidenceConfidenceRationale: 'Verified', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 500000, missingEvidence: [], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'deliver_recovery_link_email', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } };
-    const recoveryPlan = { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Deliver link', preconditions: ['Merchant opt in'], expectedOutcome: 'Recovery', estimatedRecoveryPaise: 500000, requiresAutonomousExecution: true, emailCopyIntent: 'Pay now' }], recoveryProbability: 0.85, confidence: 0.88 };
+    const recoveryPlan = { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Deliver link', preconditions: ['Merchant opt in'], expectedOutcome: 'Recovery', estimatedRecoveryPaise: 500000, requiresAutonomousExecution: true, emailCopyIntent: 'Pay now' }], heuristicRecoveryScore: 0.85, confidence: 0.88 };
     const policy = { id: validUuid, enabled: true, minimumConfidence: 0.70, rootCauses: ['customer_error'], allowedActions: ['deliver_recovery_link_email'], merchantOptedIn: true };
 
     const decision = evaluatePolicy(incident, risk, recoveryPlan, [policy], { autoResolveFraction: 0.1 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: true, customerReferenceAvailable: true });
@@ -76,7 +76,7 @@ async function main() {
   await runScenario('Policy Evaluator engages Hard Stop on open disputes', async () => {
     const incident = { id: 'inc_disputed', organizationId: org, riskTier: 'HIGH', status: 'DISPUTE_OPENED', totalFailedAmountPaise: 500000, recoveredAmountPaise: 0, remainingAmountPaise: 500000, correlatedEventIds: ['evt_d'], openedAt: new Date().toISOString(), resolvedAt: null, updatedAt: new Date().toISOString() };
     const risk = { failureRootCause: 'customer_error', evidenceStrength: 'strong', confidence: 0.90, causalNarrative: 'Dispute opened', evidenceConfidenceRationale: 'Verified dispute', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 500000, missingEvidence: [], chargebackEvidenceReady: true, evidenceItems: ['payment.dispute.created'], recommendedActionCategory: 'submit_dispute_evidence', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } };
-    const recoveryPlan = { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Link', preconditions: ['Merchant opt in'], expectedOutcome: 'Recovery', estimatedRecoveryPaise: 500000, requiresAutonomousExecution: true }], recoveryProbability: 0.5, confidence: 0.90 };
+    const recoveryPlan = { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Link', preconditions: ['Merchant opt in'], expectedOutcome: 'Recovery', estimatedRecoveryPaise: 500000, requiresAutonomousExecution: true }], heuristicRecoveryScore: 0.5, confidence: 0.90 };
 
     const decision = evaluatePolicy(incident, risk, recoveryPlan, [], { autoResolveFraction: 0 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: true, customerReferenceAvailable: true });
     assert.equal(decision.outcome, 'auto_no_action');
@@ -100,12 +100,49 @@ async function main() {
   await runScenario('Exception fallback sets confidence 0.50 and fails-closed under minimum confidence threshold', async () => {
     const incident = { id: 'inc_fail_closed', organizationId: org, riskTier: 'HIGH', status: 'OPEN', totalFailedAmountPaise: 1000000, recoveredAmountPaise: 0, remainingAmountPaise: 1000000, correlatedEventIds: ['evt_fc'], openedAt: new Date().toISOString(), resolvedAt: null, updatedAt: new Date().toISOString() };
     const riskFallback = { failureRootCause: 'customer_error', evidenceStrength: 'weak', confidence: 0.50, causalNarrative: 'Fallback', evidenceConfidenceRationale: 'Uncertainty', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 1000000, missingEvidence: ['LLM'], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'deliver_recovery_link_email', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } };
-    const recoveryPlanFallback = { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Link', preconditions: ['Merchant opt in'], expectedOutcome: 'Recovery', estimatedRecoveryPaise: 1000000, requiresAutonomousExecution: true }], recoveryProbability: 0.50, confidence: 0.50 };
+    const recoveryPlanFallback = { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Link', preconditions: ['Merchant opt in'], expectedOutcome: 'Recovery', estimatedRecoveryPaise: 1000000, requiresAutonomousExecution: true }], heuristicRecoveryScore: 0.50, confidence: 0.50 };
     const policy = { id: validUuid, enabled: true, minimumConfidence: 0.70, rootCauses: ['customer_error'], allowedActions: ['deliver_recovery_link_email'], merchantOptedIn: true };
 
     const decision = evaluatePolicy(incident, riskFallback, recoveryPlanFallback, [policy], { autoResolveFraction: 0.1 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: true, customerReferenceAvailable: true });
     assert.equal(decision.outcome, 'auto_no_action');
     assert.equal(decision.permittedActions.length, 0);
+  });
+
+  // 5b. A deterministic strategy hard-stop must not quietly become the
+  // default email command when the model supplied a recovery suggestion.
+  await runScenario('Recovery Engine exhaustion creates no executable proposal', async () => {
+    let persistedProposals = null;
+    const mockRepo = {
+      incidentDetail: async () => ({
+        incident: { id: 'inc_no_strategy', organizationId: org, riskTier: 'CRITICAL', status: 'OPEN', totalFailedAmountPaise: 500000, recoveredAmountPaise: 0, remainingAmountPaise: 500000, correlatedEventIds: ['evt_ns'], openedAt: new Date().toISOString(), resolvedAt: null, updatedAt: new Date().toISOString() },
+        events: [{ id: 'evt_ns', organizationId: org, event: { eventId: 'evt_ns', organizationId: org, eventType: 'payment.failed', paymentId: 'pay_ns', amountPaise: 500000, receivedAt: new Date().toISOString() }, enrichment: { failureAttribution: 'fraud_block' } }],
+        investigation: null, proposals: [], audit: [], execution: []
+      }),
+      policyContext: async () => ({ policy: { id: validUuid, enabled: true, minimumConfidence: 0.70, rootCauses: ['fraud_confirmed'], allowedActions: ['deliver_recovery_link_email'], merchantOptedIn: true }, stats: { autoResolveFraction: 0.1 }, contact: { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: true, customerReferenceAvailable: true } }),
+      riskToolMetrics: async () => null, incidentMemory: async () => [], executionPolicyContext: async () => null, customerProfile: async () => null, autonomyPolicy: async () => null,
+      persistDirectInvestigation: async (...args) => { persistedProposals = args[7]; }
+    };
+    const mockProvider = new EchoModelAdapter(req => {
+      if (req.systemPrompt.includes('Supervisor')) return { hypothesis: 'Fraud signal', primaryFailureCategory: 'fraud_confirmed', objectives: ['Stop'], evidencePriorities: [], subAgents: [], constraints: [], noActionCriteria: ['Fraud'], estimatedAutoResolvable: false, requiresNoActionFallback: true, confidence: 0.9, reasoning: 'Signal' };
+      if (req.systemPrompt.includes('Risk Analyst')) return { failureRootCause: 'fraud_confirmed', evidenceStrength: 'strong', confidence: 0.95, causalNarrative: 'Fraud', evidenceConfidenceRationale: 'Signal', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 500000, missingEvidence: [], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'no_action', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } };
+      return { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Do not use', preconditions: [], expectedOutcome: 'None', estimatedRecoveryPaise: 500000, requiresAutonomousExecution: true }], heuristicRecoveryScore: 0.9, confidence: 0.9 };
+    });
+    await runDurableInvestigation(mockRepo, mockProvider, { jobId: 'job_ns', organizationId: org, incidentId: 'inc_no_strategy', triggerEventId: 'evt_ns', attemptNumber: 1, createdAt: new Date().toISOString() }, { directExecution: true });
+    assert.deepEqual(persistedProposals, []);
+  });
+
+  await runScenario('Webhook rotation accepts the bounded prior secret', async () => {
+    const previousWebhookSecret = 'previous_webhook_secret_123456789012';
+    const payload = Buffer.from(JSON.stringify({ event: 'payment.failed', payload: { payment: { entity: { id: 'pay_old_secret', amount: 500000, created_at: Math.floor(Date.now() / 1000) } } } }));
+    let recorded = false;
+    const result = await receiveWebhook(payload, signWebhook(payload, previousWebhookSecret), 'evt_old_secret', {
+      recordWebhookIntake: async () => {
+        recorded = true;
+        return { eventId: 'evt_old_secret', duplicate: false, incidentId: 'inc_old_secret', createdNewIncident: true };
+      }
+    }, { webhookSecret, previousWebhookSecret, organizationId: org });
+    assert.equal(result.duplicate, false);
+    assert.equal(recorded, true);
   });
 
   // 6. Full Pipeline Integration Test
@@ -130,7 +167,7 @@ async function main() {
       const s = req.systemPrompt || '';
       if (s.includes('Supervisor')) return { hypothesis: 'Customer checkout drop', primaryFailureCategory: 'customer_error', objectives: ['Validate telemetry'], evidencePriorities: [{ fact: 'Razorpay intake', whyItMatters: 'Root cause' }], subAgents: [{ agent: 'risk_analyst', question: 'What is risk?', priority: 1, allowedContextFields: ['payment'] }, { agent: 'recovery_planner', question: 'What is plan?', priority: 1, allowedContextFields: ['payment'] }], constraints: ['Enforce stopping rules'], noActionCriteria: ['Dispute opened'], estimatedAutoResolvable: true, requiresNoActionFallback: false, confidence: 0.90, reasoning: 'Verified' };
       if (s.includes('Risk Analyst') || (s.includes('Risk') && !s.includes('Recovery Planner'))) return { failureRootCause: 'customer_error', evidenceStrength: 'strong', confidence: 0.88, causalNarrative: 'Customer dropped 2FA', evidenceConfidenceRationale: 'Razorpay fields', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 7500000, missingEvidence: [], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'deliver_recovery_link_email', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } };
-      return { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Deliver link', preconditions: ['Merchant opt in'], expectedOutcome: 'Recovery', estimatedRecoveryPaise: 7500000, requiresAutonomousExecution: true, emailCopyIntent: 'Pay now' }], recoveryProbability: 0.85, confidence: 0.88 };
+      return { proposedActions: [{ actionType: 'deliver_recovery_link_email', rationale: 'Deliver link', preconditions: ['Merchant opt in'], expectedOutcome: 'Recovery', estimatedRecoveryPaise: 7500000, requiresAutonomousExecution: true, emailCopyIntent: 'Pay now' }], heuristicRecoveryScore: 0.85, confidence: 0.88 };
     });
 
     await runDurableInvestigation(mockRepo, mockProvider, { jobId: 'job_1', organizationId: org, incidentId: 'inc_full_pipeline', triggerEventId: 'evt_fp', attemptNumber: 1, createdAt: new Date().toISOString() }, { directExecution: true });
@@ -187,7 +224,7 @@ async function main() {
     let createdActions = [];
     let state = {
       incident: { id: 'inc_e2e_intake', organizationId: org, riskTier: 'HIGH', status: 'OPEN', totalFailedAmountPaise: 1000000, recoveredAmountPaise: 0, remainingAmountPaise: 1000000, correlatedEventIds: ['evt_e2e_1'], openedAt: new Date().toISOString(), resolvedAt: null, updatedAt: new Date().toISOString() },
-      events: [{ id: 'evt_e2e_1', organizationId: org, event: { eventId: 'evt_e2e_1', eventType: 'payment.failed', customerHash: 'cust_hash_1', occurredAt: new Date().toISOString() }, enrichment: { failureAttribution: 'gateway_degraded' } }],
+      events: [{ id: 'evt_e2e_1', organizationId: org, event: { eventId: 'evt_e2e_1', eventType: 'payment.failed', customerHash: 'cust_hash_1', occurredAt: new Date().toISOString() }, enrichment: { failureAttribution: 'gateway_degraded', enrichedAt: new Date().toISOString() } }],
       investigation: { riskAnalysis: { failureRootCause: 'gateway_degraded', evidenceStrength: 'strong', confidence: 0.90, causalNarrative: 'Gateway issue', evidenceConfidenceRationale: 'Verified', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 1000000, missingEvidence: [], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'resolve_infrastructure', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } } },
       execution: []
     };
@@ -202,6 +239,8 @@ async function main() {
       incidentDetail: async () => state,
       customerProfile: async () => null,
       autonomyPolicy: async () => null,
+      policyContext: async () => ({ policy: { id: validUuid, enabled: true, minimumConfidence: 0.7, rootCauses: ['gateway_degraded'], allowedActions: ['resolve_infrastructure'], merchantOptedIn: true }, stats: { autoResolveFraction: 0 }, contact: { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: true, customerReferenceAvailable: true } }),
+      executionPolicyContext: async () => ({ policy: { enabledCapabilities: ['resolve_infrastructure'], maxAmountPaise: 2000000, allowedCurrencies: ['INR'], emailConsentRequired: false, providerHealthy: true, emergencyPaused: false, retryBudget: 3 }, existingCommandKeys: new Set() }),
       createExecutionActionForSaga: async (orgId, incId, capability, rationale, amount) => {
         replanCount++;
         createdActions.push({ capability, command_key: `${orgId}:${capability}:${incId}` });

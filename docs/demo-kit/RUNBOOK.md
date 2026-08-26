@@ -28,7 +28,7 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 | **Preflight Check** | `node scripts/demo-preflight.mjs` | Asserts deployed API health, organization UUID match, and `test` mode safety. |
 | **Self-Test** | `node scripts/self-test.mjs` | Verifies local HMAC-SHA256 signature generation and duplicate detection logic. |
 | **Send Webhook** | `node scripts/send-webhook.mjs --scenario failed-payment --event-id "evt_1"` | Constructs, HMAC-signs, and dispatches test webhooks for any scenario. |
-| **Automated Sequence** | `node scripts/run-demo.mjs --pause-ms 2000` | Runs all 4 core scenarios sequentially with customizable pause delays. |
+| **Automated Sequence** | `node scripts/run-demo.mjs --pause-ms 2000` | Runs failure, exact duplicate, correlated failure, and dispute scenarios; it adds reconciliation only when given a real action reference and captured payment. |
 | **Verification Suite** | `node scripts/verify-demo.mjs` | Validates that incidents, execution outbox records, and audit entries exist in DB. |
 
 ---
@@ -62,18 +62,18 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 |---|---|
 | **Screen State** | Split-Screen (Demo Studio on Left, Dashboard on Right). |
 | **Operator Action** | 1. Point out the **4 Hero KPI Cards** at the top (`Active Telemetry`, `Autonomous Outreach`, `Multi-Agent Engine`, `Safety Policy Lock`).<br />2. On Demo Studio (`http://127.0.0.1:3050`), click **`[ > DISPATCH EVENT ]`** under **01: FAILED PAYMENT**. |
-| **Visual Target** | Hover cursor over the newly ingested incident. Highlight the **5-Stage Pipeline Progression Bar** (`1. Webhook Ingested` → `2. Vulcan Enriched` → `3. Multi-Agent Plan` → `4. Policy Decision` → `5. Outbox Executed`) and the **`⚡ Razorpay Vulcan AI Direct`** signal badge. |
+| **Visual Target** | Hover cursor over the newly ingested incident. Highlight the **5-Stage Pipeline Progression Bar** (`1. Webhook Ingested` → `2. Razorpay Fields Enriched` → `3. Evidence Investigation` → `4. Deterministic Strategy + Policy` → `5. Outbox Queued`). Do not present any legacy “Vulcan” label if it appears in an old screenshot or build. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
 > "Welcome to the PayScope Autonomous Command Center. At the top, you can see our real-time operational posture: Active Telemetry, Autonomous Outreach status, Multi-Agent Engine health, and Deterministic Safety Policy Locks.
 > 
 > Let's dispatch a live payment failure webhook from our operator terminal.
 > 
-> Instantly, PayScope verifies the HMAC signature and ingests Razorpay Vulcan telemetry—including acquirer health scores and failure attributions. 
+> Instantly, PayScope verifies the HMAC signature and derives bounded enrichment from allowlisted Razorpay payment fields—such as error source, failure step, retry attempts, acquirer data, and downtime signals when available.
 > 
-> Look at the 5-stage pipeline progression: The event is ingested, enriched by Vulcan AI, investigated by our multi-agent supervisor, cleared through 13 deterministic safety gates, and dispatched into the transactional execution outbox.
+> Look at the 5-stage pipeline progression: The event is ingested, enriched from Razorpay fields, investigated for evidence and risk, ranked by the deterministic Recovery Engine, cleared through 13 deterministic safety gates, and queued in the transactional execution outbox.
 > 
-> Our AI identified the exact root cause: 'Customer drop-off during UPI 2FA authentication', and automatically generated a branded 1-click Razorpay Payment Link."
+> The evidence pipeline identified a likely customer drop-off during UPI authentication. The deterministic Recovery Engine selected the permitted strategy; only after policy clearance can the direct-execution worker create a 1-click Razorpay Payment Link."
 
 ---
 
@@ -92,7 +92,7 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 > 
 > PayScope's correlation engine matches the order ID, customer hash, and sliding time window. The duplicate is suppressed immediately at the intake boundary with `duplicate: true`.
 > 
-> No duplicate incident is created, and zero duplicate emails are sent. Complete idempotency is guaranteed."
+> No duplicate incident is created, no duplicate replan is started, and no duplicate email command is issued. The durable command key and callback/event deduplication make the action idempotent."
 
 ---
 
@@ -111,7 +111,7 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 > 
 > Notice how PayScope immediately locks into 'Dispute Safety Mode'. Our deterministic policy engine intercepts the dispute and engages a Hard Stop across 13 safety gates.
 > 
-> All automated recovery actions are blocked instantly. AI proposes, but deterministic safety policy authorizes. The merchant is always 100% compliant."
+> All automated recovery actions are blocked instantly. Models supply bounded evidence; the deterministic policy is the final authorization boundary."
 
 ---
 
@@ -120,7 +120,7 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 | Field | Detail / Instruction |
 |---|---|
 | **Screen State** | Split-Screen. |
-| **Operator Action** | 1. On Demo Studio, click **`[ > DISPATCH RECON ]`** under **04: RECONCILIATION**.<br />2. Click on the **Resolved** tab in the PayScope Dashboard. |
+| **Operator Action** | 1. Confirm that the reference is from an actual PayScope-created Test-mode Payment Link and the payment ID is its captured payment.<br />2. On Demo Studio, click **`[ > DISPATCH RECON ]`** under **04: RECONCILIATION**.<br />3. Click on the **Resolved** tab in the PayScope Dashboard. |
 | **Visual Target** | Scroll to the **Autonomous Execution Ledger** and highlight the status changing to **`Payment Recovered & Reconciled`** with Razorpay reference `ps_...`. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
@@ -130,7 +130,7 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 > 
 > When the customer completes the payment, Razorpay sends a signed `payment_link.paid` webhook. PayScope correlates the reference ID back to the original incident.
 > 
-> The incident status immediately updates to RESOLVED, and the recovered amount is credited to the merchant's ledger. We never claim money is recovered until Razorpay's cryptographic callback confirms it."
+> When the reference and payment match the durable action, the incident updates to RESOLVED and the recovered amount is recorded. We never claim money is recovered from SMTP acceptance or a synthetic event; it requires the verified Razorpay callback and causal correlation."
 
 ---
 
@@ -147,7 +147,7 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 > 
 > Merchants can also query their entire payment operations dataset in natural language. I'll ask: 'show open high-risk incidents'—and PayScope instantly returns a structured, accurate operational breakdown.
 > 
-> That is PayScope: Autonomous Multi-Agent Payment Recovery with zero guesswork, 100% safety locks, and verified Razorpay reconciliation. Thank you!"
+> That is PayScope: evidence-backed payment recovery with deterministic authorization, durable execution, and verified Razorpay reconciliation. Thank you!"
 
 ---
 

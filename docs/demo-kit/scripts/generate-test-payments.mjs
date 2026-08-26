@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -52,11 +51,6 @@ async function createOrder(amount = 125000, notes = {}) {
 }
 
 async function main() {
-    const ts = Date.now().toString().slice(-6);
-    const failedId = `pay_test_failed_${ts}`;
-    const capturedId = `pay_test_captured_${ts}`;
-    const sampleRef = `ps_${crypto.randomBytes(16).toString('hex')}`;
-
     let orderId = null;
     if (keyId && keySecret && keyId.startsWith('rzp_test_')) {
         try {
@@ -70,24 +64,11 @@ async function main() {
         }
     }
 
-    // Always update docs/demo-kit/.env automatically with valid IDs
-    if (fs.existsSync(envPath)) {
-        let content = fs.readFileSync(envPath, 'utf8');
-        content = content.replace(/^PAYSCOPE_DEMO_FAILED_PAYMENT_ID=.*/m, `PAYSCOPE_DEMO_FAILED_PAYMENT_ID=${failedId}`);
-        content = content.replace(/^PAYSCOPE_DEMO_RELATED_PAYMENT_ID=.*/m, `PAYSCOPE_DEMO_RELATED_PAYMENT_ID=${failedId}`);
-        content = content.replace(/^PAYSCOPE_DEMO_CAPTURED_PAYMENT_ID=.*/m, `PAYSCOPE_DEMO_CAPTURED_PAYMENT_ID=${capturedId}`);
-        content = content.replace(/^PAYSCOPE_DEMO_PAYMENT_LINK_REFERENCE=.*/m, `PAYSCOPE_DEMO_PAYMENT_LINK_REFERENCE=${sampleRef}`);
-        fs.writeFileSync(envPath, content, 'utf8');
-    }
-
-    console.log('\n✅ Fresh Payment & Reference IDs generated and written to docs/demo-kit/.env:\n');
-    console.log(`1. Failed Payment ID:         ${failedId}`);
-    console.log(`2. Captured Payment ID:       ${capturedId}`);
-    console.log(`3. Payment Link Reference ID: ${sampleRef}\n`);
+    console.log('\nDemo Test-order preparation complete.\n');
     if (orderId) {
         console.log('Razorpay API verification order:', orderId);
     }
-    console.log('\n✨ Demo Kit environment updated! You can now start your fresh recording.');
+    console.log('This script does not manufacture payment IDs or PayScope references. Enter a real failed/captured Test payment and a reference from an actual PayScope-created Payment Link before demonstrating reconciliation.');
 }
 
 main();

@@ -62,12 +62,10 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
   router.get('/autonomy-policy', async (_req, res, next) => {
     try { res.status(200).json({ success: true, data: await repository.autonomyPolicy(organizationId) }); } catch (error) { next(error); }
   });
-  router.put('/autonomy-policy', async (req, res, next) => {
-    try {
-      const update = typeof req.body === 'object' && req.body !== null ? req.body : {};
-      res.status(200).json({ success: true, data: await repository.updateAutonomyPolicy(organizationId, update) });
-    } catch (error) { next(error); }
-  });
+  // Policy mutation is deliberately not exposed by the browser API.  Until a
+  // merchant-authenticated control plane exists, policy changes must be made
+  // through the service-role operational workflow so an unauthenticated HTTP
+  // caller cannot pause autonomy or enable an execution capability.
   router.get('/revenue-intelligence', async (_req, res, next) => {
     try { res.status(200).json({ success: true, data: await repository.revenueIntelligence(organizationId) }); } catch (error) { next(error); }
   });

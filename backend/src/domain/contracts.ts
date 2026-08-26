@@ -128,7 +128,7 @@ export const RiskAnalysisModelOutputSchema = RiskAnalysisSchema.omit({ toolResul
 export const RecoveryPlanSchema = z.object({
   proposedActions: z.array(z.object({ actionType: ActionTypeSchema, rationale: z.string().min(1).max(100), preconditions: z.array(z.string().min(1).max(140)).min(1).max(6), expectedOutcome: z.string().min(1).max(160), estimatedRecoveryPaise: paise.nullable(), scriptContent: z.string().min(1).max(600).optional(), emailCopyIntent: z.string().min(1).max(600).optional(), requiresAutonomousExecution: z.literal(true) }).strict()).max(8),
   noActionReason: z.string().min(1).max(200).optional(),
-  recoveryProbability: z.number().min(0).max(1),
+  heuristicRecoveryScore: z.number().min(0).max(1),
   confidence: z.number().min(0).max(1),
 }).strict();
 

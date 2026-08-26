@@ -38,7 +38,7 @@ console.log(JSON.stringify({
     apiUrl, runId, organizationChecked: org, next: [
         'Open the dashboard and show the single correlated failed-payment incident.',
         'Show the duplicate response and dispute policy gate.',
-        'For direct execution, use the dedicated consent and ambiguous-send procedures in RUNBOOK.md.',
+        'Enable direct execution only after completing the deployment prerequisites in backend/docs/PRODUCTION_RAZORPAY_DEPLOYMENT.md.',
         'Use send-webhook.mjs --scenario payment-link-paid only with a real PayScope reference from the demo action.',
     ]
 }, null, 2));

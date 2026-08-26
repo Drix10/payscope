@@ -13,16 +13,16 @@
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-RLS%20%2B%20Audit-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
 </p>
 
-PayScope turns raw Razorpay webhook events into an end-to-end, tenant-scoped revenue-rescue loop. It correlates raw payment failure signals into unified incident timelines, enriches them with **Razorpay payment telemetry and bank downtime signals**, runs a multi-agent root-cause investigation via Mesh API, enforces a 13-gate deterministic policy safety engine, and dispatches 1-click Razorpay Payment Links directly to customers via Nodemailer SMTP.
+PayScope turns raw Razorpay webhook events into a tenant-scoped, evidence-backed recovery loop. It correlates payment-failure signals into incident timelines, enriches allowlisted Razorpay payment fields and downtime signals, runs a structured Mesh investigation, ranks a deterministic recovery strategy, enforces 13 policy gates, and—when direct execution is enabled and healthy—dispatches a Razorpay Payment Link through SMTP.
 
 ---
 
 ## Key Pillars
 
-1. **Razorpay Telemetry Ingestion:** Directly ingests Razorpay payment telemetry, extracting acquirer health metrics, failure attributions (`error_source`, `error_step`, `error_reason`), and network risk flags across the enrichment layer and dashboard UI.
-2. **Multi-Agent Root-Cause Analysis:** Uses dedicated agent roles (Supervisor, Risk Analyst, Recovery Planner) via Mesh API with **3-attempt structured output retries** to evaluate causal narratives, alternative hypotheses, and evidence confidence without speculative execution.
-3. **Deterministic Policy Safety Engine:** 13 hard-coded policy safety gates validate merchant consent, dispute locks, amount caps, quiet hours, and contact frequency limits before any provider command is dispatched.
-4. **Idempotent Execution & Callback Reconciliation:** Emits traceable recovery actions (e.g. Razorpay Payment Links) with unique reference tracking (`ps_...`), confirming recovery only upon signed callback verification.
+1. **Razorpay Telemetry Ingestion:** Uses allowlisted Razorpay fields (`error_source`, `error_step`, `error_reason`, attempts, and acquirer data) plus bounded downtime signals. The enrichment is explicitly heuristic, never an invented provider signal.
+2. **Structured Investigation + Deterministic Strategy:** Supervisor, Risk Analyst, and Recovery Planner use bounded JSON with 3 attempts. The model supplies evidence and copy intent; the deterministic Recovery Engine selects the executable strategy.
+3. **Deterministic Policy Safety Engine:** 13 gates validate merchant consent, dispute locks, amount caps, quiet hours, contact frequency limits, provider health, and idempotency before any provider command is dispatched.
+4. **Idempotent Execution & Callback Reconciliation:** Creates traceable recovery actions with unique references (`ps_...`), reconciles ambiguous provider results before retry, and confirms financial recovery only from a causally matched, signed callback.
 5. **Real SHA-256 Cryptographic Audit Chain:** Serves real-time merchant revenue analytics (`/api/mvp/revenue-intelligence`) and computes SHA-256 entry hashes across the audit ledger.
 
 ---
@@ -44,9 +44,8 @@ PayScope turns raw Razorpay webhook events into an end-to-end, tenant-scoped rev
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <strong>03 — AI Decision Record</strong><br />
-      Detailed evidence breakdown, causal attributions, alternative hypotheses, and 13 policy evaluation gates.<br /><br />
-      <img src="docs/screenshots/03-ai-decision-record.png" alt="PayScope AI decision record" />
+      <strong>03 — Evidence and Strategy Record</strong><br />
+      The current product records model evidence separately from the deterministic strategy and policy decision. The legacy simulated-action screenshot has been intentionally removed pending a current capture.
     </td>
     <td width="50%" valign="top">
       <strong>04 — Autonomous Execution Ledger</strong><br />
@@ -66,7 +65,7 @@ PayScope turns raw Razorpay webhook events into an end-to-end, tenant-scoped rev
 | **Project name / title** | **PayScope — Autonomous Payment Operations Agent** |
 | **GitHub repository** | [github.com/Drix10/payscope](https://github.com/Drix10/payscope) |
 | **Project objective** | Ingest signed Razorpay events, enrich with Razorpay telemetry, analyze evidence using a structured multi-agent pipeline, execute authorized recovery actions, and verify outcomes via signed callbacks. |
-| **What it solves** | Payment failures are noisy and hard to resolve manually. PayScope correlates raw webhooks into unified incidents, distinguishes bank outages from customer drops, executes recovery links, and makes every action 100% audit-verifiable. |
+| **What it solves** | Payment failures are noisy and hard to resolve manually. PayScope correlates webhooks into unified incidents, distinguishes bounded heuristic causes, executes only policy-permitted actions, and retains an auditable decision/receipt/callback chain. |
 
 ---
 
@@ -76,13 +75,16 @@ PayScope turns raw Razorpay webhook events into an end-to-end, tenant-scoped rev
 Razorpay Webhook (HMAC SHA-256 Signed)
    │
    ▼
-Razorpay Telemetry Intake (Acquirer Health & Failure Attribution)
+Allowlisted Razorpay Field Enrichment (Heuristic Attribution)
    │
    ▼
 Correlation & Deduplication Engine (Order ID, Customer Hash, Time Window)
    │
    ▼
-Multi-Agent Analysis Engine (Supervisor → Risk Analyst → Recovery Planner with 3x Retry)
+Structured Investigation (Supervisor → Risk Analyst → Recovery Planner)
+   │
+   ▼
+Deterministic Recovery Engine (strategy score and heuristic estimate, not calibrated probability)
    │
    ▼
 Deterministic Policy Engine (13 Safety Gates, Dispute Locks, Contact Ceilings)
@@ -102,7 +104,8 @@ Callback Reconciliation & Append-Only Cryptographic Audit Trail
 |---|---|---|
 | **Supervisor Agent** | Synthesizes incident context, sets investigation objectives, and establishes risk constraints. | Analytical only; cannot execute commands or alter policies. |
 | **Risk Analyst Agent** | Analyzes payment failure telemetry, merchant metrics, and causal factors. | Analytical only; reads tenant data without side effects. |
-| **Recovery Planner Agent** | Recommends recovery options based on failure attribution and customer state. | Formulates proposals only; subject to policy approval. |
+| **Recovery Planner Agent** | Supplies bounded recovery context and permitted email copy intent. | Cannot select the final action or execute commands. |
+| **Recovery Engine** | Ranks untried recovery strategies from durable incident evidence and customer context. | Deterministic selector; no strategy means no action. |
 | **Deterministic Policy Engine** | Evaluates 13 hard business rules, dispute blocks, and outreach ceilings. | Gatekeeper; holds final execution authority. |
 | **Execution Workers** | Dispatches authorized provider commands from outbox and tracks receipts. | Executes approved actions idempotently. |
 
@@ -141,7 +144,7 @@ npm start
 ```
 Access the operator UI at `http://127.0.0.1:3050`.
 
-To generate real Razorpay Test payment references for live testing:
+To prepare a Razorpay Test order for checkout (this does not create a payment, Payment Link, or causal recovery reference):
 ```bash
 node docs/demo-kit/scripts/generate-test-payments.mjs
 ```
@@ -151,7 +154,7 @@ node docs/demo-kit/scripts/generate-test-payments.mjs
 ## Verification & Testing
 
 ```bash
-# Comprehensive ETE test suite (21/21 tests passing across Multi-Agent Engine, Execution Outbox, Fixture Baselines, and Causal Attribution)
+# Backend integration suite (12 scenarios covering strategy selection/exhaustion, policy gates, adaptive replanning, webhook rotation, and deduplication)
 cd backend && npm run test
 
 # Frontend TypeScript compilation & production build check

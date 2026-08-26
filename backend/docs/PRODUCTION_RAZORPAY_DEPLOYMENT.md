@@ -22,6 +22,7 @@ This project has the following active autonomous-lifecycle migrations before the
 - `202608230010_direct_execution_complete.sql` (callback inbox, reconciliation, execution policy, transition graph)
 - `202608230011_direct_only_enforcement.sql` (retire legacy simulation channels)
 - `202608230012_internal_action_finalize.sql` (finalize non-provider actions without a provider receipt)
+- `202608230013_execution_audit_metrics.sql` (execution audit coverage and metrics)
 
 Create the merchant organization through the canonical migration/RPC workflow, copy its UUID to `PAYSCOPE_ORGANIZATION_ID`, and keep a separate `PAYSCOPE_INTEGRATION_ORGANIZATION_ID` for opt-in integration checks. Do not use an incident-bearing organization for destructive fixture cleanup; audit entries are append-only by design.
 
@@ -35,13 +36,14 @@ Copy `backend/.env.example` to a private `backend/.env`. Set:
 - a unique `PAYSCOPE_WORKER_ID`
 - `CORS_ORIGINS=https://<your-vercel-domain>`
 - `RAZORPAY_ENVIRONMENT=live` or `test`, matching the `rzp_live_` or `rzp_test_` prefix of `RAZORPAY_KEY_ID`
-- Razorpay key secret and webhook secret, Supabase URL/service-role key, Mesh API key, SMTP credentials, and `PAYSCOPE_EMAIL_ENCRYPTION_KEY` only on the VPS
+- Razorpay key secret and current webhook secret, Supabase URL/service-role key, Mesh API key, SMTP credentials, and `PAYSCOPE_EMAIL_ENCRYPTION_KEY` only on the VPS
+- optionally `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` for the deliberately bounded webhook-secret rotation period; remove it once Razorpay is configured with the current secret everywhere
 
 If the service is behind exactly one trusted reverse proxy, set `TRUST_PROXY=true`. Do not set it when Node is directly internet-facing. Do not place any backend value in Vercel or a `VITE_*` variable.
 
 When `PAYSCOPE_DIRECT_EXECUTION_ENABLED=true`, PayScope's Phase-A capability creates a Razorpay Payment Link with Razorpay notifications disabled and sends one recovery email through the configured SMTP relay. A recipient must be in the encrypted, consented email vault. The execution worker starts only after SMTP verification succeeds; otherwise direct execution reports unhealthy and actions remain queued. Immediately before the irreversible SMTP marker, the database rechecks active consent, a non-terminal incident, and a 24-hour command lifetime. SMTP acceptance is not delivery or recovery; only a verified `payment_link.paid` event confirms recovery. An ambiguous SMTP result is recorded as `unreconciled` and is never blindly resent.
 
-Before enabling that value, configure the merchant policy for the Phase-A capability and enroll only a consented recipient from the VPS:
+Before enabling that value, configure the merchant policy for the Phase-A capability:
 
 ```sql
 update public.payscope_merchant_policies
@@ -51,14 +53,7 @@ set enabled = true,
 where organization_id = '<merchant-organization-uuid>';
 ```
 
-```bash
-# Run only on the VPS; remove the three temporary PAYSCOPE_RECIPIENT_* values
-# from .env immediately after the encrypted write succeeds.
-PAYSCOPE_RECIPIENT_CUSTOMER_ID=cust_... \
-PAYSCOPE_RECIPIENT_EMAIL=customer@example.com \
-PAYSCOPE_RECIPIENT_EMAIL_CONSENT=true \
-npm run recipient:upsert
-```
+The recipient-vault enrollment CLI described in earlier documentation is **not present in the current package scripts**. Do not enable Phase-A email execution until a privileged, auditable enrollment procedure for an explicitly consented recipient has been provisioned in your deployment. Never insert raw recipient data through a browser endpoint or expose it in logs.
 
 Set `PAYSCOPE_DIRECT_EXECUTION_ENABLED=true` only after the SMTP `verify()` readiness check succeeds and the Phase-A integration proof passes.
 
@@ -80,13 +75,13 @@ Point the Razorpay webhook to:
 POST https://<your-api-domain>/webhooks/razorpay
 ```
 
-Set its secret to the exact value of `RAZORPAY_WEBHOOK_SECRET`. The endpoint verifies the HMAC over the raw body before parsing it. It acknowledges supported signed events, then workers process only the event types needed for the bounded incident pipeline; extra signed event subscriptions are safely acknowledged rather than becoming false incidents.
+Set its secret to the exact value of `RAZORPAY_WEBHOOK_SECRET`. The endpoint verifies the HMAC over the raw body with a constant-time comparison before parsing it. During a bounded rotation window it also accepts `RAZORPAY_WEBHOOK_SECRET_PREVIOUS`; remove the prior value after rotation. It acknowledges supported signed events, then workers process only the event types needed for the bounded incident pipeline; extra signed event subscriptions are safely acknowledged rather than becoming false incidents. A duplicate event is persisted/deduplicated but does not start another adaptive replan.
 
 After saving the webhook, send one known event and confirm this chain in server logs/database:
 
 ```text
 accepted webhook → durable event + job → leased worker → enrichment → correlation
-→ schema-validated AI investigation → deterministic policy → immutable email command
+→ schema-validated evidence investigation → deterministic Recovery Engine → policy → immutable email command
 → Razorpay Payment Link → SMTP acceptance/rejection → payment-link reconciliation → audit chain
 ```
 
@@ -98,6 +93,6 @@ npm run test
 npm audit --omit=dev --audit-level=high
 ```
 
-Run opt-in integration checks only against the dedicated integration organization. Exercise duplicate webhooks, stale/missing jobs, model timeout or invalid JSON, unavailable enrichment, fraud, dispute, contact limit, partial/full late capture, concurrent worker claims, SMTP rejection, and an execution-worker restart after the durable email-send marker. In every case confirm that the browser remains read-only and an ambiguous email is never sent twice.
+Run opt-in integration checks only against the dedicated integration organization. Exercise duplicate webhooks, current/prior-secret verification during rotation, stale/missing jobs, model timeout or invalid JSON, unavailable enrichment, fraud, dispute, strategy exhaustion, contact limit, partial/full late capture, concurrent worker claims, SMTP rejection, and an execution-worker restart after the durable email-send marker. In every case confirm that the browser remains read-only, an ambiguous email is never sent twice, and strategy exhaustion produces no provider command.
 
 Report direct recovery only from action → receipt → verified Razorpay event evidence; the legacy fixture benchmark has been removed.

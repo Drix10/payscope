@@ -22,8 +22,7 @@ const scenarios = {
                     error_source: 'customer',
                     error_step: 'payment_authentication',
                     error_reason: 'customer_drop',
-                    vulcan_attribution: 'customer_drop',
-                    vulcan_gateway_health: 0.98
+                    attempts: 1
                 }
             },
             order: { entity: { id: orderId, customer_id: customerId, amount, currency, status: 'attempted', created_at: Math.floor(Date.now() / 1000) } },
@@ -46,8 +45,7 @@ const scenarios = {
                     error_source: 'gateway',
                     error_step: 'payment_authorization',
                     error_reason: 'gateway_degraded',
-                    vulcan_attribution: 'gateway_degraded',
-                    vulcan_gateway_health: 0.45
+                    attempts: 1
                 }
             },
             order: { entity: { id: input.orderId ?? `order_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, customer_id: input.customerId ?? `cust_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`, amount: input.amount ?? randomAmount(), currency: 'INR', status: 'attempted', created_at: Math.floor(Date.now() / 1000) } },

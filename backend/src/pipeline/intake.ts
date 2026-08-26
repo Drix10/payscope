@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from 'crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { AppError, Incident, IncidentStatus, NormalizedEvent, NormalizedEventSchema, RiskTier, VulcanEnrichment } from '../domain/contracts';
 import { RECOVERY_WINDOW_MS } from '../config/config';
 import { replanIncidentStrategy } from '../intelligence/recovery-engine';
@@ -53,6 +53,12 @@ function hashCustomer(customerReference: string | undefined, customerHashSecret:
 
 export function rawPayloadHash(rawBody: Buffer): string {
   return createHash('sha256').update(rawBody).digest('hex');
+}
+
+function validWebhookSignature(rawBody: Buffer, signature: string, secret: string): boolean {
+  const provided = Buffer.from(signature.trim(), 'hex');
+  const expected = Buffer.from(createHmac('sha256', secret).update(rawBody).digest('hex'), 'hex');
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
 export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: string, customerHashSecret: string, receivedAt = new Date().toISOString()): NormalizedEvent {
@@ -247,13 +253,18 @@ export async function receiveWebhook(
   if (!eventIdHeader) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'x-razorpay-event-id header is required');
 
   const secret = config.webhookSecret;
-  const computed = createHmac('sha256', secret).update(rawBody).digest('hex');
-  if (computed !== signatureHeader.trim()) throw new AppError('INVALID_RAZORPAY_SIGNATURE', 400, 'x-razorpay-signature header is invalid');
+  const verifiedWithCurrentSecret = validWebhookSignature(rawBody, signatureHeader, secret);
+  const verifiedWithPreviousSecret = !verifiedWithCurrentSecret
+    && Boolean(config.previousWebhookSecret)
+    && validWebhookSignature(rawBody, signatureHeader, config.previousWebhookSecret!);
+  if (!verifiedWithCurrentSecret && !verifiedWithPreviousSecret) {
+    throw new AppError('INVALID_RAZORPAY_SIGNATURE', 400, 'x-razorpay-signature header is invalid');
+  }
 
   const normalized = normalizeRazorpayWebhook(rawBody, eventIdHeader, secret);
   const result = await repository.recordWebhookIntake(config.organizationId, rawBody, normalized);
   
-  if (result.incidentId && !result.createdNewIncident && (normalized.eventType === 'payment.failed' || normalized.eventType === 'payment_link.expired' || normalized.eventType === 'recovery.failed')) {
+  if (!result.duplicate && result.incidentId && !result.createdNewIncident && (normalized.eventType === 'payment.failed' || normalized.eventType === 'payment_link.expired' || normalized.eventType === 'recovery.failed')) {
     const eventReason = normalized.eventType === 'payment_link.expired' ? 'payment_link_expired' : normalized.eventType === 'recovery.failed' ? 'recovery_failed' : 'linked_risk_event';
     try {
       await handleIncidentAdaptiveLifecycle(repository, config.organizationId, result.incidentId, eventReason);

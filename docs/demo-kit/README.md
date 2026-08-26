@@ -2,9 +2,9 @@
 
 This kit is a **local operator studio for a production-hosted test-mode demo**. You run the Demo Operator Studio on your laptop (`npm start`); it sends HMAC-signed Razorpay-shaped test webhooks to the PayScope API. The API, queue worker, structured multi-agent AI pipeline, execution worker, database, audit chain, and frontend process those events in real time.
 
-It demonstrates complete payment-operations behavior: signed intake, Razorpay Vulcan AI real-time telemetry ingestion, duplicate delivery, order correlation, dispute hard stops, policy safety gates, Nodemailer SMTP email dispatch, and verified Payment Link reconciliation.
+It demonstrates the bounded payment-operations loop: signed intake, Razorpay payment-field telemetry enrichment, duplicate delivery, order correlation, dispute hard stops, deterministic policy gates, recovery-strategy selection, and Payment Link callback reconciliation. When direct execution is enabled and SMTP is ready, the backend may create a Payment Link and send a recovery email; SMTP acceptance is not delivery or payment recovery.
 
-It never calls a financial write API directly. The only provider-facing operation is sending signed test webhook payloads to PayScope. Keep the Razorpay account in test mode and use a dedicated demo organization.
+It never calls a payment, capture, refund, or Payment Link write API. Its normal operation sends signed test webhook payloads to PayScope; optional payment lookups use Razorpay's read-only Test API. Keep the Razorpay account in test mode and use a dedicated demo organization.
 
 ---
 
@@ -59,7 +59,7 @@ PAYSCOPE_DEMO_WEBHOOK_SECRET=<same-secret-as-deployed-backend>
 PAYSCOPE_DEMO_ORGANIZATION_ID=<deployed-demo-organization-uuid>
 PAYSCOPE_DEMO_RAZORPAY_ENVIRONMENT=test
 
-# Optional Real Razorpay Test Credentials (for real enrichment):
+# Optional Razorpay Test Credentials (read-only lookup for real payment fields):
 PAYSCOPE_DEMO_RAZORPAY_KEY_ID=rzp_test_...
 PAYSCOPE_DEMO_RAZORPAY_KEY_SECRET=<test-key-secret>
 
@@ -82,7 +82,7 @@ Before starting your recording session:
 - **Authentic Payment Failure:** Click **"Trigger Failure Event"**. Watch the incident appear live in the PayScope incident feed with risk tier, cause analysis, and policy decision.
 - **Duplicate Delivery:** Click **"Re-send Duplicate Event"**. Verify that PayScope returns HTTP 200 with `duplicate: true`, preventing duplicate incident or outreach creation.
 - **Dispute Hard Stop:** Click **"Trigger Dispute Event"**. Show the policy gate transition to `DISPUTE_OPENED` with 0 customer outreach actions.
-- **Verified Reconciliation:** Click **"Trigger Reconciliation"**. Show how a verified Razorpay `payment_link.paid` event confirms causal recovery.
+- **Verified Reconciliation:** Click **"Trigger Reconciliation"** only with a real PayScope Payment Link reference and its captured test payment. Show how the signed `payment_link.paid` event confirms causal recovery.
 
 ---
 
@@ -90,12 +90,12 @@ Before starting your recording session:
 
 | Scenario | Local Studio Behavior | Production API Effect | Dashboard Evidence |
 |---|---|---|---|
-| Synthetic Failed Payment | Sends signed `payment.failed` with fake IDs | Event enqueued; pipeline investigates | Incident timeline, degraded evidence, policy decision |
+| Synthetic Failed Payment | Sends signed `payment.failed` with representative Razorpay payment fields | Event enqueued; pipeline investigates | Incident timeline, heuristic evidence, policy decision |
 | Exact Duplicate Replay | Sends identical event ID again | Idempotency layer detects duplicate | HTTP `duplicate: true`, no second incident |
 | Same-Order Correlation | Sends failure with matching order ID | Correlates failure to existing incident | Single incident containing multiple failure events |
 | Dispute Hard Stop | Sends signed `payment.dispute.created` | Critical dispute incident created | `DISPUTE_OPENED`, policy block, zero outreach actions |
 | Real Failed Payment | Fetches payment via Razorpay Test API, then sends fields | Production enrichment reads real Razorpay fields | `razorpay_fields_heuristic`, provider signals |
-| Real Payment Link Paid | Sends callback with PayScope reference + captured payment ID | Reconciliation confirms causal action | Receipt, callback, confirmed outcome |
+| Real Payment Link Paid | Sends a signed callback with the stored PayScope reference + captured payment ID | Reconciliation confirms the causal action when it matches a durable action | Receipt, callback, confirmed outcome |
 
 ---
 
@@ -106,3 +106,4 @@ Before starting your recording session:
 - Run `npm start` before recording to ensure the API target is reachable and preflight passes.
 - Do not claim an email was *"delivered"* for SMTP acceptance—describe it as **"SMTP accepted"**.
 - Describe recovery as **"Confirmed outcome"** only after the signed `payment_link.paid` callback is processed.
+- Synthetic webhooks prove PayScope's intake and policy paths. They do not prove Razorpay issued the webhook or that a customer paid; use a real test Payment Link reference for that proof.

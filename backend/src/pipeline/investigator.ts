@@ -177,13 +177,16 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
 
     logger.info({
       incidentId: job.incidentId,
-      topStrategy: topStrategy?.name ?? 'deliver_recovery_link_email',
+      topStrategy: topStrategy?.name ?? 'no_strategy_available',
       recoveryValueScore: topStrategy?.recoveryValueScore ?? 0,
       heuristicRecoveryEstimatePaise: topStrategy?.heuristicRecoveryEstimatePaise ?? 0,
     }, 'Recovery Engine calculated optimal strategy');
 
     const llmCopyIntent = recovery.plan.proposedActions.find(a => a.emailCopyIntent)?.emailCopyIntent;
-    const strategyCapabilities = topStrategy ? topStrategy.capabilities : ['deliver_recovery_link_email' as const];
+    // An absent deterministic strategy is a terminal no-action outcome.  In
+    // particular, never turn strategy exhaustion (or a fraud hard-stop) into
+    // a default customer-contact action merely because the model suggested it.
+    const strategyCapabilities = topStrategy?.capabilities ?? [];
 
     const enginePlan: RecoveryPlan = RecoveryPlanSchema.parse({
       proposedActions: strategyCapabilities.map(cap => ({
@@ -191,12 +194,15 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
         rationale: `Optimal strategy chosen by Recovery Engine: ${topStrategy?.displayName ?? cap} (Score: ${topStrategy?.recoveryValueScore ?? 80}).`,
         preconditions: ['Merchant opted in to recovery', 'Deterministic policy clearance'],
         expectedOutcome: `Recover ${detail.incident.remainingAmountPaise} paise via ${topStrategy?.displayName ?? cap}`,
-        estimatedRecoveryPaise: topStrategy?.heuristicRecoveryEstimatePaise ?? detail.incident.remainingAmountPaise,
+        estimatedRecoveryPaise: topStrategy?.heuristicRecoveryEstimatePaise ?? 0,
         requiresAutonomousExecution: true,
         emailCopyIntent: cap === 'deliver_recovery_link_email' ? (llmCopyIntent ?? 'Complete your recent payment securely using our 1-click Razorpay payment link. Reply STOP to opt out.') : undefined,
       })),
       noActionReason: topStrategy ? undefined : 'NO_RECOVERY_STRATEGY_AVAILABLE',
-      recoveryProbability: topStrategy ? (topStrategy.recoveryValueScore / 100) : 0,
+      // This is a planner compatibility field, not a calibrated probability.
+      // The durable audit record carries the Recovery Engine's explicitly
+      // named heuristic score/estimate instead.
+      heuristicRecoveryScore: topStrategy ? (topStrategy.recoveryValueScore / 100) : 0,
       confidence: risk.analysis.confidence,
     });
 
@@ -265,7 +271,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
           },
         ],
         noActionReason: isFraudOrDispute ? 'DISPUTE_OR_FRAUD_HARD_STOP' : undefined,
-        recoveryProbability: isFraudOrDispute ? 0 : 0.50,
+        heuristicRecoveryScore: isFraudOrDispute ? 0 : 0.50,
         confidence: 0.50,
       }),
       modelId: 'telemetry-deterministic-fallback',
@@ -312,7 +318,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       const customerProfile = typeof repository.customerProfile === 'function' ? await repository.customerProfile(job.organizationId, latest?.event.customerHash ?? '') : null;
       const autonomyPolicy = typeof repository.autonomyPolicy === 'function' ? await repository.autonomyPolicy(job.organizationId) : null;
       const ranked = rankStrategies(detail.incident, enrichment, output.risk.analysis, customerProfile, autonomyPolicy);
-      logger.info({ incidentId: job.incidentId, topStrategy: ranked[0]?.name ?? 'deliver_recovery_link_email', score: ranked[0]?.recoveryValueScore ?? 0 }, 'PayScope strategy ranked for recovery outbox execution');
+      logger.info({ incidentId: job.incidentId, topStrategy: ranked[0]?.name ?? 'no_strategy_available', score: ranked[0]?.recoveryValueScore ?? 0 }, 'PayScope strategy ranked for recovery outbox execution');
     } catch (err) {
       logger.warn({ incidentId: job.incidentId, error: err instanceof Error ? err.message : String(err) }, 'PayScope strategy ranking evaluation warning');
     }
