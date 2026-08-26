@@ -101,7 +101,7 @@ export async function sendWebhook({ apiUrl, secret, scenario, eventId, reference
     const payment = paymentId ? await fetchTestPayment(paymentId, razorpayKeyId, razorpayKeySecret).catch(() => undefined) : undefined;
     if (payment && scenario === 'failed-payment' && payment.status !== 'failed') throw new Error(`--payment-id has Razorpay status ${payment.status}; use a failed test payment for this scenario`);
     if (payment && scenario === 'payment-link-paid' && payment.status !== 'captured') throw new Error(`--payment-id has Razorpay status ${payment.status}; use a captured test payment for this scenario`);
-    const payload = makePayload({ referenceId, customerId, orderId, payment });
+    const payload = { id: eventId, ...makePayload({ referenceId, customerId, orderId, payment }) };
     const body = JSON.stringify(payload);
     const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');
     const response = await fetch(`${apiUrl.replace(/\/$/, '')}/webhooks/razorpay`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-razorpay-signature': signature, 'x-razorpay-event-id': eventId }, body, signal: AbortSignal.timeout(10_000) });

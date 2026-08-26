@@ -14,7 +14,9 @@ const health = await response.json().catch(() => null);
 if (!response.ok || !health) fail(`API health unavailable (${response.status})`);
 if (health.razorpayEnvironment !== 'test') fail(`deployed API reports razorpayEnvironment=${health.razorpayEnvironment ?? 'missing'}`);
 if (expectedOrg) {
-    const mvpResponse = await fetch(`${apiUrl}/api/mvp/health`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    const mvpHeaders = { accept: 'application/json' };
+    if (process.env.PAYSCOPE_DASHBOARD_API_KEY) mvpHeaders['x-payscope-api-key'] = process.env.PAYSCOPE_DASHBOARD_API_KEY;
+    const mvpResponse = await fetch(`${apiUrl}/api/mvp/health`, { headers: mvpHeaders, signal: AbortSignal.timeout(10_000) });
     const mvp = await mvpResponse.json().catch(() => null);
     if (![200, 503].includes(mvpResponse.status) || mvp?.data?.organizationId !== expectedOrg) fail('API organization does not match PAYSCOPE_DEMO_ORGANIZATION_ID');
 }

@@ -22,7 +22,7 @@ PayScope turns raw Razorpay webhook events into a tenant-scoped, evidence-backed
 1. **Razorpay Telemetry Ingestion:** Uses allowlisted Razorpay fields (`error_source`, `error_step`, `error_reason`, attempts, and acquirer data) plus bounded downtime signals. The enrichment is explicitly heuristic, never an invented provider signal.
 2. **Structured Investigation + Deterministic Strategy:** Supervisor, Risk Analyst, and Recovery Planner use bounded JSON with 3 attempts. The model supplies evidence and copy intent; the deterministic Recovery Engine selects the executable strategy.
 3. **Deterministic Policy Safety Engine:** 13 gates validate merchant consent, dispute locks, amount caps, quiet hours, contact frequency limits, provider health, and idempotency before any provider command is dispatched.
-4. **Idempotent Execution & Callback Reconciliation:** Creates traceable recovery actions with unique references (`ps_...`), reconciles ambiguous provider results before retry, and confirms financial recovery only from a causally matched, signed callback.
+4. **Idempotent Execution & Callback Reconciliation:** Creates traceable recovery actions with unique references (`ps_...`), reconciles ambiguous provider results before retry, marks expired recovery links terminal before adaptive replanning, and confirms financial recovery only from a causally matched, signed callback. When no untried provider-backed capability remains, the engine stops with a durably audited decision instead of inventing actions.
 5. **Real SHA-256 Cryptographic Audit Chain:** Serves real-time merchant revenue analytics (`/api/mvp/revenue-intelligence`) and computes SHA-256 entry hashes across the audit ledger.
 
 ---
@@ -118,6 +118,8 @@ Callback Reconciliation & Append-Only Cryptographic Audit Trail
 - npm
 - PostgreSQL / Supabase instance (SQL migrations located in `backend/supabase/migrations`)
 
+Required environment (see `backend/.env.example`): `PAYSCOPE_CALLBACK_ENCRYPTION_KEY` (base64 32-byte key — webhooks are refused without it), and `PAYSCOPE_DASHBOARD_API_KEY` (mandatory in production; the `/api/mvp/*` dashboard endpoints reject requests without it).
+
 ### 1. Backend Setup
 ```bash
 cd backend
@@ -154,7 +156,9 @@ node docs/demo-kit/scripts/generate-test-payments.mjs
 ## Verification & Testing
 
 ```bash
-# Backend integration suite (12 scenarios covering strategy selection/exhaustion, policy gates, adaptive replanning, webhook rotation, and deduplication)
+# Backend suites: integration scenarios (strategy selection/exhaustion, policy gates,
+# adaptive replanning, webhook rotation, encrypted callback evidence, fail-closed DB reads)
+# plus a real-HTTP suite that boots the actual server and posts signed webhooks over the wire
 cd backend && npm run test
 
 # Frontend TypeScript compilation & production build check

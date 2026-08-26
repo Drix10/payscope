@@ -177,7 +177,9 @@ const server = http.createServer(async (req, res) => {
 
             let orgChecked = false;
             if (expectedOrg) {
-                const mvpRes = await fetch(`${apiUrl}/api/mvp/health`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) }).catch(() => null);
+                const mvpHeaders = { accept: 'application/json' };
+                if (env.PAYSCOPE_DASHBOARD_API_KEY) mvpHeaders['x-payscope-api-key'] = env.PAYSCOPE_DASHBOARD_API_KEY;
+                const mvpRes = await fetch(`${apiUrl}/api/mvp/health`, { headers: mvpHeaders, signal: AbortSignal.timeout(8000) }).catch(() => null);
                 const mvp = await mvpRes?.json().catch(() => null);
                 if (mvp?.data?.organizationId === expectedOrg) {
                     orgChecked = true;
@@ -248,7 +250,9 @@ const server = http.createServer(async (req, res) => {
         if (url.pathname === '/api/verify' && req.method === 'GET') {
             const apiUrl = (env.PAYSCOPE_DEMO_API_URL ?? '').replace(/\/$/, '');
             if (!apiUrl) return json({ ok: false, error: 'PAYSCOPE_DEMO_API_URL is missing' }, 400);
-            const resInc = await fetch(`${apiUrl}/api/mvp/incidents?limit=10`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) }).catch(err => err);
+            const incHeaders = { accept: 'application/json' };
+            if (env.PAYSCOPE_DASHBOARD_API_KEY) incHeaders['x-payscope-api-key'] = env.PAYSCOPE_DASHBOARD_API_KEY;
+            const resInc = await fetch(`${apiUrl}/api/mvp/incidents?limit=10`, { headers: incHeaders, signal: AbortSignal.timeout(8000) }).catch(err => err);
             if (resInc instanceof Error || !resInc.ok) {
                 return json({ ok: false, error: 'Failed to fetch incidents' }, 500);
             }

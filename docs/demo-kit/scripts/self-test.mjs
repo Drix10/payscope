@@ -33,6 +33,7 @@ try {
     const duplicate = await sendWebhook({ apiUrl, secret, scenario: 'failed-payment', eventId: 'self-test-001' });
     if (requests.length !== 2) throw new Error('expected two webhook requests');
     if (requests[0].event !== 'payment.failed') throw new Error('unexpected event type');
+    if (requests[0].id !== 'self-test-001') throw new Error('webhook envelope id missing or mismatched');
     if (requests[0].payload.payment.entity.currency !== 'INR') throw new Error('unexpected currency');
     if (duplicate.duplicate !== true) throw new Error('duplicate response was not preserved');
     console.log('demo-kit self-test: passed');

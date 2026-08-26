@@ -5,7 +5,9 @@ if (!apiUrl || !expectedOrg) throw new Error('Set PAYSCOPE_DEMO_API_URL and PAYS
 if (!Number.isSafeInteger(minimumIncidents) || minimumIncidents < 1 || minimumIncidents > 100) throw new Error('PAYSCOPE_DEMO_MIN_INCIDENTS must be an integer from 1 to 100');
 
 async function get(path) {
-    const response = await fetch(`${apiUrl}${path}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    const headers = { accept: 'application/json' };
+    if (process.env.PAYSCOPE_DASHBOARD_API_KEY) headers['x-payscope-api-key'] = process.env.PAYSCOPE_DASHBOARD_API_KEY;
+    const response = await fetch(`${apiUrl}${path}`, { headers, signal: AbortSignal.timeout(10_000) });
     const body = await response.json().catch(() => null);
     if (!response.ok || !body?.success) throw new Error(`${path} failed (${response.status})`);
     return body.data;
