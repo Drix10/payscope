@@ -140,12 +140,12 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 |---|---|
 | **Screen State** | Full-Screen Right Window (Dashboard) — Recovery Intelligence panel. |
 | **Operator Action** | 1. Hover the **"Why this action?"** tooltip on the latest incident (shows historical rate, sample size, Wilson interval, and exploration flag).<br />2. Point to the **Strategy Performance** table (merchant × failure × segment).<br />3. Note the **"Estimated ₹42,500 (n=47, 34% [28%–41%])"** — never *Expected* — and the 5% exploration badge when present. |
-| **Visual Target** | Highlight that ranking used empirical posterior (Beta-Binomial, prior 18% configurable) with Thompson-inspired deterministic exploration, not a static score. |
+| **Visual Target** | Highlight that strategy ranking uses empirical posterior (Beta-Binomial with centralized 18% prior config) with Thompson-inspired deterministic exploration and unified cold-start estimation semantics. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "This is where PayScope learns. For this merchant, this failure category, and this customer segment, we've observed 47 prior attempts — 34% recovered, Wilson interval 28 to 41%. The engine's posterior, not a hard-coded score, drove the choice.
+> "This is where PayScope learns. For this merchant, this failure category, and this customer segment, we've observed 47 prior attempts — 34% recovered, Wilson interval 28 to 41%. The engine's posterior, configured centrally from our runtime prior, drove the choice.
 > 
-> Every intervention is an experiment: send time, channel, expected recovery, and actual outcome are written to the durable `recovery_outcomes` ledger. Paid, expired, failed and cancelled all close the loop exactly once — so the next decision is measurably different. No LLM ever mutates policy; statistics do."
+> Every intervention is an experiment: send time, channel, expected recovery, and actual outcome are written to the durable `recovery_outcomes` ledger. Paid and expired events transactionally close the learning loop during reconciliation — so the next decision is measurably different. No LLM ever mutates policy; statistics do."
 
 ### ⏱️ 4:40 – 5:00 | Segment 7: Cryptographic Audit Trail & Operational Intelligence Query
 

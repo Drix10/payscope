@@ -22,8 +22,8 @@ PayScope turns raw Razorpay webhook events into a tenant-scoped, evidence-backed
 1. **Razorpay Telemetry Ingestion:** Uses allowlisted Razorpay fields (`error_source`, `error_step`, `error_reason`, attempts, and acquirer data) plus bounded downtime signals. The enrichment is explicitly heuristic, never an invented provider signal.
 2. **Structured Investigation + Deterministic Strategy:** Supervisor, Risk Analyst, and Recovery Planner use bounded JSON with 3 attempts. The model supplies evidence and copy intent; the deterministic Recovery Engine selects the executable strategy.
 3. **Deterministic Policy Safety Engine:** 13 gates validate merchant consent, dispute locks, amount caps, quiet hours, contact frequency limits, provider health, and idempotency before any provider command is dispatched.
-4. **Idempotent Execution & Callback Reconciliation:** Creates traceable recovery actions with unique references (`ps_...`), reconciles ambiguous provider results before retry, marks expired recovery links terminal before adaptive replanning, and confirms financial recovery only from a causally matched, signed callback. When no untried provider-backed capability remains, the engine stops with a durably audited decision instead of inventing actions.
-5. **Recovery Policy Learning:** Every intervention is an experiment. Paid/expired outcomes close a durable ledger (`payscope_recovery_outcomes`), updating merchant×failure×segment recovery rates via Beta-Binomial posterior with Thompson sampling. Future rankings use empirical expected recovery value — deterministic, no LLM policy mutation, with 5% exploration and cold-start prior.
+4. **Idempotent Execution & Durable Callback Reconciliation:** Creates traceable recovery actions with unique references (`ps_...`), reconciles ambiguous provider results before retry, marks expired recovery links terminal before adaptive replanning, and transactionally closes the learning ledger (`payscope_record_recovery_outcome`). Financial recovery is confirmed only from a causally matched, signed callback. When no untried provider-backed capability remains, the engine stops with a durably audited decision instead of inventing actions.
+5. **Recovery Policy Learning:** Every intervention is an experiment. Paid/expired outcomes close a durable ledger (`payscope_recovery_outcomes`), updating merchant×failure×segment recovery rates via Beta-Binomial posterior with Thompson sampling. Cold-start and historical estimations share a single unified mathematical semantics using the centralized prior configuration (`RuntimeConfig.recoveryPriorRate`), 5% exploration, and empirical posterior.
 6. **Real SHA-256 Cryptographic Audit Chain:** Serves real-time merchant revenue analytics (`/api/mvp/revenue-intelligence`) and computes SHA-256 entry hashes across the audit ledger.
 
 ---
@@ -46,7 +46,8 @@ PayScope turns raw Razorpay webhook events into a tenant-scoped, evidence-backed
   <tr>
     <td width="50%" valign="top">
       <strong>03 — Evidence and Strategy Record</strong><br />
-      The current product records model evidence separately from the deterministic strategy and policy decision. The legacy simulated-action screenshot has been intentionally removed pending a current capture.
+      Model evidence records are separated from the deterministic strategy and policy decision.<br /><br />
+      <img src="docs/screenshots/03-ai-decision-record.png" alt="PayScope AI decision record" />
     </td>
     <td width="50%" valign="top">
       <strong>04 — Autonomous Execution Ledger</strong><br />
