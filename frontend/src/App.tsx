@@ -516,7 +516,7 @@ function ActualStages({ detail, entries }: { detail: IncidentDetail; entries: Au
     : totalGates > 0 ? `Passed ${passedGates}/${totalGates} Policy Gates` : 'Deterministic Policy Clearance';
 
   const steps = [
-    { num: 1, label: '1. Ingest & Telemetry', status: detail.events.length > 0 ? 'complete' : 'pending', detail: `${detail.events.length} Vulcan Telemetry Signal${detail.events.length === 1 ? '' : 's'}` },
+    { num: 1, label: '1. Ingest & Telemetry', status: detail.events.length > 0 ? 'complete' : 'pending', detail: `${detail.events.length} Telemetry Signal${detail.events.length === 1 ? '' : 's'}` },
     { num: 2, label: '2. Multi-Agent Analysis', status: hasInvestigation ? 'complete' : 'pending', detail: hasInvestigation ? 'Supervisor + Risk Analyst' : 'Running LLM Multi-Agent' },
     { num: 3, label: '3. Safety Gates', status: isBlocked ? 'blocked' : hasPolicy ? 'complete' : 'pending', detail: gateDetail },
     { num: 4, label: '4. Idempotent Execution', status: isBlocked ? 'blocked' : hasExecution ? 'complete' : 'pending', detail: isBlocked ? 'Outreach Blocked' : 'Razorpay Link & Email Sent' },
@@ -571,14 +571,7 @@ function Timeline({ events }: { events: Event[] }) {
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
               <span>{label(event.enrichment.failureAttribution)}</span>
               <span className="text-neutral-600">•</span>
-              {event.enrichment.source === 'vulcan_direct' ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2 py-0.5 text-[10px] font-bold text-[#86f4bd]">
-                  <Sparkles className="h-3 w-3 text-[#00ff87]" />
-                  Razorpay Vulcan AI Direct
-                </span>
-              ) : (
-                <span className="text-neutral-500">source: {event.enrichment.source}</span>
-              )}
+              <span className="text-neutral-500">source: {event.enrichment.source}</span>
             </div>
           )}
         </li>

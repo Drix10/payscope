@@ -7,24 +7,23 @@
 
 <p align="center">
   <img alt="Razorpay AI Buildathon" src="https://img.shields.io/badge/Razorpay-AI%20Buildathon-0C1021?style=for-the-badge&logo=razorpay&logoColor=white" />
-  <img alt="Razorpay Vulcan AI" src="https://img.shields.io/badge/Razorpay-Vulcan%20AI%20Foundation-00FF87?style=for-the-badge&logoColor=black" />
   <img alt="Mesh API AI" src="https://img.shields.io/badge/Mesh%20API-Structured%20Multi--Agent-7C3AED?style=for-the-badge" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.6-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-Vite-61DAFB?style=for-the-badge&logo=react&logoColor=111827" />
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-RLS%20%2B%20Audit-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
 </p>
 
-PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution loop. It correlates raw payment signals into unified incident timelines, runs multi-agent root-cause investigation with structured retry mechanisms, and executes policy-bounded recovery actions with verified Razorpay callback reconciliation.
+PayScope turns raw Razorpay webhook events into an end-to-end, tenant-scoped revenue-rescue loop. It correlates raw payment failure signals into unified incident timelines, enriches them with **Razorpay payment telemetry and bank downtime signals**, runs a multi-agent root-cause investigation via Mesh API, enforces a 13-gate deterministic policy safety engine, and dispatches 1-click Razorpay Payment Links directly to customers via Nodemailer SMTP.
 
 ---
 
 ## Key Pillars
 
-1. **Razorpay Vulcan Intelligence Ingestion:** Directly ingests Razorpay Vulcan real-time payment telemetry, extracting acquirer health metrics, failure attributions, and network risk flags across the enrichment layer and dashboard UI.
+1. **Razorpay Telemetry Ingestion:** Directly ingests Razorpay payment telemetry, extracting acquirer health metrics, failure attributions (`error_source`, `error_step`, `error_reason`), and network risk flags across the enrichment layer and dashboard UI.
 2. **Multi-Agent Root-Cause Analysis:** Uses dedicated agent roles (Supervisor, Risk Analyst, Recovery Planner) via Mesh API with **3-attempt structured output retries** to evaluate causal narratives, alternative hypotheses, and evidence confidence without speculative execution.
 3. **Deterministic Policy Safety Engine:** 13 hard-coded policy safety gates validate merchant consent, dispute locks, amount caps, quiet hours, and contact frequency limits before any provider command is dispatched.
 4. **Idempotent Execution & Callback Reconciliation:** Emits traceable recovery actions (e.g. Razorpay Payment Links) with unique reference tracking (`ps_...`), confirming recovery only upon signed callback verification.
-5. **Dynamic Revenue Intelligence & Policy Control:** Serves real-time merchant revenue analytics (`/api/mvp/revenue-intelligence`) and configurable merchant autonomy guardrails (`/api/mvp/autonomy-policy`).
+5. **Real SHA-256 Cryptographic Audit Chain:** Serves real-time merchant revenue analytics (`/api/mvp/revenue-intelligence`) and computes SHA-256 entry hashes across the audit ledger.
 
 ---
 
@@ -66,7 +65,7 @@ PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution
 | **Track selection** | AI agents for payment operations |
 | **Project name / title** | **PayScope — Autonomous Payment Operations Agent** |
 | **GitHub repository** | [github.com/Drix10/payscope](https://github.com/Drix10/payscope) |
-| **Project objective** | Ingest signed Razorpay events, enrich with Razorpay Vulcan intelligence, analyze evidence using a structured multi-agent pipeline, execute authorized recovery actions, and verify outcomes via signed callbacks. |
+| **Project objective** | Ingest signed Razorpay events, enrich with Razorpay telemetry, analyze evidence using a structured multi-agent pipeline, execute authorized recovery actions, and verify outcomes via signed callbacks. |
 | **What it solves** | Payment failures are noisy and hard to resolve manually. PayScope correlates raw webhooks into unified incidents, distinguishes bank outages from customer drops, executes recovery links, and makes every action 100% audit-verifiable. |
 
 ---
@@ -77,7 +76,7 @@ PayScope turns Razorpay webhook events into a complete, tenant-scoped resolution
 Razorpay Webhook (HMAC SHA-256 Signed)
    │
    ▼
-Razorpay Vulcan Intelligence Layer (Acquirer Health & Failure Attribution)
+Razorpay Telemetry Intake (Acquirer Health & Failure Attribution)
    │
    ▼
 Correlation & Deduplication Engine (Order ID, Customer Hash, Time Window)

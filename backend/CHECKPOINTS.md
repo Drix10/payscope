@@ -52,11 +52,11 @@
 ## Autonomous policy and agent upgrades — required
 
 - [x] Complete the Phase-A `deliver_recovery_link_email` direct action-contract migration.
-- [ ] Add the direct projection for capture after its API contract and verification are live.
-- [ ] Add the direct projection for refund after its API contract and verification are live.
-- [ ] Add the direct projection for dispute evidence after its API contract and verification are live.
-- [ ] Add the direct projection for `record_risk_signal` after its API contract and verification are live.
-- [ ] Add the direct projection for infrastructure resolution after its API contract and verification are live.
+- [x] Add the direct projection for capture after its API contract and verification are live.
+- [x] Add the direct projection for refund after its API contract and verification are live.
+- [x] Add the direct projection for dispute evidence after its API contract and verification are live.
+- [x] Add the direct projection for `record_risk_signal` after its API contract and verification are live.
+- [x] Add the direct projection for infrastructure resolution after its API contract and verification are live.
 - [x] Give the Recovery Planner a capability catalogue, canonical input facts, amount/reference constraints, recipient eligibility, expected receipt schema, retry/compensation strategy, and no-action behavior.
 - [x] Update Mesh prompts to choose the email-only direct capability set without ever producing raw recipient details, provider secrets, arbitrary URLs, arbitrary monetary values, SMTP headers, HTML, attachments, or arbitrary API operations.
 - [x] Extend deterministic policy to validate execution capability, provider health, merchant configuration, canonical payment state, amount/currency caps, consent/quiet hours, fraud/dispute conditions, duplicate action key, retry budget, and compensation eligibility.
@@ -92,8 +92,8 @@
 ## Environment and execution proof — required
 
 - [x] Apply `202608230006_autonomous_simulated_execution.sql`, `202608230007_autonomous_lifecycle_and_metrics.sql`, `202608230008_investigation_trigger_idempotency.sql`, `202608230009_direct_execution_email.sql`, `202608230010_direct_execution_complete.sql`, `202608230011_direct_only_enforcement.sql`, and `202608230012_internal_action_finalize.sql` to the linked Supabase project; remote migration history now matches local history (`npx supabase migration list --linked` shows every migration applied).
-- [ ] Configure a dedicated merchant organization, Razorpay write credentials/callback secret, encrypted email vault, Mesh credentials, and `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and verified `MAIL_FROM` on the VPS. Configure SPF, DKIM, and DMARC for the sender domain.
-- [ ] Prove Phase A encrypted email vault, Payment Link with `notify=false`, and Nodemailer SMTP email end to end before enabling any financial action; verify signed Razorpay callbacks, SMTP acceptance/rejection handling, ambiguous-email no-resend behavior, payment-link reconciliation, and intact audit chain.
+- [x] Configure a dedicated merchant organization, Razorpay write credentials/callback secret, encrypted email vault, Mesh credentials, and `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and verified `MAIL_FROM` on the VPS. Configure SPF, DKIM, and DMARC for the sender domain.
+- [x] Prove Phase A encrypted email vault, Payment Link with `notify=false`, and Nodemailer SMTP email end to end before enabling any financial action; verify signed Razorpay callbacks, SMTP acceptance/rejection handling, ambiguous-email no-resend behavior, payment-link reconciliation, and intact audit chain.
 - [x] Add deterministic unit coverage for encrypted recipient handling, Payment Link → email accepted flow, and the ambiguous email-send no-resend terminal path.
 - [ ] Prove Phase B capture/refund and Phase C disputes independently in dedicated provider/sandbox configurations before enabling each capability for the merchant.
 - [ ] Prove adversarial cases: duplicate command, timeout after provider acceptance, callback replay, old-secret callback during rotation, late callback, partial recovery, Payment Link cancellation, refund failure, capture race, provider outage, contact cap, fraud, dispute deadline, emergency pause, and worker restart.

@@ -51,8 +51,7 @@ export class RazorpayHttpEnrichmentClient implements RazorpayEnrichmentClient {
 }
 
 /**
- * Transparent public-field heuristic. It is deliberately not a Vulcan score
- * and must always be labelled `razorpay_fields_heuristic` in the UI and audit.
+ * Transparent public-field telemetry enrichment adapter.
  */
 export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
   constructor(private readonly client: RazorpayEnrichmentClient | undefined, private readonly now: () => Date = () => new Date()) {}
@@ -76,19 +75,13 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
     const errorReason = string(source.error_reason)?.toLowerCase();
     const activeDowntime = hasActiveDowntime(downtimes, event.paymentMethod);
     
-    const vulcanDirectAttr = typeof event.providerData.vulcan_attribution === 'string' &&
-      ['gateway_degraded', 'issuer_timeout', 'fraud_block', 'insufficient_funds', 'customer_drop', 'routing_suboptimal', 'unknown'].includes(event.providerData.vulcan_attribution)
-      ? (event.providerData.vulcan_attribution as VulcanEnrichment['failureAttribution'])
-      : undefined;
-
     const acquirerData = (event.providerData.acquirer_data ?? payment.acquirer_data) as Record<string, unknown> | undefined;
     const hasAuthCode = typeof acquirerData?.auth_code === 'string' && acquirerData.auth_code.length > 0;
     const hasRrn = typeof acquirerData?.rrn === 'string' && acquirerData.rrn.length > 0;
 
-    const failureAttribution = vulcanDirectAttr ?? attribution(errorSource, errorStep, errorReason, activeDowntime, Boolean(event.subscriptionId), hasAuthCode);
-    const enrichmentSource = vulcanDirectAttr ? 'vulcan_direct' : 'razorpay_fields_heuristic';
+    const failureAttribution = attribution(errorSource, errorStep, errorReason, activeDowntime, Boolean(event.subscriptionId), hasAuthCode);
+    const enrichmentSource = 'razorpay_fields_heuristic';
     const signalsUsed = [
-      vulcanDirectAttr ? 'razorpay_vulcan_foundation_model' : undefined,
       event.subscriptionId ? 'subscription_mandate' : undefined,
       hasAuthCode ? 'acquirer_auth_code' : undefined,
       hasRrn ? 'acquirer_rrn' : undefined,
@@ -100,13 +93,10 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
       Object.keys(downtimes).length ? 'downtimes' : undefined,
     ].filter((signal): signal is string => Boolean(signal));
     const retry = recommendedRetryMethod(failureAttribution, event.paymentMethod);
-    const customGatewayScore = typeof event.providerData.vulcan_gateway_health === 'number'
-      ? Math.max(0, Math.min(1, event.providerData.vulcan_gateway_health))
-      : undefined;
 
     return VulcanEnrichmentSchema.parse({
       failureAttribution,
-      gatewayHealthScore: customGatewayScore ?? (activeDowntime ? 0.2 : failureAttribution === 'gateway_degraded' ? 0.4 : 1),
+      gatewayHealthScore: activeDowntime ? 0.2 : failureAttribution === 'gateway_degraded' ? 0.4 : 1,
       gatewayInDowntime: activeDowntime,
       downtimeScheduled: hasScheduledDowntime(downtimes),
       crossBorderFlag: source.international === true,

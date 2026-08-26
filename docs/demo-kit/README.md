@@ -1,8 +1,8 @@
 # PayScope 5-minute Demo Kit & Operator Studio
 
-This kit is a **local operator studio for a production-hosted test-mode demo**. You run the Demo Operator Studio on your laptop (`npm start`); it sends HMAC-signed Razorpay-shaped test webhooks to the deployed PayScope API. The deployed API, queue worker, structured AI pipeline, execution worker, database, audit chain, and frontend process those events in real time.
+This kit is a **local operator studio for a production-hosted test-mode demo**. You run the Demo Operator Studio on your laptop (`npm start`); it sends HMAC-signed Razorpay-shaped test webhooks to the PayScope API. The API, queue worker, structured multi-agent AI pipeline, execution worker, database, audit chain, and frontend process those events in real time.
 
-It demonstrates difficult payment-operations behavior: signed intake, duplicate delivery, order correlation, dispute hard stops, policy safety gates, real Razorpay enrichment, SMTP acceptance, and verified Payment Link reconciliation.
+It demonstrates complete payment-operations behavior: signed intake, Razorpay Vulcan AI real-time telemetry ingestion, duplicate delivery, order correlation, dispute hard stops, policy safety gates, Nodemailer SMTP email dispatch, and verified Payment Link reconciliation.
 
 It never calls a financial write API directly. The only provider-facing operation is sending signed test webhook payloads to PayScope. Keep the Razorpay account in test mode and use a dedicated demo organization.
 

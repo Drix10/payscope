@@ -32,7 +32,7 @@ export type RecoveryStrategy = {
   customerAdjustment: number;
   finalScore: number;
   expectedValuePaise: number;
-  dataSource: 'vulcan_direct' | 'razorpay_fields_heuristic';
+  dataSource: 'razorpay_fields_heuristic';
   blockedBy: string | null;
 };
 
@@ -111,7 +111,7 @@ export function rankStrategies(
 
   const attribution = enrichment?.failureAttribution ?? 'unknown';
   const scores = ATTRIBUTION_STRATEGY_SCORES[attribution] ?? ATTRIBUTION_STRATEGY_SCORES.unknown;
-  const dataSource = enrichment?.source === 'vulcan_direct' ? 'vulcan_direct' : 'razorpay_fields_heuristic';
+  const dataSource = 'razorpay_fields_heuristic';
 
   const strategies: RecoveryStrategy[] = [];
 

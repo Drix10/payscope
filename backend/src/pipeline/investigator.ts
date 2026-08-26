@@ -196,9 +196,9 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
         estimatedAutoResolvable: primaryFailureCategory !== 'fraud_confirmed',
         requiresNoActionFallback: true,
         confidence: 0.85,
-        reasoning: `Razorpay Vulcan AI classification based on ${enrichment?.source ?? 'real-time payment telemetry'}.`,
+        reasoning: `Razorpay payment telemetry classification based on ${enrichment?.source ?? 'real-time telemetry'}.`,
       }),
-      modelId: 'vulcan-deterministic-fallback',
+      modelId: 'telemetry-deterministic-fallback',
       tokensUsed: 0,
     };
     const fallbackRisk = {
@@ -207,7 +207,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
         evidenceStrength: 'moderate',
         confidence: 0.85,
         causalNarrative: `Payment failure attributed to ${attr.replace(/_/g, ' ')} via Razorpay telemetry intake.`,
-        evidenceConfidenceRationale: 'Verified by Razorpay Vulcan AI telemetry intake and real-time enrichment signals.',
+        evidenceConfidenceRationale: 'Verified by Razorpay telemetry intake and real-time enrichment signals.',
         alternativeHypotheses: ['Issuer timeout', 'Customer drop'],
         falsePositiveCostEstimatePaise: detail.incident.remainingAmountPaise,
         missingEvidence: [],
@@ -216,7 +216,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
         recommendedActionCategory: attr === 'fraud_block' ? 'no_action' : 'deliver_recovery_link_email',
         toolResults: { incidentTimelineEventCount: detail.events.length, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },
       }),
-      modelId: 'vulcan-deterministic-fallback',
+      modelId: 'telemetry-deterministic-fallback',
       tokensUsed: 0,
     };
     const isFraudOrDispute = primaryFailureCategory === 'fraud_confirmed' || detail.incident.status === 'DISPUTE_OPENED';
@@ -237,7 +237,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
         recoveryProbability: isFraudOrDispute ? 0 : 0.85,
         confidence: 0.85,
       }),
-      modelId: 'vulcan-deterministic-fallback',
+      modelId: 'telemetry-deterministic-fallback',
       tokensUsed: 0,
     };
     const safeFallbackPolicy = policyContextResult ? evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [policyContextResult.policy], policyContextResult.stats, policyContextResult.contact, {
@@ -250,7 +250,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     }) : evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [{ id: 'payscope-fallback-policy', enabled: false, minimumConfidence: 1, rootCauses: [] as never[], allowedActions: [] as never[], merchantOptedIn: false }], { autoResolveFraction: 0 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false, customerReferenceAvailable: false });
 
     output = { plan: fallbackSupervisor, risk: fallbackRisk, recovery: fallbackRecovery, policy: safeFallbackPolicy };
-    logger.warn({ incidentId: job.incidentId, errorMsg: error instanceof Error ? error.message : String(error) }, 'Multi-agent LLM investigation fell back to Razorpay Vulcan AI deterministic evaluation');
+    logger.warn({ incidentId: job.incidentId, errorMsg: error instanceof Error ? error.message : String(error) }, 'Multi-agent LLM investigation fell back to Razorpay telemetry evaluation');
   }
 
   const proposals = output.policy.permittedActions.map(action => {

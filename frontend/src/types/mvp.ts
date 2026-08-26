@@ -7,7 +7,7 @@ export type Incident = {
   correlatedEventIds: string[]; openedAt: string; resolvedAt: string | null; updatedAt: string
 }
 
-export type Event = { id: string; organizationId: string; event: { eventType: string; occurredAt: string; receivedAt: string; amountPaise?: number; paymentMethod?: string }; enrichment: { source: string; failureAttribution: string; gatewayHealthScore: number; gatewayInDowntime: boolean; downtimeScheduled: boolean; crossBorderFlag: boolean; priorAttemptCount: number; partialRecoveryPossible: boolean; recommendedRetryMethod: string | null; signalsUsed: string[] } | null; enrichmentSource: 'razorpay_fields_heuristic' | 'fixture_signed' | 'vulcan_direct' | 'unavailable' | null }
+export type Event = { id: string; organizationId: string; event: { eventType: string; occurredAt: string; receivedAt: string; amountPaise?: number; paymentMethod?: string }; enrichment: { source: string; failureAttribution: string; gatewayHealthScore: number; gatewayInDowntime: boolean; downtimeScheduled: boolean; crossBorderFlag: boolean; priorAttemptCount: number; partialRecoveryPossible: boolean; recommendedRetryMethod: string | null; signalsUsed: string[] } | null; enrichmentSource: 'razorpay_fields_heuristic' | 'fixture_signed' | 'unavailable' | null }
 export type ProposalStatus = 'pending' | 'approved' | 'simulated' | 'cancelled_by_dispute' | 'cancelled_by_recovery' | 'failed'
 export type Proposal = { id: string; organizationId: string; incidentId: string; actionType: string; status: ProposalStatus; proposedAt: string; simulatedAt: string | null; content: Record<string, unknown>; deliveryResult: Record<string, unknown> | null }
 export type ExecutionState = 'queued' | 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'retry_scheduled' | 'compensating' | 'failed' | 'cancelled'
@@ -60,7 +60,7 @@ export type ActiveRescue = {
   strategyName: string;
   strategyDisplayName: string;
   vulcanAttribution: string;
-  vulcanDataSource: 'vulcan_direct' | 'razorpay_fields_heuristic';
+  vulcanDataSource: 'razorpay_fields_heuristic';
   sagaStep: string;
   elapsedMs: number;
 }

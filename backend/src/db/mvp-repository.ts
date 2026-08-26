@@ -793,9 +793,6 @@ export class MvpRepository {
       const eventsResult = await this.client.from('payscope_events').select('enrichment_source').eq('organization_id', organizationId).limit(100);
       events = (eventsResult.data ?? []) as Array<Record<string, unknown>>;
     } catch {}
-    const vulcanCount = events.filter(e => e.enrichment_source === 'vulcan_direct').length;
-    const vulcanSignalCoverage = events.length > 0 ? vulcanCount / events.length : 0;
-
     const activeRescues = sagas.filter(s => s.status === 'active').map(s => {
       const inc = incidents.find(i => i.id === s.incidentId);
       const steps = MvpRepository.sagaStepStore.get(s.id) ?? [];
@@ -806,7 +803,7 @@ export class MvpRepository {
         strategyName: s.strategyName,
         strategyDisplayName: s.strategyName.replace(/_/g, ' '),
         vulcanAttribution: 'customer_drop',
-        vulcanDataSource: (s.vulcanDataSource === 'vulcan_direct' ? 'vulcan_direct' : 'razorpay_fields_heuristic') as 'vulcan_direct' | 'razorpay_fields_heuristic',
+        vulcanDataSource: 'razorpay_fields_heuristic' as const,
         sagaStep: currentStep ? `${currentStep.stepType}: ${currentStep.capability ?? 'observation'}` : 'Executing recovery plan',
         elapsedMs: Math.max(0, Date.now() - Date.parse(s.createdAt)),
       };
@@ -819,7 +816,7 @@ export class MvpRepository {
       protectedPaise,
       recoveryRate,
       merchantInterventionCount: 0,
-      vulcanSignalCoverage,
+      vulcanSignalCoverage: 0,
       activeRescues,
       autonomous: {
         investigated: incidents.length,

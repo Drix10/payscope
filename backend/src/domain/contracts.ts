@@ -7,7 +7,7 @@ export class AppError extends Error {
   }
 }
 
-export const EnrichmentSourceSchema = z.enum(['razorpay_fields_heuristic', 'fixture_signed', 'vulcan_direct', 'unavailable']);
+export const EnrichmentSourceSchema = z.enum(['razorpay_fields_heuristic', 'fixture_signed', 'unavailable']);
 export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED']);
 export const RiskTierSchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'MONITOR']);
 export const ExecutionStateSchema = z.enum(['queued', 'dispatching', 'accepted', 'unreconciled', 'confirmed', 'retry_scheduled', 'compensating', 'failed', 'cancelled']);
