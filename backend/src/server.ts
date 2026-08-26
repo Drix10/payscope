@@ -94,7 +94,9 @@ export function createPayScopeApp(env: NodeJS.ProcessEnv = process.env, override
     path.resolve(__dirname, '../../frontend/dist'),
     path.resolve(process.cwd(), 'dist/public'),
     path.resolve(process.cwd(), '../frontend/dist'),
-  ].find(p => fs.existsSync(p));
+    path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(process.cwd(), 'public'),
+  ].find(p => fs.existsSync(path.join(p, 'index.html')));
 
   if (frontendDistPath) {
     app.use(express.static(frontendDistPath));
@@ -102,10 +104,19 @@ export function createPayScopeApp(env: NodeJS.ProcessEnv = process.env, override
       if (req.path.startsWith('/api') || req.path.startsWith('/webhooks') || req.path.startsWith('/metrics') || req.path.startsWith('/health')) {
         return next();
       }
-      res.sendFile(path.join(frontendDistPath, 'index.html'));
+      res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
+        if (err && !res.headersSent) {
+          next(err);
+        }
+      });
     });
   } else {
-    app.use((_req, res) => res.status(404).json(failure('NOT_FOUND', 'Route not found.')));
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/webhooks') || req.path.startsWith('/metrics') || req.path.startsWith('/health')) {
+        return next();
+      }
+      res.status(404).send('<h1>PayScope UI build (index.html) not found</h1><p>Please run <code>npm run build</code> in the frontend or root folder.</p>');
+    });
   }
   app.use((error: Error, req: Request, res: Response, _next: NextFunction) => { if (res.headersSent || req.aborted) return; const appError = error instanceof AppError ? error : undefined; const parser = error as Error & { type?: string }; const status = appError?.status ?? (error instanceof ZodError ? 400 : parser.type === 'entity.too.large' ? 413 : 500); if (status === 500) logger.error({ errorClass: error.name, requestId: res.getHeader('X-Request-Id') }, 'PayScope request failed'); res.status(status).json(failure(appError?.code ?? (status === 413 ? 'PAYLOAD_TOO_LARGE' : status === 400 ? 'INVALID_PAYLOAD' : 'MVP_API_ERROR'), appError?.message ?? (status === 500 ? 'The PayScope MVP could not complete the request.' : 'Request validation failed.'))); });
 
