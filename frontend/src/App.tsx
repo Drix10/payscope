@@ -117,7 +117,7 @@ const queueViews: Array<{ value: Incident["status"] | "ALL"; title: string }> =
 
 export default function App() {
   const [viewMode, setViewMode] = useState<"showcase" | "dashboard">(
-    "dashboard",
+    "showcase",
   );
   const [health, setHealth] = useState<MvpHealth | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -1090,6 +1090,11 @@ function AiDecision({
         : "Autonomous action recorded."
     : null;
 
+  const latestEnrichment = [...detail.events].reverse().find((e) => e.enrichment)?.enrichment;
+  const telemetryCategory = latestEnrichment?.failureAttribution
+    ? label(latestEnrichment.failureAttribution)
+    : "Payment Failure Analysis";
+
   return (
     <section className="rounded-2xl border border-white/[.09] bg-white/[.018] p-5 sm:p-6">
       <div className="flex items-start justify-between gap-3">
@@ -1108,12 +1113,12 @@ function AiDecision({
         <DecisionRow
           icon={<Waypoints className="h-4 w-4" />}
           title={
-            plan ? label(plan.primaryFailureCategory) : "Investigation pending"
+            plan ? label(plan.primaryFailureCategory) : telemetryCategory
           }
           detail={
             plan
               ? `${plan.hypothesis} · ${plan.objectives[0]}`
-              : "The worker has not persisted an investigation yet."
+              : "LLM Multi-Agent Supervisor active · Recovery Engine calculating optimal strategy."
           }
         />
         <DecisionRow
@@ -1121,10 +1126,15 @@ function AiDecision({
           title={
             risk
               ? `Likely cause: ${label(risk.failureRootCause)}`
-              : "Evidence being checked"
+              : latestEnrichment?.failureAttribution
+                ? `Telemetry: ${label(latestEnrichment.failureAttribution)}`
+                : "Evidence being checked"
           }
           detail={
-            risk?.causalNarrative ?? "No unsupported conclusion is shown."
+            risk?.causalNarrative ??
+            (latestEnrichment?.failureAttribution
+              ? `Razorpay telemetry attribution: ${latestEnrichment.failureAttribution.replace(/_/g, " ")}`
+              : "No unsupported conclusion is shown.")
           }
         />
         <DecisionRow
