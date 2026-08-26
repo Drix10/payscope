@@ -113,6 +113,7 @@ export function rankStrategies(
   riskAnalysis: RiskAnalysis,
   customerProfile: CustomerProfile | null,
   autonomyPolicy: AutonomyPolicy | null,
+  priorRate?: number,
   historicalByStrategy?: Map<string, RecoveryOutcomeStats | null>,
   explorationSeed?: string
 ): RecoveryStrategy[] {
@@ -149,9 +150,10 @@ export function rankStrategies(
     let heuristicRecoveryEstimatePaise: number;
     let strategyRationale = '';
     let isExploration = false;
-    if (historicalByStrategy && process.env.PAYSCOPE_LEARNING_ENABLED !== 'false') {
+    if (historicalByStrategy) {
+      if (!Number.isFinite(priorRate) || (priorRate as number) <= 0 || (priorRate as number) >= 1) throw new Error('Invalid recovery prior rate');
       const hist = historicalByStrategy.get(name) ?? null;
-      const scored = scoreStrategy({ baseScore, historical: hist, amountPaise: incident.remainingAmountPaise, confidence: riskAnalysis.confidence, customerAdjustment: adjustment }, explorationSeed ?? incident.id + ':' + name);
+      const scored = scoreStrategy({ baseScore, historical: hist, amountPaise: incident.remainingAmountPaise, confidence: riskAnalysis.confidence, customerAdjustment: adjustment }, explorationSeed ?? incident.id + ':' + name, priorRate as number);
       recoveryValueScore = scored.recoveryValueScore;
       heuristicRecoveryEstimatePaise = scored.heuristicRecoveryEstimatePaise;
       strategyRationale = scored.rationale;
@@ -173,7 +175,7 @@ export function rankStrategies(
       heuristicRecoveryEstimatePaise,
       dataSource,
       blockedBy,
-      posteriorRate: historicalByStrategy ? (histForLedger ? histForLedger.recoveryRate : 0.18) : undefined,
+      posteriorRate: historicalByStrategy ? (histForLedger ? histForLedger.recoveryRate : (priorRate as number)) : undefined,
       historicalRate: histForLedger ? histForLedger.recoveryRate : null,
       sampleSize: histForLedger?.attempts ?? 0,
       exploration: isExploration || undefined,
@@ -208,6 +210,7 @@ export function adaptRecoveryStrategy(
   riskAnalysis: RiskAnalysis,
   customerProfile: CustomerProfile | null,
   autonomyPolicy: AutonomyPolicy | null,
+  priorRate?: number,
   historicalByStrategy?: Map<string, import('../domain/contracts').RecoveryOutcomeStats | null>,
   explorationSeed?: string
 ): RecoveryStrategy | null {
@@ -220,7 +223,7 @@ export function adaptRecoveryStrategy(
   ) {
     return null;
   }
-  const ranked = rankStrategies(incident, enrichment, riskAnalysis, customerProfile, autonomyPolicy, historicalByStrategy, explorationSeed ?? incident.id + ':adapt');
+  const ranked = rankStrategies(incident, enrichment, riskAnalysis, customerProfile, autonomyPolicy, priorRate, historicalByStrategy, explorationSeed ?? incident.id + ':adapt');
   const untried = ranked.filter(s =>
     !previousStrategiesTried.includes(s.name) &&
     s.capabilities.every(cap => !previousStrategiesTried.includes(cap))
@@ -307,7 +310,14 @@ export async function replanIncidentStrategy(
   // synthetic "customer without history" profile that could unlock action.
   const customerProfile = latest?.event.customerHash ? await repository.customerProfile(organizationId, latest.event.customerHash) : null;
   const autonomyPolicy = await repository.autonomyPolicy(organizationId);
-  // Learning context for adaptive ranking (deterministic, no LLM)
+  // Learning context for adaptive ranking (deterministic, no LLM) — priorRate is required when history is present
+  const priorRateForAdapt = (() => {
+    const raw = process.env.PAYSCOPE_RECOVERY_PRIOR_RATE?.trim();
+    if (!raw) return 0.18;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0 || n >= 1) throw new Error('Invalid recovery prior rate');
+    return n;
+  })();
   const customerSegmentForAdapt = customerProfile
     ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfile.successfulPaymentCount >= 5 ? 'repeat' : 'new')
     : 'unknown';
@@ -327,7 +337,7 @@ export async function replanIncidentStrategy(
     return list;
   });
 
-  const adapted = adaptRecoveryStrategy(tried, detail.incident, enrichment, realRiskAnalysis, customerProfile, autonomyPolicy, histForAdapt, incidentId + ':adapt');
+  const adapted = adaptRecoveryStrategy(tried, detail.incident, enrichment, realRiskAnalysis, customerProfile, autonomyPolicy, priorRateForAdapt, histForAdapt, incidentId + ':adapt');
   if (!adapted) {
     await audit('no_action', 'Adaptive replan skipped because no untried provider-backed strategy is available.', { priorActionId: priorFailedAction.id ?? null, confidence: realRiskAnalysis.confidence });
     return { adaptedStrategy: null, actionId: null };

@@ -9,7 +9,7 @@ import { strategyPerformanceEvents } from '../../observability';
 export class Reconciler {
   constructor(private readonly client: SupabaseClient) { }
 
-  async reconcilePaymentLinkPaid(organizationId: string, referenceId: string, eventId: string, paymentId: string | null): Promise<string | null> {
+  async reconcilePaymentLinkPaid(organizationId: string, referenceId: string, eventId: string, paymentId: string | null, amountPaise?: number | null): Promise<string | null> {
     if (!/^ps_[a-f0-9]{32}$/i.test(referenceId)) return null;
     if (!organizationId || !eventId || eventId.length > 320) return null;
     // Organization-scoped lookup: prevents cross-tenant creation of a second action.
@@ -33,9 +33,10 @@ export class Reconciler {
     // If monotonic skipped, error is null and function logs skipped; we swallow
     if (reconcileError && !/monotonic|skipped/i.test(reconcileError.message)) throw new Error(`Reconciliation transition failed: ${reconcileError.message}`);
     strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'confirmed' });
-    // Close learning ledger (idempotent: only pending -> paid transitions)
+    // Close learning ledger: paid amount is the captured amount when available, else the action's amount (economically correct)
+    const actualRecovery = Number.isSafeInteger(amountPaise) && (amountPaise as number) > 0 ? (amountPaise as number) : null;
     await this.client.rpc('payscope_record_recovery_outcome', {
-      p_organization_id: organizationId, p_action_id: actionId, p_outcome: 'paid', p_actual_recovery_paise: null,
+      p_organization_id: organizationId, p_action_id: actionId, p_outcome: 'paid', p_actual_recovery_paise: actualRecovery,
     }).then(
       () => {},
       (e) => { try { const { logger } = require('../../observability'); logger.warn({ organizationId, actionId, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (paid)'); } catch {} }

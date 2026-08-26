@@ -197,6 +197,13 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfile.successfulPaymentCount >= 5 ? 'repeat' : 'new')
       : 'unknown';
     const failureCategory = enrichment?.failureAttribution ?? 'unknown';
+    const priorRate = (() => {
+      const raw = process.env.PAYSCOPE_RECOVERY_PRIOR_RATE?.trim();
+      if (!raw) return 0.18;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0 || n >= 1) throw new Error('Invalid recovery prior rate');
+      return n;
+    })();
     let historicalByStrategy: Map<string, import('../domain/contracts').RecoveryOutcomeStats | null> | undefined;
     if (process.env.PAYSCOPE_LEARNING_ENABLED !== 'false' && typeof (repository as unknown as { recoveryOutcomeStats?: unknown }).recoveryOutcomeStats === 'function') {
       let hist: import('../domain/contracts').RecoveryOutcomeStats | null = null;
@@ -208,7 +215,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       }
       historicalByStrategy = new Map([['deliver_recovery_link_email', hist]]);
     }
-    const rankedStrategies = rankStrategies(detail.incident, enrichment, risk.analysis, customerProfile, autonomyPolicy, historicalByStrategy, job.incidentId);
+    const rankedStrategies = rankStrategies(detail.incident, enrichment, risk.analysis, customerProfile, autonomyPolicy, priorRate, historicalByStrategy, job.incidentId);
     const topStrategy = rankedStrategies[0];
 
     logger.info({
@@ -362,7 +369,14 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     try {
       const customerProfileForLog = typeof repository.customerProfile === 'function' ? await repository.customerProfile(job.organizationId, latest?.event.customerHash ?? '').catch(() => null) : null;
       const autonomyPolicyForLog = typeof repository.autonomyPolicy === 'function' ? await repository.autonomyPolicy(job.organizationId).catch(() => null) : null;
-      // Recompute with learning for log consistency (no extra DB cost if stats already fetched above; recompute is cheap)
+      // Recompute with learning for log consistency
+      const priorRateForLog = (() => {
+        const raw = process.env.PAYSCOPE_RECOVERY_PRIOR_RATE?.trim();
+        if (!raw) return 0.18;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n <= 0 || n >= 1) throw new Error('Invalid recovery prior rate');
+        return n;
+      })();
       let histForLog: Map<string, import('../domain/contracts').RecoveryOutcomeStats | null> | undefined;
       if (process.env.PAYSCOPE_LEARNING_ENABLED !== 'false' && typeof (repository as unknown as { recoveryOutcomeStats?: unknown }).recoveryOutcomeStats === 'function' && latest?.event.customerHash) {
         const seg = customerProfileForLog ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfileForLog.successfulPaymentCount >= 5 ? 'repeat' : 'new') : 'unknown';
@@ -370,7 +384,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
         const h = await (repository as unknown as { recoveryOutcomeStats: (o: string, s: string, c: string, seg: string) => Promise<import('../domain/contracts').RecoveryOutcomeStats | null> }).recoveryOutcomeStats(job.organizationId, 'deliver_recovery_link_email', cat, seg).catch(() => null);
         histForLog = new Map([['deliver_recovery_link_email', h]]);
       }
-      const ranked = rankStrategies(detail.incident, enrichment, output.risk.analysis, customerProfileForLog, autonomyPolicyForLog, histForLog, job.incidentId);
+      const ranked = rankStrategies(detail.incident, enrichment, output.risk.analysis, customerProfileForLog, autonomyPolicyForLog, priorRateForLog, histForLog, job.incidentId);
       logger.info({ incidentId: job.incidentId, topStrategy: ranked[0]?.name ?? 'no_strategy_available', score: ranked[0]?.recoveryValueScore ?? 0, exploration: ranked[0]?.exploration ?? false }, 'PayScope strategy ranked for recovery outbox execution');
       // Enqueue direct execution action with outcome ledger (atomic) — only when direct execution is enabled and a strategy exists
       if (options.directExecution && ranked[0] && ranked[0].capabilities.includes('deliver_recovery_link_email') && typeof (repository as unknown as { createExecutionActionForSaga?: unknown }).createExecutionActionForSaga === 'function') {

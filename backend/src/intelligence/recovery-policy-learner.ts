@@ -1,20 +1,12 @@
 import { RecoveryOutcomeStats } from '../domain/contracts';
 
 // Deterministic posterior exploration heuristic — deterministic, no LLM mutation.
-// Uses Beta-Binomial posterior with configurable global prior; hash-seeded exploration.
-// Called "Thompson-inspired" — not true Beta sampling, but deterministic and reproducible.
+// Uses Beta-Binomial posterior with required priorRate; hash-seeded exploration.
 
-const DEFAULT_PRIOR_RATE = 0.18;
 const PSEUDO_COUNT = 20;
 
-function getPriorRate(): number {
-  const raw = process.env.PAYSCOPE_RECOVERY_PRIOR_RATE?.trim();
-  if (!raw) return DEFAULT_PRIOR_RATE;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 && n < 1 ? n : DEFAULT_PRIOR_RATE;
-}
-function priorAlpha(): number { return getPriorRate() * PSEUDO_COUNT; }
-function priorBeta(): number { return (1 - getPriorRate()) * PSEUDO_COUNT; }
+function priorAlpha(priorRate: number): number { return priorRate * PSEUDO_COUNT; }
+function priorBeta(priorRate: number): number { return (1 - priorRate) * PSEUDO_COUNT; }
 
 export type StrategyScoreInput = {
   baseScore: number;
@@ -55,7 +47,8 @@ function deterministicPosteriorSample(alpha: number, beta: number, seed: string)
   return Math.max(0, Math.min(1, mean + z * std));
 }
 
-export function scoreStrategy(input: StrategyScoreInput, explorationSeed: string): ScoredStrategy {
+export function scoreStrategy(input: StrategyScoreInput, explorationSeed: string, priorRate: number): ScoredStrategy {
+  if (!Number.isFinite(priorRate) || priorRate <= 0 || priorRate >= 1) throw new Error('Invalid recovery prior rate');
   const safeBase = Number.isFinite(input.baseScore) ? Math.max(0, Math.min(100, input.baseScore)) : 50;
   const safeAmount = Number.isSafeInteger(input.amountPaise) && input.amountPaise >= 0 ? input.amountPaise : 0;
   const safeConfidence = Number.isFinite(input.confidence) ? Math.max(0, Math.min(1, input.confidence)) : 0.5;
@@ -64,8 +57,8 @@ export function scoreStrategy(input: StrategyScoreInput, explorationSeed: string
   const attempts = Number.isSafeInteger(historical?.attempts) && (historical?.attempts ?? 0) >= 0 ? historical!.attempts : 0;
   const paidRaw = Number.isSafeInteger(historical?.paid) && (historical?.paid ?? 0) >= 0 ? historical!.paid : 0;
   const paid = Math.min(paidRaw, attempts);
-  const alpha = priorAlpha() + paid;
-  const beta = priorBeta() + (attempts - paid);
+  const alpha = priorAlpha(priorRate) + paid;
+  const beta = priorBeta(priorRate) + (attempts - paid);
   const posteriorRate = alpha / (alpha + beta);
   const sampledRate = deterministicPosteriorSample(alpha, beta, explorationSeed || 'default');
   // 5% epsilon: use sampled rate, otherwise MAP (posterior mean)
@@ -74,7 +67,6 @@ export function scoreStrategy(input: StrategyScoreInput, explorationSeed: string
   const rawScore = safeBase * 0.5 + effectiveRate * 100 * 0.5 + safeAdj;
   const recoveryValueScore = Math.max(0, Math.min(100, Math.round(rawScore)));
   const heuristicRecoveryEstimatePaise = Math.round(effectiveRate * safeConfidence * safeAmount);
-  const priorRate = getPriorRate();
   const rationale = historical
     ? `posterior ${(posteriorRate * 100).toFixed(1)}% (n=${attempts}, paid=${paid})${isExploration ? ' [exploration]' : ''}`
     : `prior ${(priorRate * 100).toFixed(1)}% (cold start, configurable via PAYSCOPE_RECOVERY_PRIOR_RATE)`;
