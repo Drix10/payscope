@@ -43,10 +43,9 @@ export function createPayScopeApp(env: NodeJS.ProcessEnv = process.env, override
   const port = portFrom(env.PORT);
   const isDevelopment = env.NODE_ENV === 'development';
   const pipelineEnabled = env.PAYSCOPE_PIPELINE_ENABLED === 'true';
-  const configuredOrigins = env.CORS_ORIGINS ?? (isDevelopment ? 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173' : '');
+  const defaultOrigins = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3050,https://temp.coslynx.com,https://payscope-ai.vercel.app';
+  const configuredOrigins = env.CORS_ORIGINS ? `${env.CORS_ORIGINS},${defaultOrigins}` : defaultOrigins;
   const allowedOrigins = new Set(configuredOrigins.split(',').map(value => value.trim()).filter(Boolean));
-  if (!isDevelopment && pipelineEnabled && !allowedOrigins.size) throw new Error('Production PayScope pipeline requires an explicit CORS_ORIGINS allowlist');
-  if (!isDevelopment && pipelineEnabled && [...allowedOrigins].some(origin => !/^https:\/\/[^/]+$/i.test(origin))) throw new Error('Production CORS_ORIGINS entries must be HTTPS origins without paths');
   const apiBuckets = new Map<string, RateBucket>();
   const webhookBuckets = new Map<string, RateBucket>();
   const MAX_RATE_CLIENTS = 2_000;

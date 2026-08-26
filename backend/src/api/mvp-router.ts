@@ -21,11 +21,8 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
   const router = Router();
   const dashboardKeys = options.dashboardApiKeys ?? [];
   router.use((req, res, next) => {
-    if (dashboardKeys.length === 0) return next();
     const bearer = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? '';
     const headerKey = req.header('x-payscope-api-key')?.trim() ?? '';
-    // Exactly one presented credential is evaluated; a request carrying both
-    // headers is rejected so an attacker cannot mix-and-match credentials.
     if (bearer && headerKey) return rejectUnauthorized(res);
     const credential = bearer || headerKey;
     if (dashboardKeyMatches(credential, dashboardKeys)) return next();

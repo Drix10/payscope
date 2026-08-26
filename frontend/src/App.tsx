@@ -249,12 +249,17 @@ export default function App() {
         setLoadedFilter(filter);
         setError(null);
 
-        // Silent detail refresh if an incident is currently selected
-        const currentSelectedId = selectedIdRef.current;
-        if (
-          currentSelectedId &&
-          nextIncidents.some((i) => i.id === currentSelectedId)
-        ) {
+        // Refresh detail for currently selected incident (or auto-select first incident)
+        const targetId =
+          selectedIdRef.current &&
+          nextIncidents.some((i) => i.id === selectedIdRef.current)
+            ? selectedIdRef.current
+            : (nextIncidents[0]?.id ?? null);
+
+        if (targetId) {
+          if (selectedIdRef.current !== targetId) {
+            setSelectedId(targetId);
+          }
           silentDetailController.current?.abort();
           const silentController = new AbortController();
           silentDetailController.current = silentController;
@@ -264,15 +269,14 @@ export default function App() {
           void (async () => {
             try {
               const [detail, entries] = await Promise.all([
-                mvpApi.incident(currentSelectedId, silentController.signal),
-                mvpApi.audit(currentSelectedId, silentController.signal),
+                mvpApi.incident(targetId, silentController.signal),
+                mvpApi.audit(targetId, silentController.signal),
               ]);
               if (
                 mounted.current &&
-                selectedIdRef.current === currentSelectedId &&
+                selectedIdRef.current === targetId &&
                 detailSequence.current === seq &&
-                !silentController.signal.aborted &&
-                !controller.signal.aborted
+                !silentController.signal.aborted
               ) {
                 setSelected(detail);
                 setAudit(entries);
@@ -414,12 +418,12 @@ export default function App() {
     if (viewMode === "dashboard") void refresh();
   }, [refresh, viewMode]);
 
-  // Real-time Background Polling Engine (every 3s when dashboard is open)
+  // Real-time Background Polling Engine (every 1.5s when dashboard is open)
   useEffect(() => {
     if (viewMode !== "dashboard") return;
     const interval = setInterval(() => {
       void refresh(true);
-    }, 3000);
+    }, 1500);
     return () => clearInterval(interval);
   }, [refresh, viewMode]);
 
