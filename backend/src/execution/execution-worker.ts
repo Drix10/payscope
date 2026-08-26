@@ -128,7 +128,7 @@ export class ExecutionWorker {
         return this.repository.completeOutbox(outbox, this.workerId);
       }
       if (action.capability !== 'deliver_recovery_link_email') {
-        await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'payscope', kind: 'action_executed', payload: { rationale: `Internal execution completed for ${action.capability}` }, state: 'confirmed' });
+        await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'payscope', kind: 'action_executed', payload: { rationale: `Internal execution recorded for ${action.capability}` }, state: 'confirmed' });
         executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
         return this.repository.completeOutbox(outbox, this.workerId);
       }

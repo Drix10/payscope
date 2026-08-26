@@ -142,6 +142,22 @@ export function rankStrategies(
     .sort((a, b) => b.heuristicRecoveryEstimatePaise - a.heuristicRecoveryEstimatePaise);
 }
 
+export function mapAttributionToRootCause(attribution: string | undefined): 'gateway_degraded' | 'issuer_block' | 'fraud_confirmed' | 'customer_error' {
+  switch (attribution) {
+    case 'gateway_degraded':
+      return 'gateway_degraded';
+    case 'issuer_timeout':
+    case 'issuer_block':
+      return 'issuer_block';
+    case 'fraud_block':
+      return 'fraud_confirmed';
+    case 'customer_drop':
+    case 'subscription_lapse':
+    default:
+      return 'customer_error';
+  }
+}
+
 export function adaptRecoveryStrategy(
   previousStrategiesTried: string[],
   incident: Incident,
@@ -150,8 +166,20 @@ export function adaptRecoveryStrategy(
   customerProfile: CustomerProfile | null,
   autonomyPolicy: AutonomyPolicy | null
 ): RecoveryStrategy | null {
+  // Fraud and dispute hard stops
+  if (
+    incident.status === 'DISPUTE_OPENED' ||
+    riskAnalysis.failureRootCause === 'fraud_confirmed' ||
+    riskAnalysis.failureRootCause === 'fraud_suspected' ||
+    enrichment?.failureAttribution === 'fraud_block'
+  ) {
+    return null;
+  }
   const ranked = rankStrategies(incident, enrichment, riskAnalysis, customerProfile, autonomyPolicy);
-  const untried = ranked.filter(s => !previousStrategiesTried.includes(s.name));
+  const untried = ranked.filter(s =>
+    !previousStrategiesTried.includes(s.name) &&
+    s.capabilities.every(cap => !previousStrategiesTried.includes(cap))
+  );
   return untried[0] ?? null;
 }
 
@@ -162,32 +190,55 @@ export async function replanIncidentStrategy(
   reason: string
 ): Promise<{ adaptedStrategy: RecoveryStrategy | null; actionId: string | null }> {
   const detail = await repository.incidentDetail(organizationId, incidentId).catch(() => null);
-  if (!detail || detail.incident.status === 'RESOLVED' || detail.incident.status === 'DISMISSED') {
+  if (!detail || detail.incident.status === 'RESOLVED' || detail.incident.status === 'DISMISSED' || detail.incident.status === 'DISPUTE_OPENED') {
     return { adaptedStrategy: null, actionId: null };
   }
   const latest = detail.events.at(-1);
   const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
+
+  // Enforce fraud hard stop on telemetry attribution
+  if (enrichment?.failureAttribution === 'fraud_block') {
+    return { adaptedStrategy: null, actionId: null };
+  }
+
   const customerProfile = latest?.event.customerHash ? await repository.customerProfile(organizationId, latest.event.customerHash).catch(() => null) : null;
   const autonomyPolicy = await repository.autonomyPolicy(organizationId).catch(() => null);
 
-  const triedCapabilities = (detail.execution || []).map((a: { capability: ActionType }) => a.capability);
-  const fakeRiskAnalysis = {
-    failureRootCause: enrichment?.failureAttribution === 'gateway_degraded' ? 'gateway_degraded' : 'customer_error',
-    evidenceStrength: 'moderate',
-    confidence: 0.85,
-    causalNarrative: `Adaptive replan triggered: ${reason}`,
-    evidenceConfidenceRationale: 'Verified adaptive event trigger',
-    alternativeHypotheses: [],
+  const tried = (detail.execution || []).flatMap((a: { capability: ActionType; command_key?: string }) => {
+    const list: string[] = [a.capability];
+    if (a.command_key) list.push(a.command_key);
+    return list;
+  });
+
+  // Real risk analysis derived from existing investigation if available or deterministic fallback
+  const existingRisk = detail.investigation?.riskAnalysis;
+  const failureRootCause = existingRisk?.failureRootCause ?? mapAttributionToRootCause(enrichment?.failureAttribution);
+  const realRiskAnalysis: RiskAnalysis = {
+    failureRootCause,
+    evidenceStrength: existingRisk?.evidenceStrength ?? 'moderate',
+    confidence: existingRisk?.confidence ?? 0.50,
+    causalNarrative: existingRisk?.causalNarrative ?? `Adaptive replan triggered by telemetry: ${reason}`,
+    evidenceConfidenceRationale: existingRisk?.evidenceConfidenceRationale ?? 'Deterministic telemetry attribution clearance',
+    alternativeHypotheses: existingRisk?.alternativeHypotheses ?? [],
     falsePositiveCostEstimatePaise: detail.incident.remainingAmountPaise,
-    missingEvidence: [],
-    chargebackEvidenceReady: false,
+    missingEvidence: existingRisk?.missingEvidence ?? [],
+    chargebackEvidenceReady: failureRootCause === 'fraud_confirmed' || failureRootCause === 'fraud_suspected',
     evidenceItems: [latest?.event.eventType ?? 'payment.failed'],
-    recommendedActionCategory: 'deliver_recovery_link_email',
-    toolResults: {},
+    recommendedActionCategory: failureRootCause === 'fraud_confirmed' || failureRootCause === 'fraud_suspected' ? 'no_action' : 'deliver_recovery_link_email',
+    toolResults: { incidentTimelineEventCount: detail.events.length, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },
   };
 
-  const adapted = adaptRecoveryStrategy(triedCapabilities, detail.incident, enrichment, fakeRiskAnalysis as any, customerProfile, autonomyPolicy);
+  const adapted = adaptRecoveryStrategy(tried, detail.incident, enrichment, realRiskAnalysis, customerProfile, autonomyPolicy);
   if (!adapted) return { adaptedStrategy: null, actionId: null };
+
+  // Idempotency check: Ensure we do not create duplicate actions for the same capability/incident
+  const canonicalKey = `${organizationId}:${adapted.capabilities[0]}:${incidentId}`;
+  const existingExecution = (detail.execution || []).some((a: { capability?: string; command_key?: string }) =>
+    a.capability === adapted.capabilities[0] || a.command_key === canonicalKey
+  );
+  if (existingExecution) {
+    return { adaptedStrategy: null, actionId: null };
+  }
 
   const actionId = await repository.createExecutionActionForSaga(
     organizationId,

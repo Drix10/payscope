@@ -538,10 +538,16 @@ export class MvpRepository {
             return payload?.customerHash === customerHash;
           });
           actionsCount = customerActions.length;
-          recoveryEmailsPaid = customerActions.filter(a => a.state === 'confirmed' || a.state === 'payment_link_paid').length;
           const dispatched = customerActions.find(d => typeof d.dispatched_at === 'string');
           if (dispatched) lastContact = dispatched.dispatched_at as string;
         }
+
+        // Correlate recovery conversion strictly from captured payment_link events for this customer
+        const paidLinkEvents = customerEvents.filter(e => {
+          const norm = (e.normalized as any);
+          return norm?.eventType === 'payment_link.paid' || (norm?.eventType === 'payment.captured' && norm?.providerData?.payment_link_reference_id);
+        });
+        recoveryEmailsPaid = paidLinkEvents.length;
       } catch (err) {
         logger.warn({ organizationId, customerHash, error: err instanceof Error ? err.message : String(err) }, 'PayScope failed to fetch execution action history for customer profile');
       }
@@ -627,7 +633,7 @@ export class MvpRepository {
 
   async createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string> {
     const actionId = randomUUID();
-    const commandKey = `${organizationId}:${capability}:${incidentId}:${Date.now()}`;
+    const commandKey = `${organizationId}:${capability}:${incidentId}`;
     const detail = await this.incidentDetail(organizationId, incidentId).catch(() => null);
     const latestEvent = detail?.events.at(-1);
     const customerHash = latestEvent?.event.customerHash ?? createHash('sha256').update(`${organizationId}:${incidentId}`).digest('hex').slice(0, 64);

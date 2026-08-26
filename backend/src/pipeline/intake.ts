@@ -252,8 +252,9 @@ export async function receiveWebhook(
   const normalized = normalizeRazorpayWebhook(rawBody, eventIdHeader, secret);
   const result = await repository.recordWebhookIntake(config.organizationId, rawBody, normalized);
   
-  if (result.incidentId && (normalized.eventType === 'payment.failed' || normalized.eventType === 'payment_link.expired')) {
-    await handleIncidentAdaptiveLifecycle(repository, config.organizationId, result.incidentId, 'linked_risk_event').catch(() => null);
+  if (result.incidentId && (normalized.eventType === 'payment.failed' || normalized.eventType === 'payment_link.expired' || normalized.eventType === 'recovery.failed')) {
+    const eventReason = normalized.eventType === 'payment_link.expired' ? 'payment_link_expired' : normalized.eventType === 'recovery.failed' ? 'recovery_failed' : 'linked_risk_event';
+    await handleIncidentAdaptiveLifecycle(repository, config.organizationId, result.incidentId, eventReason).catch(() => null);
   }
 
   return { duplicate: result.duplicate, ignored: false, eventId: result.eventId };
