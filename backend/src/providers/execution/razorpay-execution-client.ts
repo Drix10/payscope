@@ -6,12 +6,14 @@ export type RazorpayDispute = { id: string; paymentId: string; status: string };
 export type RazorpayRetryClassification = 'retryable' | 'idempotent_retry' | 'terminal';
 export type RazorpayErrorMeta = { status: number; code: string | null; classification: RazorpayRetryClassification };
 
+const RAZORPAY_MAX_AMOUNT_PAISE = 5_000_000_000; // ₹5 crore (50,000,000 INR = 5,000,000,000 paise)
+
 export class RazorpayExecutionClient {
   constructor(private readonly keyId: string, private readonly keySecret: string, private readonly timeoutMs = 10_000) { }
 
   async createPaymentLink(input: { referenceId: string; amountPaise: number; currency: string; description: string }): Promise<RazorpayPaymentLink> {
     if (!/^ps_[a-f0-9]{32}$/.test(input.referenceId)) throw new Error('Invalid PayScope Payment Link reference');
-    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > 50_000_000_00) throw new Error('Payment Link amount must be between 100 paise and 50 crore (Razorpay limit)');
+    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > RAZORPAY_MAX_AMOUNT_PAISE) throw new Error('Payment Link amount must be between 100 paise and 5 crore (Razorpay limit)');
     if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('Payment Link currency is invalid');
     if (!input.description || input.description.trim().length === 0) throw new Error('Payment Link description is required');
     const result = await this.request('/v1/payment_links', {
@@ -50,7 +52,7 @@ export class RazorpayExecutionClient {
 
   async capturePayment(input: { paymentId: string; amountPaise: number; currency: string }): Promise<RazorpayPayment> {
     if (!/^pay_[A-Za-z0-9]+$/.test(input.paymentId)) throw new Error('Invalid canonical payment id');
-    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > 50_000_000_00) throw new Error('Capture amount must be between 100 paise and 50 crore');
+    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > RAZORPAY_MAX_AMOUNT_PAISE) throw new Error('Capture amount must be between 100 paise and 5 crore');
     if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('Capture currency is invalid');
     // read-before-write: fetch canonical state first (caller must also verify authorized)
     const canonical = await this.fetchPayment(input.paymentId);
@@ -76,7 +78,7 @@ export class RazorpayExecutionClient {
 
   async createRefund(input: { paymentId: string; amountPaise: number; currency: string; receipt: string; idempotencyKey: string }): Promise<RazorpayRefund> {
     if (!/^pay_[A-Za-z0-9]+$/.test(input.paymentId)) throw new Error('Invalid payment id for refund');
-    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > 50_000_000_00) throw new Error('Refund amount must be between 100 paise and 50 crore');
+    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > RAZORPAY_MAX_AMOUNT_PAISE) throw new Error('Refund amount must be between 100 paise and 5 crore');
     if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('Refund currency invalid');
     if (!input.receipt || input.receipt.length > 160 || !/^[A-Za-z0-9_-]+$/.test(input.receipt)) throw new Error('Refund receipt must be alphanumeric (with _ or -) and max 160 chars');
     if (!/^[A-Za-z0-9_-]{16,240}$/.test(input.idempotencyKey)) throw new Error('Refund idempotency key must be 16-240 alphanumeric chars (with _ or -)');

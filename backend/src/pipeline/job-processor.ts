@@ -28,6 +28,7 @@ export class PipelineJobProcessor {
     private readonly repository: DurablePipelineRepository,
     private readonly enrichmentProvider: EnrichmentProvider,
     private readonly dispatchInvestigation: InvestigationDispatcher,
+    private readonly recoveryPriorRate: number = 0.18,
   ) {}
 
   async process(job: QueueJob): Promise<void> {
@@ -77,7 +78,7 @@ export class PipelineJobProcessor {
     }
     const replanIncidentId = !result?.created && result?.incident ? result.incident.id : reconciledIncidentId;
     if (replanIncidentId && ['payment_link.expired', 'recovery.failed'].includes(event.event.eventType)) {
-      await replanIncidentStrategy(this.repository, job.organizationId, replanIncidentId, event.event.eventType.replace('.', '_'));
+      await replanIncidentStrategy(this.repository, job.organizationId, replanIncidentId, event.event.eventType.replace('.', '_'), this.recoveryPriorRate);
     }
   }
 }

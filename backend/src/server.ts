@@ -107,8 +107,13 @@ export function createPayScopeApp(env: NodeJS.ProcessEnv = process.env, override
         enrichment,
         async job => {
           if (!job.incidentId) throw new Error('Investigation job is missing incidentId');
-          return runDurableInvestigation(pipeline.repository, model ?? fallbackProvider, job, { directExecution: pipeline.config.directExecutionEnabled });
-        }
+          return runDurableInvestigation(pipeline.repository, model ?? fallbackProvider, job, {
+            directExecution: pipeline.config.directExecutionEnabled,
+            recoveryPriorRate: pipeline.config.recoveryPriorRate,
+            agentDeadlineMs: pipeline.config.agentDeadlineMs,
+          });
+        },
+        pipeline.config.recoveryPriorRate,
       );
       worker = new QueueWorker(pipeline.client, pipeline.config.workerId, job => processor.process(job));
       if (pipeline.config.directExecutionEnabled && pipeline.config.smtp && pipeline.config.emailEncryptionKey && keyId && keySecret) {

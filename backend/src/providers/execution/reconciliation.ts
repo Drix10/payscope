@@ -35,12 +35,10 @@ export class Reconciler {
     strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'confirmed' });
     // Close learning ledger: paid amount is the captured amount when available, else the action's amount (economically correct)
     const actualRecovery = Number.isSafeInteger(amountPaise) && (amountPaise as number) > 0 ? (amountPaise as number) : null;
-    await this.client.rpc('payscope_record_recovery_outcome', {
+    const { error: ledgerError } = await this.client.rpc('payscope_record_recovery_outcome', {
       p_organization_id: organizationId, p_action_id: actionId, p_outcome: 'paid', p_actual_recovery_paise: actualRecovery,
-    }).then(
-      () => {},
-      (e) => { logger.warn({ organizationId, actionId, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (paid)'); }
-    );
+    });
+    if (ledgerError) throw new Error(`Recovery outcome ledger close failed (paid): ${ledgerError.message}`);
     return typeof row.incident_id === 'string' ? row.incident_id : null;
   }
 
@@ -60,12 +58,10 @@ export class Reconciler {
     });
     if (compensationError) throw new Error(`Expired-link compensation failed: ${compensationError.message}`);
     strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'cancelled' });
-    await this.client.rpc('payscope_record_recovery_outcome', {
+    const { error: ledgerError } = await this.client.rpc('payscope_record_recovery_outcome', {
       p_organization_id: organizationId, p_action_id: row.id, p_outcome: 'expired', p_actual_recovery_paise: 0,
-    }).then(
-      () => {},
-      (e) => { logger.warn({ organizationId, actionId: row.id, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (expired)'); }
-    );
+    });
+    if (ledgerError) throw new Error(`Recovery outcome ledger close failed (expired): ${ledgerError.message}`);
     return typeof row.incident_id === 'string' ? row.incident_id : null;
   }
 

@@ -66,7 +66,7 @@ async function main() {
       evidenceConfidenceRationale: 'Verified by Razorpay fields', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 7500000,
       missingEvidence: [], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'deliver_recovery_link_email', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },
     };
-    const ranked = rankStrategies(incident, enrichment, riskAnalysis, null, null);
+    const ranked = rankStrategies(incident, enrichment, riskAnalysis, null, null, 0.18);
     assert.ok(ranked.length > 0);
     assert.equal(ranked[0].name, 'deliver_recovery_link_email');
     assert.ok(ranked[0].heuristicRecoveryEstimatePaise > 0);
@@ -104,7 +104,7 @@ async function main() {
     const enrichment = { failureAttribution: 'gateway_degraded', gatewayHealthScore: 0.4, gatewayInDowntime: true, downtimeScheduled: false, crossBorderFlag: false, priorAttemptCount: 1, partialRecoveryPossible: false, recommendedRetryMethod: 'netbanking', source: 'razorpay_fields_heuristic', enrichedAt: new Date().toISOString(), signalsUsed: ['downtimes'] };
     const riskAnalysis = { failureRootCause: 'gateway_degraded', evidenceStrength: 'strong', confidence: 0.92, causalNarrative: 'Acquirer downtime', evidenceConfidenceRationale: 'Razorpay signal', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 1000000, missingEvidence: [], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'resolve_infrastructure', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } };
 
-    const adapted = adaptRecoveryStrategy(['deliver_recovery_link_email'], incident, enrichment, riskAnalysis, null, null);
+    const adapted = adaptRecoveryStrategy(['deliver_recovery_link_email'], incident, enrichment, riskAnalysis, null, null, 0.18);
     assert.equal(adapted, null, 'strategy exhaustion must terminate in safe no-action, not a fake infrastructure capability');
   });
 
@@ -261,7 +261,7 @@ async function main() {
       createExecutionActionForSaga: async () => { createdCount++; return 'action_new'; }
     };
 
-    const res = await replanIncidentStrategy(mockRepo, org, 'inc_dup', 'linked_risk_event');
+    const res = await replanIncidentStrategy(mockRepo, org, 'inc_dup', 'linked_risk_event', 0.18);
     assert.equal(res.adaptedStrategy, null, 'the only provider-backed capability was already tried; replan must stop');
     assert.equal(res.actionId, null);
     assert.equal(createdCount, 0);
@@ -283,7 +283,7 @@ async function main() {
       recordAdaptiveReplanDecision: async input => { auditDecisions.push(input); },
       createExecutionActionForSaga: async () => { throw new Error('must never be called'); }
     };
-    const res = await replanIncidentStrategy(mockRepo, org, 'inc_live', 'payment_link_expired');
+    const res = await replanIncidentStrategy(mockRepo, org, 'inc_live', 'payment_link_expired', 0.18);
     assert.equal(res.adaptedStrategy, null);
     assert.equal(res.actionId, null);
     assert.equal(auditDecisions[0].decision, 'no_action');

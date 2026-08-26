@@ -71,7 +71,7 @@ async function main() {
     console.log(`✔ live ledger: ${stats.paid}/${stats.attempts} paid for ${testCat}/${testSegment}`);
 
     // Killer: ranking with history vs without must differ — priorRate is required when history is present
-    const without = rankStrategies(incident, enrichment, risk, { organizationId: org, customerHash: 'a'.repeat(64), successfulPaymentMethods: [], failedPaymentMethods: [], successfulPaymentCount: 6, totalIncidentCount: 1, recoveryEmailsSent: 0, recoveryEmailsPaid: 0, lastContactedAt: null, firstSeenAt: new Date().toISOString(), lastSeenAt: new Date().toISOString() }, null);
+    const without = rankStrategies(incident, enrichment, risk, { organizationId: org, customerHash: 'a'.repeat(64), successfulPaymentMethods: [], failedPaymentMethods: [], successfulPaymentCount: 6, totalIncidentCount: 1, recoveryEmailsSent: 0, recoveryEmailsPaid: 0, lastContactedAt: null, firstSeenAt: new Date().toISOString(), lastSeenAt: new Date().toISOString() }, null, prior);
     const withHist = new Map([['deliver_recovery_link_email', stats]]);
     const withHistory = rankStrategies(incident, enrichment, risk, { organizationId: org, customerHash: 'a'.repeat(64), successfulPaymentMethods: [], failedPaymentMethods: [], successfulPaymentCount: 6, totalIncidentCount: 1, recoveryEmailsSent: 0, recoveryEmailsPaid: 0, lastContactedAt: null, firstSeenAt: new Date().toISOString(), lastSeenAt: new Date().toISOString() }, null, prior, withHist, incident.id);
     assert.notEqual(withHistory[0].recoveryValueScore, without[0].recoveryValueScore, 'history must measurably change score');

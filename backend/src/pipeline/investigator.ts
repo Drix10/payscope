@@ -19,10 +19,9 @@ export function paymentLinkReferenceForProposalDirect(organizationId: string, in
 
 // Three sequential agent calls must fit this budget. Reasoning models spend
 // thousands of hidden tokens (tens of seconds) before emitting JSON, so the
-// default is generous and overridable via PAYSCOPE_AGENT_DEADLINE_MS.
-const AGENT_PIPELINE_DEADLINE_MS = Number.isSafeInteger(Number(process.env.PAYSCOPE_AGENT_DEADLINE_MS))
-  ? Math.max(5_000, Number(process.env.PAYSCOPE_AGENT_DEADLINE_MS))
-  : 240_000;
+// default is generous and overridable via RuntimeConfig agentDeadlineMs.
+const DEFAULT_AGENT_PIPELINE_DEADLINE_MS = 240_000;
+const DEFAULT_RECOVERY_PRIOR_RATE = 0.18;
 
 export type SupervisorInput = {
   incident: Pick<Incident, 'id' | 'riskTier' | 'status' | 'totalFailedAmountPaise' | 'correlatedEventIds' | 'openedAt'>;
@@ -135,11 +134,13 @@ export async function runRecoveryPlanner(provider: ModelProvider, input: Recover
   throw new Error('Recovery Planner retry exhausted without throwing - this should never happen');
 }
 
-export async function runDurableInvestigation(repository: MvpRepository, provider: ModelProvider, job: QueueJob, options: { directExecution?: boolean } = {}): Promise<void> {
+export async function runDurableInvestigation(repository: MvpRepository, provider: ModelProvider, job: QueueJob, options: { directExecution?: boolean; recoveryPriorRate?: number; agentDeadlineMs?: number } = {}): Promise<void> {
   if (!job.incidentId) throw new Error('Investigation job is missing incidentId');
   if (!job.triggerEventId) throw new Error('Investigation job is missing triggerEventId');
   const incidentId = job.incidentId;
   const started = Date.now();
+  const agentDeadlineMs = options.agentDeadlineMs ?? DEFAULT_AGENT_PIPELINE_DEADLINE_MS;
+  const recoveryPriorRate = options.recoveryPriorRate ?? DEFAULT_RECOVERY_PRIOR_RATE;
   const detail = await repository.incidentDetail(job.organizationId, incidentId);
   const latest = detail.events.at(-1);
   const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
@@ -167,7 +168,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     ]);
     policyContextResult = policyContext;
     executionContextResult = executionContext;
-    const deadlineProvider = providerWithDeadline(provider, started + AGENT_PIPELINE_DEADLINE_MS);
+    const deadlineProvider = providerWithDeadline(provider, started + agentDeadlineMs);
     const supervisor = await runInvestigationSupervisor(deadlineProvider, {
       incident: detail.incident,
       enrichment,
@@ -206,13 +207,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfile.successfulPaymentCount >= 5 ? 'repeat' : 'new')
       : 'unknown';
     const failureCategory = enrichment?.failureAttribution ?? 'unknown';
-    const priorRate = (() => {
-      const raw = process.env.PAYSCOPE_RECOVERY_PRIOR_RATE?.trim();
-      if (!raw) return 0.18;
-      const n = Number(raw);
-      if (!Number.isFinite(n) || n <= 0 || n >= 1) throw new Error('Invalid recovery prior rate');
-      return n;
-    })();
+    const priorRate = recoveryPriorRate;
     let historicalByStrategy: Map<string, import('../domain/contracts').RecoveryOutcomeStats | null> | undefined;
     if (process.env.PAYSCOPE_LEARNING_ENABLED !== 'false' && typeof (repository as unknown as { recoveryOutcomeStats?: unknown }).recoveryOutcomeStats === 'function') {
       let hist: import('../domain/contracts').RecoveryOutcomeStats | null = null;
@@ -385,13 +380,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       const customerProfileForLog = typeof repository.customerProfile === 'function' ? await repository.customerProfile(job.organizationId, latest?.event.customerHash ?? '').catch(() => null) : null;
       const autonomyPolicyForLog = typeof repository.autonomyPolicy === 'function' ? await repository.autonomyPolicy(job.organizationId).catch(() => null) : null;
       // Recompute with learning for log consistency
-      const priorRateForLog = (() => {
-        const raw = process.env.PAYSCOPE_RECOVERY_PRIOR_RATE?.trim();
-        if (!raw) return 0.18;
-        const n = Number(raw);
-        if (!Number.isFinite(n) || n <= 0 || n >= 1) throw new Error('Invalid recovery prior rate');
-        return n;
-      })();
+      const priorRateForLog = recoveryPriorRate;
       let histForLog: Map<string, import('../domain/contracts').RecoveryOutcomeStats | null> | undefined;
       if (process.env.PAYSCOPE_LEARNING_ENABLED !== 'false' && typeof (repository as unknown as { recoveryOutcomeStats?: unknown }).recoveryOutcomeStats === 'function' && latest?.event.customerHash) {
         const seg = customerProfileForLog ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfileForLog.successfulPaymentCount >= 5 ? 'repeat' : 'new') : 'unknown';
