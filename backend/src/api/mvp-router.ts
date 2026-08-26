@@ -4,6 +4,8 @@ import { ZodError } from 'zod';
 import { MvpRepository } from '../db/mvp-repository';
 import { IncidentStatus } from '../domain/contracts';
 
+import { realtimeHub } from '../realtime/realtime-hub';
+
 export type MvpRouterOptions = { enrichmentAdapter: 'razorpay_fields_heuristic'; razorpayEnvironment: 'test' | 'live'; directExecutionEnabled: boolean; directExecutionReady: () => boolean; dashboardApiKeys?: string[] };
 
 /** Constant-time credential match against the active key plus bounded previous keys (rotation). */
@@ -34,6 +36,9 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
       const communications = options.directExecutionEnabled ? (options.directExecutionReady() ? 'email_execution' : 'email_execution_unavailable') : 'autonomous_simulation';
       res.status(communications === 'email_execution_unavailable' ? 503 : 200).json({ success: true, data: { organizationId, pipeline: 'autonomous', razorpayEnvironment: options.razorpayEnvironment, communications, database: 'ready', queueWorker: 'configured', webhook: 'signed', enrichmentAdapter: options.enrichmentAdapter } });
     } catch (error) { next(error); }
+  });
+  router.get('/events/stream', (req, res) => {
+    realtimeHub.addClient(res, organizationId);
   });
   router.get('/incidents', async (req, res, next) => {
     try {

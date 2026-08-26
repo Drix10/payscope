@@ -4,6 +4,7 @@ import { RECOVERY_WINDOW_MS } from '../config/config';
 import { encryptOpaqueBuffer } from '../security/encryption';
 import { normalizeCallback, parseCallbackEnvelope, verifyRazorpayCallbackSignature, VerifiedCallback } from '../providers/execution/callback-verifier';
 import { callbackVerification } from '../observability';
+import { realtimeHub } from '../realtime/realtime-hub';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -266,6 +267,7 @@ export async function receiveWebhook(
 
   const normalized = normalizeRazorpayWebhook(rawBody, envelope.eventId, config.webhookSecret);
   const result = await repository.recordWebhookIntake(config.organizationId, rawBody, normalized);
+  realtimeHub.broadcast('incident_created', config.organizationId, { eventId: result.eventId, eventType: normalized.eventType });
   
   return { duplicate: result.duplicate, ignored: false, eventId: result.eventId };
 }

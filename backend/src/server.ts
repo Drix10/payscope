@@ -1,3 +1,5 @@
+import path from 'path';
+import fs from 'fs';
 import 'dotenv/config';
 import cors from 'cors';
 import express, { Express, NextFunction, Request, Response } from 'express';
@@ -85,7 +87,26 @@ export function createPayScopeApp(env: NodeJS.ProcessEnv = process.env, override
   if (pipeline) app.use('/api/mvp', createMvpRouter(pipeline.repository, pipeline.config.organizationId!, { enrichmentAdapter: 'razorpay_fields_heuristic', razorpayEnvironment: pipeline.config.razorpayEnvironment, directExecutionEnabled: pipeline.config.directExecutionEnabled, directExecutionReady: () => directExecutionReady, dashboardApiKeys: pipeline.config.dashboardApiKeys }));
   else app.use('/api/mvp', (_req, res) => res.status(503).json(failure('PIPELINE_NOT_ENABLED', 'The durable PayScope pipeline is not enabled.')));
   app.use('/api', (_req, res) => res.status(404).json(failure('NOT_FOUND', 'API route not found.')));
-  app.use((_req, res) => res.status(404).json(failure('NOT_FOUND', 'Route not found.')));
+  
+  const frontendDistPath = [
+    path.resolve(__dirname, 'public'),
+    path.resolve(__dirname, '../public'),
+    path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(process.cwd(), 'dist/public'),
+    path.resolve(process.cwd(), '../frontend/dist'),
+  ].find(p => fs.existsSync(p));
+
+  if (frontendDistPath) {
+    app.use(express.static(frontendDistPath));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/webhooks') || req.path.startsWith('/metrics') || req.path.startsWith('/health')) {
+        return next();
+      }
+      res.sendFile(path.join(frontendDistPath, 'index.html'));
+    });
+  } else {
+    app.use((_req, res) => res.status(404).json(failure('NOT_FOUND', 'Route not found.')));
+  }
   app.use((error: Error, req: Request, res: Response, _next: NextFunction) => { if (res.headersSent || req.aborted) return; const appError = error instanceof AppError ? error : undefined; const parser = error as Error & { type?: string }; const status = appError?.status ?? (error instanceof ZodError ? 400 : parser.type === 'entity.too.large' ? 413 : 500); if (status === 500) logger.error({ errorClass: error.name, requestId: res.getHeader('X-Request-Id') }, 'PayScope request failed'); res.status(status).json(failure(appError?.code ?? (status === 413 ? 'PAYLOAD_TOO_LARGE' : status === 400 ? 'INVALID_PAYLOAD' : 'MVP_API_ERROR'), appError?.message ?? (status === 500 ? 'The PayScope MVP could not complete the request.' : 'Request validation failed.'))); });
 
   function allow(req: Request, buckets: Map<string, RateBucket>, limit: number): boolean { const now = Date.now(); const client = req.ip || 'unknown'; if (!buckets.has(client) && buckets.size >= MAX_RATE_CLIENTS) buckets.delete(buckets.keys().next().value!); const bucket = buckets.get(client) ?? { tokens: limit, lastRefillAt: now, lastSeenAt: now }; bucket.tokens = Math.min(limit, bucket.tokens + (now - bucket.lastRefillAt) * (limit / 60_000)); bucket.lastRefillAt = now; bucket.lastSeenAt = now; if (bucket.tokens < 1) { buckets.set(client, bucket); return false; } bucket.tokens -= 1; buckets.set(client, bucket); return true; }

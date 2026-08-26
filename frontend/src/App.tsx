@@ -424,13 +424,39 @@ export default function App() {
     if (viewMode === "dashboard") void refresh();
   }, [refresh, viewMode]);
 
-  // Real-time Background Polling Engine (every 1.5s when dashboard is open)
+  // Real-time Event Engine (Instant SSE Push Stream)
   useEffect(() => {
     if (viewMode !== "dashboard") return;
+
+    let eventSource: EventSource | null = null;
+    try {
+      const streamUrl = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/mvp/events/stream`;
+      eventSource = new EventSource(streamUrl);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "ping") return;
+
+          // Instant real-time UI refresh on backend push event (<50ms delay)
+          void refresh(true);
+        } catch {
+          // Ignore parsing errors
+        }
+      };
+    } catch {
+      // EventSource fallback
+    }
+
+    // Safety Polling Engine (every 3s fallback)
     const interval = setInterval(() => {
       void refresh(true);
-    }, 1500);
-    return () => clearInterval(interval);
+    }, 3000);
+
+    return () => {
+      eventSource?.close();
+      clearInterval(interval);
+    };
   }, [refresh, viewMode]);
 
   // Auto-Select First Matching Incident if none selected or if selection left current filter

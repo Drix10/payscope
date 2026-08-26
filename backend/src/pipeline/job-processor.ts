@@ -4,6 +4,7 @@ import { EnrichmentProvider } from '../providers/enrichment/interface';
 import { correlateEvent, IncidentCandidate } from './intake';
 import { replanIncidentStrategy, ReplanRepository } from '../intelligence/recovery-engine';
 import { incidentLifecycleEvents, logger, timeToRecoveryMs } from '../observability';
+import { realtimeHub } from '../realtime/realtime-hub';
 
 export interface DurablePipelineRepository {
   eventById(organizationId: string, eventId: string): Promise<StoredEvent>;
@@ -59,6 +60,7 @@ export class PipelineJobProcessor {
     const shouldInvestigate = Boolean(result && ['risk_event_opened_incident', 'linked_risk_event', 'dispute_opened'].includes(result.reason));
     await this.repository.persistCorrelation(event, result?.incident, shouldInvestigate);
     if (result?.incident) {
+      realtimeHub.broadcast('incident_updated', job.organizationId, { incidentId: result.incident.id, status: result.incident.status }, result.incident.id);
       incidentLifecycleEvents.inc({ event: result.reason, status: result.incident.status });
       if (result.incident.status === 'RESOLVED') {
         const openedAt = Date.parse(result.incident.openedAt);

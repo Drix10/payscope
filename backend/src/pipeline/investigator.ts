@@ -5,6 +5,7 @@ import { Incident, InvestigationPlan, InvestigationPlanSchema, NormalizedEvent, 
 import { ModelProvider, ModelRequest, ModelResult } from '../providers/model/interface';
 import { evaluatePolicy } from './policy-evaluator';
 import { rankStrategies } from '../intelligence/recovery-engine';
+import { realtimeHub } from '../realtime/realtime-hub';
 import { llmFailureEvents, logger } from '../observability';
 
 // Display/audit reference on the proposal record. Deterministic per
@@ -374,6 +375,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
   });
   const persistence = [job.organizationId, job.incidentId, job.triggerEventId, output.plan.plan, output.risk.analysis, output.recovery.plan, output.policy, proposals, [output.plan.modelId, output.risk.modelId, output.recovery.modelId].join(','), output.plan.tokensUsed + output.risk.tokensUsed + output.recovery.tokensUsed, Date.now() - started] as const;
   await repository.persistDirectInvestigation(...persistence);
+  realtimeHub.broadcast('investigation_updated', job.organizationId, { incidentId: job.incidentId }, job.incidentId);
 
   if (output.policy.outcome === 'auto_with_proposals' && output.policy.permittedActions.length > 0) {
     try {
