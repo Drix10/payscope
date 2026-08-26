@@ -90,7 +90,7 @@ async function main() {
     const ranked = rankStrategies(incident, enrichment, riskAnalysis, customerProfile, null);
     assert.ok(ranked.length > 0, 'Should return candidate strategies');
     assert.equal(ranked[0].name, 'deliver_recovery_link_email');
-    assert.ok(ranked[0].expectedValuePaise > 0, 'Expected value should be positive');
+    assert.ok(ranked[0].heuristicRecoveryEstimatePaise > 0, 'Heuristic estimate should be positive');
   });
 
   // 2. Policy Evaluator Gates Test

@@ -22,7 +22,6 @@ export type RecoveryStrategy = {
   customerAdjustment: number;
   recoveryValueScore: number;
   heuristicRecoveryEstimatePaise: number;
-  expectedValuePaise: number;
   dataSource: 'razorpay_fields_heuristic';
   blockedBy: string | null;
 };
@@ -133,7 +132,6 @@ export function rankStrategies(
       customerAdjustment: adjustment,
       recoveryValueScore,
       heuristicRecoveryEstimatePaise,
-      expectedValuePaise: heuristicRecoveryEstimatePaise,
       dataSource,
       blockedBy,
     });
@@ -141,7 +139,7 @@ export function rankStrategies(
 
   return strategies
     .filter(s => s.blockedBy === null)
-    .sort((a, b) => b.expectedValuePaise - a.expectedValuePaise);
+    .sort((a, b) => b.heuristicRecoveryEstimatePaise - a.heuristicRecoveryEstimatePaise);
 }
 
 export function adaptRecoveryStrategy(

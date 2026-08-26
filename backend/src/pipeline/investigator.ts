@@ -179,7 +179,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       incidentId: job.incidentId,
       topStrategy: topStrategy?.name ?? 'deliver_recovery_link_email',
       recoveryValueScore: topStrategy?.recoveryValueScore ?? 0,
-      expectedValuePaise: topStrategy?.expectedValuePaise ?? 0,
+      heuristicRecoveryEstimatePaise: topStrategy?.heuristicRecoveryEstimatePaise ?? 0,
     }, 'Recovery Engine calculated optimal strategy');
 
     const llmCopyIntent = recovery.plan.proposedActions.find(a => a.emailCopyIntent)?.emailCopyIntent;
@@ -191,7 +191,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
         rationale: `Optimal strategy chosen by Recovery Engine: ${topStrategy?.displayName ?? cap} (Score: ${topStrategy?.recoveryValueScore ?? 80}).`,
         preconditions: ['Merchant opted in to recovery', 'Deterministic policy clearance'],
         expectedOutcome: `Recover ${detail.incident.remainingAmountPaise} paise via ${topStrategy?.displayName ?? cap}`,
-        estimatedRecoveryPaise: topStrategy?.expectedValuePaise ?? detail.incident.remainingAmountPaise,
+        estimatedRecoveryPaise: topStrategy?.heuristicRecoveryEstimatePaise ?? detail.incident.remainingAmountPaise,
         requiresAutonomousExecution: true,
         emailCopyIntent: cap === 'deliver_recovery_link_email' ? (llmCopyIntent ?? 'Complete your recent payment securely using our 1-click Razorpay payment link. Reply STOP to opt out.') : undefined,
       })),
@@ -235,13 +235,13 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     const fallbackRisk = {
       analysis: RiskAnalysisSchema.parse({
         failureRootCause: attr === 'gateway_degraded' ? 'gateway_degraded' : attr === 'issuer_timeout' ? 'issuer_block' : attr === 'fraud_block' ? 'fraud_confirmed' : 'customer_error',
-        evidenceStrength: 'moderate',
-        confidence: 0.85,
-        causalNarrative: `Payment failure attributed to ${attr.replace(/_/g, ' ')} via Razorpay telemetry intake.`,
-        evidenceConfidenceRationale: 'Verified by Razorpay telemetry intake and real-time enrichment signals.',
+        evidenceStrength: 'weak',
+        confidence: 0.50,
+        causalNarrative: `Payment failure attributed to ${attr.replace(/_/g, ' ')} via Razorpay telemetry intake (Fallback).`,
+        evidenceConfidenceRationale: 'Uncertainty during pipeline fallback — requires deterministic policy clearance.',
         alternativeHypotheses: ['Issuer timeout', 'Customer drop'],
         falsePositiveCostEstimatePaise: detail.incident.remainingAmountPaise,
-        missingEvidence: [],
+        missingEvidence: ['Complete multi-agent LLM analysis'],
         chargebackEvidenceReady: attr === 'fraud_block',
         evidenceItems: [latest?.event.eventType ?? 'payment.failed'],
         recommendedActionCategory: attr === 'fraud_block' ? 'no_action' : 'deliver_recovery_link_email',
@@ -265,15 +265,15 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
           },
         ],
         noActionReason: isFraudOrDispute ? 'DISPUTE_OR_FRAUD_HARD_STOP' : undefined,
-        recoveryProbability: isFraudOrDispute ? 0 : 0.85,
-        confidence: 0.85,
+        recoveryProbability: isFraudOrDispute ? 0 : 0.50,
+        confidence: 0.50,
       }),
       modelId: 'telemetry-deterministic-fallback',
       tokensUsed: 0,
     };
     const safeFallbackPolicy = policyContextResult ? evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [policyContextResult.policy], policyContextResult.stats, policyContextResult.contact, {
       executionPolicy: executionContextResult?.policy ?? undefined,
-      existingCommandKeys: new Set((detail.execution || []).map(action => action.capability)),
+      existingCommandKeys: new Set((detail.execution || []).map(action => `${job.organizationId}:${action.capability}:${job.incidentId}`)),
       commandKeyForAction: actionType => `${job.organizationId}:${actionType}:${job.incidentId}`,
       currentRetryCount: (detail.execution || []).filter(action => action.capability === 'deliver_recovery_link_email').length,
       amountPaise: detail.incident.remainingAmountPaise,

@@ -524,6 +524,7 @@ export class MvpRepository {
       const failedMethods = Array.from(new Set(failedEvents.map(e => (e.normalized as any)?.paymentMethod).filter(Boolean)));
       
       let actionsCount = 0;
+      let recoveryEmailsPaid = 0;
       let lastContact: string | null = null;
       try {
         const { data: actions } = await this.client.from('payscope_execution_actions')
@@ -537,10 +538,13 @@ export class MvpRepository {
             return payload?.customerHash === customerHash;
           });
           actionsCount = customerActions.length;
+          recoveryEmailsPaid = customerActions.filter(a => a.state === 'confirmed' || a.state === 'payment_link_paid').length;
           const dispatched = customerActions.find(d => typeof d.dispatched_at === 'string');
           if (dispatched) lastContact = dispatched.dispatched_at as string;
         }
-      } catch {}
+      } catch (err) {
+        logger.warn({ organizationId, customerHash, error: err instanceof Error ? err.message : String(err) }, 'PayScope failed to fetch execution action history for customer profile');
+      }
 
       current = {
         organizationId,
@@ -550,7 +554,7 @@ export class MvpRepository {
         successfulPaymentCount: capturedEvents.length,
         totalIncidentCount: Math.max(failedEvents.length, 1),
         recoveryEmailsSent: actionsCount,
-        recoveryEmailsPaid: 0,
+        recoveryEmailsPaid,
         lastContactedAt: lastContact,
         firstSeenAt: (customerEvents.at(-1)?.created_at as string) ?? now,
         lastSeenAt: (customerEvents.at(0)?.created_at as string) ?? now,
