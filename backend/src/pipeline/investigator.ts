@@ -12,7 +12,12 @@ export function paymentLinkReferenceForProposalDirect(actionType: string): strin
   return `ps_${hash}`;
 }
 
-const AGENT_PIPELINE_DEADLINE_MS = 35_000;
+// Three sequential agent calls must fit this budget. Reasoning models spend
+// thousands of hidden tokens (tens of seconds) before emitting JSON, so the
+// default is generous and overridable via PAYSCOPE_AGENT_DEADLINE_MS.
+const AGENT_PIPELINE_DEADLINE_MS = Number.isSafeInteger(Number(process.env.PAYSCOPE_AGENT_DEADLINE_MS))
+  ? Math.max(5_000, Number(process.env.PAYSCOPE_AGENT_DEADLINE_MS))
+  : 240_000;
 
 export type SupervisorInput = {
   incident: Pick<Incident, 'id' | 'riskTier' | 'status' | 'totalFailedAmountPaise' | 'correlatedEventIds' | 'openedAt'>;
@@ -57,7 +62,7 @@ export async function runInvestigationSupervisor(provider: ModelProvider, input:
         systemPrompt: SUPERVISOR_PROMPT,
         userContent: JSON.stringify(input),
         maxInputTokens: 2_048,
-        maxTokens: 512,
+        maxTokens: 8192,
         responseSchema: InvestigationPlanSchema,
         tenantId,
       });
@@ -85,7 +90,7 @@ export async function runRiskAnalyst(provider: ModelProvider, tools: RiskAnalyst
         systemPrompt: RISK_PROMPT,
         userContent: JSON.stringify({ incident: input.incident, enrichment: input.enrichment, timeline: safeTimeline, merchantFailureRate, networkFailureRate, customerIncidentCount }),
         maxInputTokens: 3_072,
-        maxTokens: 768,
+        maxTokens: 8192,
         responseSchema: RiskAnalysisModelOutputSchema,
         tenantId,
       });
@@ -109,7 +114,7 @@ export async function runRecoveryPlanner(provider: ModelProvider, input: Recover
         systemPrompt: PLANNER_PROMPT,
         userContent: JSON.stringify(input),
         maxInputTokens: 2_048,
-        maxTokens: 512,
+        maxTokens: 8192,
         responseSchema: RecoveryPlanSchema,
         tenantId,
       });

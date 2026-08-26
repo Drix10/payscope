@@ -29,7 +29,10 @@ export class MeshModelAdapter implements ModelProvider {
   ) {}
 
   async complete<T>(request: ModelRequest<T>): Promise<ModelResult<T>> {
-    if (!Number.isSafeInteger(request.maxTokens) || request.maxTokens < 1 || request.maxTokens > 768) throw new Error('Model output token budget must be between 1 and 768');
+    // Reasoning models emit hidden reasoning tokens before any JSON content.
+    // The output budget must accommodate reasoning + structured content, or
+    // every response finishes with reason "length" and empty content.
+    if (!Number.isSafeInteger(request.maxTokens) || request.maxTokens < 1 || request.maxTokens > 8192) throw new Error('Model output token budget must be between 1 and 8192');
     if (request.timeoutMs !== undefined && (!Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1)) throw new Error('Model request timeout must be a positive integer');
     assertInputWithinBudget(`${request.systemPrompt}\n\n${request.userContent}`, request.maxInputTokens);
     const timeoutMs = request.timeoutMs !== undefined ? request.timeoutMs : this.timeoutMs;
