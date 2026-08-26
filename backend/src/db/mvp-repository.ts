@@ -499,6 +499,12 @@ export class MvpRepository {
     const now = new Date().toISOString();
     let current = MvpRepository.customerProfileStore.get(key);
 
+    // Evict cached profiles older than 5 minutes to prevent stale customer history
+    if (current && (Date.now() - Date.parse(current.lastSeenAt)) > 300_000) {
+      MvpRepository.customerProfileStore.delete(key);
+      current = undefined;
+    }
+
     if (!current) {
       let customerEvents: Array<Record<string, unknown>> = [];
       try {
@@ -511,8 +517,11 @@ export class MvpRepository {
         if (Array.isArray(data)) customerEvents = data;
       } catch {}
 
-      const totalIncidentCount = customerEvents.length;
-      const methods = Array.from(new Set(customerEvents.map(e => (e.normalized as any)?.paymentMethod).filter(Boolean)));
+      const capturedEvents = customerEvents.filter(e => (e.normalized as any)?.eventType === 'payment.captured');
+      const failedEvents = customerEvents.filter(e => (e.normalized as any)?.eventType === 'payment.failed');
+
+      const successfulMethods = Array.from(new Set(capturedEvents.map(e => (e.normalized as any)?.paymentMethod).filter(Boolean)));
+      const failedMethods = Array.from(new Set(failedEvents.map(e => (e.normalized as any)?.paymentMethod).filter(Boolean)));
       
       let actionsCount = 0;
       let lastContact: string | null = null;
@@ -536,10 +545,10 @@ export class MvpRepository {
       current = {
         organizationId,
         customerHash,
-        successfulPaymentMethods: methods.length ? methods : ['upi'],
-        failedPaymentMethods: methods.length ? methods : ['card'],
-        successfulPaymentCount: Math.max(0, totalIncidentCount - actionsCount),
-        totalIncidentCount: Math.max(totalIncidentCount, 1),
+        successfulPaymentMethods: successfulMethods.length ? successfulMethods : ['upi'],
+        failedPaymentMethods: failedMethods.length ? failedMethods : ['card'],
+        successfulPaymentCount: capturedEvents.length,
+        totalIncidentCount: Math.max(failedEvents.length, 1),
         recoveryEmailsSent: actionsCount,
         recoveryEmailsPaid: 0,
         lastContactedAt: lastContact,

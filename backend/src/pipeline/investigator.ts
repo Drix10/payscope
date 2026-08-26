@@ -202,7 +202,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
 
     const decision = evaluatePolicy(detail.incident, risk.analysis, enginePlan, [policyContext.policy], policyContext.stats, policyContext.contact, {
       executionPolicy: executionContext?.policy ?? undefined,
-      existingCommandKeys: new Set((detail.execution || []).map(action => action.capability)),
+      existingCommandKeys: new Set((detail.execution || []).map(action => `${job.organizationId}:${action.capability}:${job.incidentId}`)),
       commandKeyForAction: actionType => `${job.organizationId}:${actionType}:${job.incidentId}`,
       currentRetryCount: (detail.execution || []).filter(action => action.capability === 'deliver_recovery_link_email').length,
       amountPaise: detail.incident.remainingAmountPaise,
@@ -226,7 +226,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
         noActionCriteria: ['Dispute opened', 'Fraud confirmed'],
         estimatedAutoResolvable: primaryFailureCategory !== 'fraud_confirmed',
         requiresNoActionFallback: true,
-        confidence: 0.85,
+        confidence: 0.50,
         reasoning: `Razorpay payment telemetry classification based on ${enrichment?.source ?? 'real-time telemetry'}.`,
       }),
       modelId: 'telemetry-deterministic-fallback',

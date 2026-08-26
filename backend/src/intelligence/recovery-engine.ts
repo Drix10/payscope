@@ -21,6 +21,7 @@ export type RecoveryStrategy = {
   baseScore: number;
   customerAdjustment: number;
   recoveryValueScore: number;
+  heuristicRecoveryEstimatePaise: number;
   expectedValuePaise: number;
   dataSource: 'razorpay_fields_heuristic';
   blockedBy: string | null;
@@ -121,7 +122,7 @@ export function rankStrategies(
     }
 
     const recoveryValueScore = Math.max(0, Math.min(100, baseScore + adjustment));
-    const expectedValuePaise = Math.round((recoveryValueScore / 100) * incident.remainingAmountPaise);
+    const heuristicRecoveryEstimatePaise = Math.round((recoveryValueScore / 100) * incident.remainingAmountPaise);
     const blockedBy = checkAutonomyPolicy(name, autonomyPolicy);
 
     strategies.push({
@@ -131,7 +132,8 @@ export function rankStrategies(
       baseScore,
       customerAdjustment: adjustment,
       recoveryValueScore,
-      expectedValuePaise,
+      heuristicRecoveryEstimatePaise,
+      expectedValuePaise: heuristicRecoveryEstimatePaise,
       dataSource,
       blockedBy,
     });
@@ -153,4 +155,49 @@ export function adaptRecoveryStrategy(
   const ranked = rankStrategies(incident, enrichment, riskAnalysis, customerProfile, autonomyPolicy);
   const untried = ranked.filter(s => !previousStrategiesTried.includes(s.name));
   return untried[0] ?? null;
+}
+
+export async function replanIncidentStrategy(
+  repository: any,
+  organizationId: string,
+  incidentId: string,
+  reason: string
+): Promise<{ adaptedStrategy: RecoveryStrategy | null; actionId: string | null }> {
+  const detail = await repository.incidentDetail(organizationId, incidentId).catch(() => null);
+  if (!detail || detail.incident.status === 'RESOLVED' || detail.incident.status === 'DISMISSED') {
+    return { adaptedStrategy: null, actionId: null };
+  }
+  const latest = detail.events.at(-1);
+  const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
+  const customerProfile = latest?.event.customerHash ? await repository.customerProfile(organizationId, latest.event.customerHash).catch(() => null) : null;
+  const autonomyPolicy = await repository.autonomyPolicy(organizationId).catch(() => null);
+
+  const triedCapabilities = (detail.execution || []).map((a: { capability: ActionType }) => a.capability);
+  const fakeRiskAnalysis = {
+    failureRootCause: enrichment?.failureAttribution === 'gateway_degraded' ? 'gateway_degraded' : 'customer_error',
+    evidenceStrength: 'moderate',
+    confidence: 0.85,
+    causalNarrative: `Adaptive replan triggered: ${reason}`,
+    evidenceConfidenceRationale: 'Verified adaptive event trigger',
+    alternativeHypotheses: [],
+    falsePositiveCostEstimatePaise: detail.incident.remainingAmountPaise,
+    missingEvidence: [],
+    chargebackEvidenceReady: false,
+    evidenceItems: [latest?.event.eventType ?? 'payment.failed'],
+    recommendedActionCategory: 'deliver_recovery_link_email',
+    toolResults: {},
+  };
+
+  const adapted = adaptRecoveryStrategy(triedCapabilities, detail.incident, enrichment, fakeRiskAnalysis as any, customerProfile, autonomyPolicy);
+  if (!adapted) return { adaptedStrategy: null, actionId: null };
+
+  const actionId = await repository.createExecutionActionForSaga(
+    organizationId,
+    incidentId,
+    adapted.capabilities[0],
+    `Adaptive recovery execution (Replan reason: ${reason})`,
+    detail.incident.remainingAmountPaise
+  );
+
+  return { adaptedStrategy: adapted, actionId };
 }
