@@ -1,4 +1,4 @@
-import { ENRICHMENT_TIMEOUT_MS } from '../../config/stopping-rules';
+import { ENRICHMENT_TIMEOUT_MS } from '../../config/config';
 import { NormalizedEvent, VulcanEnrichment, VulcanEnrichmentSchema } from '../../domain/contracts';
 import { EnrichmentProvider } from './interface';
 

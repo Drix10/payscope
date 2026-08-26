@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { QUEUE_LOCK_TIMEOUT_MS, QUEUE_RETRY_DELAYS_MS } from '../config/stopping-rules';
+import { QUEUE_LOCK_TIMEOUT_MS, QUEUE_RETRY_DELAYS_MS } from '../config/config';
 import { QueueJob, QueueJobSchema } from '../domain/contracts';
 import { logger } from '../observability';
 

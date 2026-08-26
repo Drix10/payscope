@@ -1,4 +1,20 @@
-import { ENRICHMENT_TIMEOUT_MS, MODEL_TIMEOUT_MS, QUEUE_LOCK_TIMEOUT_MS, RECOVERY_WINDOW_MS } from './stopping-rules';
+export const STOPPING_RULES = {
+  MAX_CONTACT_ATTEMPTS_PER_INCIDENT: 2,
+  MAX_CONTACT_ATTEMPTS_PER_CUSTOMER_PER_24H: 1,
+  MAX_CONTACT_ATTEMPTS_PER_CUSTOMER_PER_7D: 3,
+  NO_CONTACT_AFTER_DISPUTE_OPENED: true,
+  NO_CONTACT_ON_FRAUD_CONFIRMED: true,
+  NO_CONTACT_WITHOUT_MERCHANT_OPT_IN: true,
+  AUTO_RESOLVE_RATE_CEILING_PER_ORG_PER_DAY: 0.90,
+  MAX_STEPS_PER_SAGA: 15,
+} as const;
+
+export const RECOVERY_WINDOW_MS = 72 * 60 * 60 * 1_000;
+export const WEBHOOK_ACK_TARGET_MS = 500;
+export const ENRICHMENT_TIMEOUT_MS = 5_000;
+export const MODEL_TIMEOUT_MS = 25_000;
+export const QUEUE_LOCK_TIMEOUT_MS = 45_000;
+export const QUEUE_RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 300_000, 900_000] as const;
 
 export type RuntimeConfig = {
   environment: 'development' | 'test' | 'production';
@@ -39,12 +55,6 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
   return parsed;
 }
 
-function boundedText(value: string | undefined, fallback: string, name: string): string {
-  const parsed = optional(value) ?? fallback;
-  if (parsed.length > 160) throw new Error(`${name} must be at most 160 characters`);
-  return parsed;
-}
-
 function boolean(value: string | undefined, fallback: boolean, name: string): boolean {
   if (!value?.trim()) return fallback;
   if (value === 'true') return true;
@@ -71,7 +81,6 @@ function smtpConfig(env: NodeJS.ProcessEnv): RuntimeConfig['smtp'] | undefined {
   };
 }
 
-/** Parses the Razorpay ingestion environment without granting financial actions. */
 export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const declaredEnvironment = optional(env.NODE_ENV) ?? 'development';
   if (!['development', 'test', 'production'].includes(declaredEnvironment)) throw new Error('NODE_ENV must be development, test, or production');

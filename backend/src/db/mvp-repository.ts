@@ -1,13 +1,11 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ActionProposal, ActionProposalSchema, ActionType, ActionTypeSchema, AuditEntry, AuditEntrySchema, AutonomyPolicy, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, ExecutionActionSummary, ExecutionActionSummarySchema, ExecutionStateSchema, Incident, IncidentSchema, IncidentStatus, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
-import { CorrelationEvent, IncidentCandidate } from '../pipeline/correlation-engine';
 import { CustomerContactStats, ExecutionPolicy, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
-import { canCorrelateWithTerminalIncident } from '../pipeline/webhook-event-policy';
+import { canCorrelateWithTerminalIncident, CorrelationEvent, IncidentCandidate } from '../pipeline/intake';
 import { Reconciler } from '../providers/execution/reconciliation';
-import { RecoverySagaRecord, SagaDef, SagaStepRecord } from '../pipeline/saga-engine';
-import { CustomerProfile } from '../intelligence/recovery-value-engine';
+import { CustomerProfile, RecoverySagaRecord, SagaDef, SagaStepRecord } from '../intelligence/recovery-engine';
 import { logger } from '../observability';
 
 export type RevenueIntelligence = {
@@ -685,7 +683,12 @@ export class MvpRepository {
   async createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string> {
     const actionId = randomUUID();
     const commandKey = `${organizationId}:${capability}:${incidentId}:${Date.now()}`;
-    const payload = { customerHash: 'saga_execution', referenceId: `ps_${randomUUID().replace(/-/g, '')}`, copyIntent: rationale };
+    const detail = await this.incidentDetail(organizationId, incidentId).catch(() => null);
+    const latestEvent = detail?.events.at(-1);
+    const customerHash = latestEvent?.event.customerHash ?? createHash('sha256').update(`${organizationId}:${incidentId}`).digest('hex').slice(0, 64);
+    const referenceId = `ps_${randomUUID().replace(/-/g, '')}`;
+    const payload = { customerHash, referenceId, copyIntent: rationale };
+    const payloadHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
     try {
       await this.client.from('payscope_execution_actions').insert({
@@ -695,15 +698,23 @@ export class MvpRepository {
         capability,
         command_key: commandKey,
         command_payload: payload,
-        command_payload_hash: '0000000000000000000000000000000000000000000000000000000000000000',
+        command_payload_hash: payloadHash,
         policy_version: '1.0.0',
         capability_version: '1.0.0',
         amount_paise: amountPaise,
         currency: 'INR',
-        state: capability === 'deliver_recovery_link_email' ? 'accepted' : 'confirmed',
-        provider_object_id: `plink_saga_${actionId.slice(0, 12)}`,
+        state: 'queued',
         created_at: new Date().toISOString(),
-        dispatched_at: new Date().toISOString(),
+      });
+
+      await this.client.from('payscope_execution_outbox').insert({
+        id: randomUUID(),
+        organization_id: organizationId,
+        action_id: actionId,
+        command_type: capability,
+        status: 'pending',
+        attempt_number: 1,
+        created_at: new Date().toISOString(),
       });
     } catch (error) {
       logger.error({ organizationId, incidentId, capability, error: error instanceof Error ? error.message : String(error) }, 'PayScope failed to create execution action for saga');
@@ -728,7 +739,17 @@ export class MvpRepository {
 
   async appendAuditEntry(entry: { organizationId: string; incidentId: string | null; eventType: string; actorType: 'system' | 'human'; actorId: string; decision: string; rationale: string; confidence: number | null }): Promise<void> {
     const sequenceNumber = Date.now();
-    const entryHash = '0000000000000000000000000000000000000000000000000000000000000000';
+    let prevHash = '0000000000000000000000000000000000000000000000000000000000000000';
+    try {
+      const { data: last } = await this.client.from('payscope_audit_entries').select('entry_hash').eq('organization_id', entry.organizationId).order('sequence_number', { ascending: false }).limit(1).maybeSingle();
+      if (last && typeof last === 'object' && typeof (last as Record<string, unknown>).entry_hash === 'string') {
+        prevHash = (last as Record<string, unknown>).entry_hash as string;
+      }
+    } catch {}
+
+    const payloadToHash = `${prevHash}:${entry.organizationId}:${entry.incidentId ?? ''}:${sequenceNumber}:${entry.eventType}:${entry.decision}:${entry.actorId}`;
+    const entryHash = createHash('sha256').update(payloadToHash).digest('hex');
+
     try {
       await this.client.from('payscope_audit_entries').insert({
         id: randomUUID(),
@@ -741,7 +762,7 @@ export class MvpRepository {
         decision: entry.decision,
         rationale: entry.rationale.slice(0, 1000),
         confidence: entry.confidence,
-        prev_entry_hash: entryHash,
+        prev_entry_hash: prevHash,
         entry_hash: entryHash,
         created_at: new Date().toISOString(),
       });
@@ -765,7 +786,7 @@ export class MvpRepository {
 
     const completedSagas = sagas.filter(s => s.status === 'completed' && s.outcome === 'recovered').length;
     const totalEndedSagas = sagas.filter(s => s.status !== 'active').length;
-    const recoveryRate = totalEndedSagas > 0 ? completedSagas / totalEndedSagas : 0.659;
+    const recoveryRate = totalEndedSagas > 0 ? completedSagas / totalEndedSagas : 0;
 
     let events: Array<Record<string, unknown>> = [];
     try {
@@ -773,7 +794,7 @@ export class MvpRepository {
       events = (eventsResult.data ?? []) as Array<Record<string, unknown>>;
     } catch {}
     const vulcanCount = events.filter(e => e.enrichment_source === 'vulcan_direct').length;
-    const vulcanSignalCoverage = events.length > 0 ? vulcanCount / events.length : 1.0;
+    const vulcanSignalCoverage = events.length > 0 ? vulcanCount / events.length : 0;
 
     const activeRescues = sagas.filter(s => s.status === 'active').map(s => {
       const inc = incidents.find(i => i.id === s.incidentId);
@@ -781,30 +802,30 @@ export class MvpRepository {
       const currentStep = steps.find(st => st.stepIndex === s.currentStepIndex);
       return {
         incidentId: s.incidentId,
-        amountPaise: inc?.remainingAmountPaise ?? 450000,
+        amountPaise: inc?.remainingAmountPaise ?? 0,
         strategyName: s.strategyName,
         strategyDisplayName: s.strategyName.replace(/_/g, ' '),
         vulcanAttribution: 'customer_drop',
-        vulcanDataSource: s.vulcanDataSource,
+        vulcanDataSource: (s.vulcanDataSource === 'vulcan_direct' ? 'vulcan_direct' : 'razorpay_fields_heuristic') as 'vulcan_direct' | 'razorpay_fields_heuristic',
         sagaStep: currentStep ? `${currentStep.stepType}: ${currentStep.capability ?? 'observation'}` : 'Executing recovery plan',
         elapsedMs: Math.max(0, Date.now() - Date.parse(s.createdAt)),
       };
     });
 
     return {
-      atRiskPaise: atRiskPaise || 450000,
-      recoverablePaise: recoverablePaise || 450000,
-      recoveredThisWeekPaise: recoveredThisWeekPaise || 799000,
-      protectedPaise: protectedPaise || 334900,
+      atRiskPaise,
+      recoverablePaise,
+      recoveredThisWeekPaise,
+      protectedPaise,
       recoveryRate,
       merchantInterventionCount: 0,
       vulcanSignalCoverage,
       activeRescues,
       autonomous: {
         investigated: incidents.length,
-        sagasCreated: sagas.length || incidents.length,
-        actionsExecuted: sagas.length || incidents.length,
-        paymentsRecovered: completedSagas || 1,
+        sagasCreated: sagas.length,
+        actionsExecuted: sagas.length,
+        paymentsRecovered: completedSagas,
       },
     };
   }

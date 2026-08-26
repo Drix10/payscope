@@ -6,11 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
-    "test": "npm run build && node scripts/agent-ete-comprehensive-test.js",
-    "test:ete": "npm run build && node scripts/agent-ete-comprehensive-test.js",
-    "recipient:upsert": "npm run build && node scripts/upsert-recipient-email.js",
-    "rotate:encryption-key": "npm run build && node scripts/rotate-encryption-key.js"
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",

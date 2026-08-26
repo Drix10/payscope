@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+export class AppError extends Error {
+  public constructor(public readonly code: string, public readonly status: number, message: string) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
 export const EnrichmentSourceSchema = z.enum(['razorpay_fields_heuristic', 'fixture_signed', 'vulcan_direct', 'unavailable']);
 export const IncidentStatusSchema = z.enum(['OPEN', 'MONITORING', 'ESCALATED', 'DISPUTE_OPENED', 'RESOLVED', 'HUMAN_RESOLVED', 'DISMISSED']);
 export const RiskTierSchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'MONITOR']);

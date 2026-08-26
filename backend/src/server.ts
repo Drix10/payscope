@@ -2,15 +2,15 @@ import 'dotenv/config';
 import cors from 'cors';
 import express, { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { ZodError } from 'zod';
 import { createMvpRouter } from './api/mvp-router';
-import { createRuntimeConfig } from './config/runtime-config';
-import { requireDatabaseClient } from './db/client';
+import { createRuntimeConfig } from './config/config';
 import { MvpRepository } from './db/mvp-repository';
-import { AppError } from './errors';
-import { AgenticWebhookIntake } from './pipeline/agentic-webhook-intake';
+import { AppError } from './domain/contracts';
+import { receiveWebhook } from './pipeline/intake';
 import { PipelineJobProcessor } from './pipeline/job-processor';
-import { runDurableInvestigation } from './pipeline/investigation-runner';
+import { runDurableInvestigation } from './pipeline/investigator';
 import { HeuristicEnrichmentAdapter, RazorpayHttpEnrichmentClient } from './providers/enrichment/heuristic-adapter';
 import { MeshModelAdapter } from './providers/model/mesh-adapter';
 import { QueueWorker } from './queue/queue-worker';
@@ -19,7 +19,6 @@ import { ExecutionWorker } from './execution/execution-worker';
 import { RecoveryEmailAdapter } from './providers/execution/email-adapter';
 import { RazorpayExecutionClient } from './providers/execution/razorpay-execution-client';
 import { RazorpayReadClient } from './providers/execution/razorpay-read-client';
-import { advanceSaga } from './pipeline/saga-runner';
 import { ExecutionWatchdog } from './providers/execution/watchdog';
 import { logger, metrics } from './observability';
 
@@ -39,10 +38,10 @@ let directExecutionReady = false;
 
 const pipeline = pipelineEnabled ? (() => {
   const config = createRuntimeConfig();
-  if (!config.supabaseUrl || !config.supabaseServiceRoleKey || !config.webhookSecret || !config.organizationId) throw new Error('PAYSCOPE_PIPELINE_ENABLED requires Supabase credentials, RAZORPAY_WEBHOOK_SECRET, and PAYSCOPE_ORGANIZATION_ID');
-  const client = requireDatabaseClient(config);
+  if (!config.supabaseUrl || !config.supabaseServiceRoleKey) throw new Error('Supabase credentials required');
+  const client = new SupabaseClient(config.supabaseUrl, config.supabaseServiceRoleKey);
   const repository = new MvpRepository(client);
-  return { config, client, repository, intake: new AgenticWebhookIntake(repository, config) };
+  return { config, client, repository };
 })() : undefined;
 
 if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
@@ -56,8 +55,7 @@ app.use('/webhooks/razorpay', (req, res, next) => { if (req.method !== 'POST') r
 app.post('/webhooks/razorpay', express.raw({ type: 'application/json', limit: '256kb' }), async (req, res, next) => {
   try {
     if (!pipeline) throw new AppError('PIPELINE_NOT_ENABLED', 503, 'The durable PayScope pipeline is not enabled.');
-    if (!Buffer.isBuffer(req.body)) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'Razorpay webhook body must be raw JSON.');
-    const result = await pipeline.intake.receive(req.body, req.header('x-razorpay-signature'), req.header('x-razorpay-event-id'));
+    const result = await receiveWebhook(req.body, req.header('x-razorpay-signature'), req.header('x-razorpay-event-id'), pipeline.repository, pipeline.config);
     res.status(200).json({ received: true, duplicate: result.duplicate, ignored: result.ignored, eventId: result.eventId, pipeline: 'autonomous' });
   } catch (error) { next(error); }
 });
@@ -92,11 +90,6 @@ async function start(): Promise<void> {
       async job => {
         if (!job.incidentId) throw new Error('Investigation job is missing incidentId');
         return runDurableInvestigation(pipeline.repository, model ?? fallbackProvider, job, { directExecution: pipeline.config.directExecutionEnabled });
-      },
-      async job => {
-        const sagaId = String(job.sagaId ?? '');
-        if (!sagaId) return;
-        return advanceSaga(sagaId, job.organizationId, pipeline.repository, readClient, executionWorker ?? null);
       }
     );
     worker = new QueueWorker(pipeline.client, pipeline.config.workerId, job => processor.process(job));

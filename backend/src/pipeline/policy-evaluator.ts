@@ -1,5 +1,5 @@
 import { ActionType, Incident, RecoveryPlan, RiskAnalysis } from '../domain/contracts';
-import { STOPPING_RULES } from '../config/stopping-rules';
+import { STOPPING_RULES } from '../config/config';
 
 export type MerchantPolicy = { id: string; enabled: boolean; minimumConfidence: number; rootCauses: RiskAnalysis['failureRootCause'][]; allowedActions: ActionType[]; merchantOptedIn: boolean };
 export type OrgDailyStats = { autoResolveFraction: number };

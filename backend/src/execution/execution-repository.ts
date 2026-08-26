@@ -91,7 +91,7 @@ export class ExecutionRepository {
     return data === true;
   }
 
-  async recordReceipt(input: { organizationId: string; actionId: string; provider: 'razorpay' | 'smtp'; kind: 'payment_link_created' | 'payment_link_paid' | 'smtp_accepted' | 'smtp_rejected' | 'unreconciled' | 'failed'; providerOperationId?: string; payload: Record<string, unknown>; state: 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'failed'; terminalReason?: string }): Promise<void> {
+  async recordReceipt(input: { organizationId: string; actionId: string; provider: 'razorpay' | 'smtp' | 'payscope'; kind: 'payment_link_created' | 'payment_link_paid' | 'smtp_accepted' | 'smtp_rejected' | 'unreconciled' | 'failed' | 'payment_captured' | 'capture_logged' | 'payment_refunded' | 'refund_logged' | 'dispute_evidence_submitted' | 'dispute_evidence_assembled' | 'action_executed'; providerOperationId?: string; payload: Record<string, unknown>; state: 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'failed'; terminalReason?: string }): Promise<void> {
     const { error } = await this.client.rpc('payscope_record_execution_receipt', {
       p_organization_id: input.organizationId,
       p_action_id: input.actionId,

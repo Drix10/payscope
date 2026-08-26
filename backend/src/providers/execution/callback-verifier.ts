@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'crypto';
-import { AppError } from '../../errors';
+import { AppError } from '../../domain/contracts';
 
 export type VerifiedCallback = {
   provider: 'razorpay';

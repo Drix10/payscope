@@ -1,5 +1,5 @@
 import nodemailer, { SentMessageInfo, Transporter } from 'nodemailer';
-import { RuntimeConfig } from '../../config/runtime-config';
+import { RuntimeConfig } from '../../config/config';
 
 export type EmailSendResult =
   | { kind: 'accepted'; messageId: string; acceptedCount: number; rejectedCount: number; response: string }

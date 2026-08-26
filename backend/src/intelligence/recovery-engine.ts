@@ -1,5 +1,15 @@
 import { ActionType, AutonomyPolicy, Incident, RiskAnalysis, VulcanEnrichment } from '../domain/contracts';
 
+export type SagaStepType = 'observe' | 'act' | 'wait' | 'replan';
+export type SagaStepDef =
+  | { type: 'observe'; description: string }
+  | { type: 'act'; capability: ActionType; rationale: string }
+  | { type: 'wait'; durationMs: number; description: string }
+  | { type: 'replan'; description: string };
+export type SagaDef = { name: string; displayName: string; steps: SagaStepDef[] };
+export type RecoverySagaRecord = { id: string; organizationId: string; incidentId: string; strategyName: string; status: 'active' | 'completed' | 'abandoned'; currentStepIndex: number; totalSteps: number; outcome: string | null; recoveredPaise: number; vulcanDataSource: string; createdAt: string; completedAt: string | null };
+export type SagaStepRecord = { id: string; organizationId: string; sagaId: string; stepIndex: number; stepType: SagaStepType; capability: ActionType | null; waitDurationMs: number | null; scheduledAt: string; status: string; executedAt: string | null; outcome: Record<string, unknown> | null };
+
 export type CustomerProfile = {
   organizationId: string;
   customerHash: string;
@@ -28,68 +38,63 @@ export type RecoveryStrategy = {
 
 const ATTRIBUTION_STRATEGY_SCORES: Record<string, Record<string, number>> = {
   gateway_degraded: {
-    recovery_email_upi_link: 68,
-    recovery_email_netbanking: 61,
-    wait_and_observe: 52,
+    deliver_recovery_link_email: 68,
+    resolve_infrastructure: 75,
   },
   customer_drop: {
-    recovery_email_same_method: 74,
-    recovery_email_alt_method: 58,
+    deliver_recovery_link_email: 82,
   },
   subscription_lapse: {
-    subscription_retry_direct: 62,
-    recovery_email_upi_link: 48,
+    deliver_recovery_link_email: 62,
   },
   issuer_timeout: {
-    recovery_email_alt_method: 55,
-    wait_and_observe: 30,
+    deliver_recovery_link_email: 55,
   },
   issuer_block: {
-    recovery_email_alt_method: 50,
-    wait_and_observe: 15,
+    deliver_recovery_link_email: 50,
   },
   routing_suboptimal: {
-    recovery_email_upi_link: 63,
-    recovery_email_netbanking: 55,
+    deliver_recovery_link_email: 63,
+    resolve_infrastructure: 70,
   },
   insufficient_funds: {
-    wait_and_observe: 40,
-    recovery_email_same_method: 25,
+    deliver_recovery_link_email: 30,
   },
   fraud_block: {},
   unknown: {
-    recovery_email_same_method: 42,
-    recovery_email_alt_method: 38,
-    wait_and_observe: 35,
+    deliver_recovery_link_email: 45,
   },
 };
 
 function strategyDisplayName(name: string): string {
   switch (name) {
-    case 'recovery_email_same_method': return '1-Click Razorpay Payment Link (Primary Channel)';
-    case 'recovery_email_upi_link': return '1-Click UPI Recovery Link Email';
-    case 'recovery_email_netbanking': return 'Alternate Netbanking Payment Link Email';
-    case 'recovery_email_alt_method': return 'Alternate Method Recovery Link Email';
-    case 'subscription_retry_direct': return 'Razorpay Subscription Mandate Charge Retry';
-    case 'wait_and_observe': return 'Telemetry Telemetry Monitoring & Infrastructure Resolution';
-    case 'dispute_evidence_auto': return 'Autonomous Chargeback Dispute Evidence Submission';
+    case 'deliver_recovery_link_email': return '1-Click Razorpay Payment Link Email';
+    case 'resolve_infrastructure': return 'Gateway Health Monitoring & Auto-Rerouting';
+    case 'submit_dispute_evidence': return 'Autonomous Chargeback Dispute Evidence Submission';
+    case 'record_risk_signal': return 'Risk Telemetry & Fraud Pattern Recording';
+    case 'capture_authorized_payment': return 'Authorization Capture Dispatch';
+    case 'refund_payment': return 'Customer Refund Processing';
     default: return name.replace(/_/g, ' ');
   }
 }
 
 function strategyCaps(name: string): ActionType[] {
   switch (name) {
-    case 'subscription_retry_direct': return ['retry_subscription_charge', 'deliver_recovery_link_email'];
-    case 'wait_and_observe': return ['resolve_infrastructure'];
-    case 'dispute_evidence_auto': return ['submit_dispute_evidence'];
+    case 'resolve_infrastructure': return ['resolve_infrastructure'];
+    case 'submit_dispute_evidence': return ['submit_dispute_evidence'];
+    case 'record_risk_signal': return ['record_risk_signal'];
+    case 'capture_authorized_payment': return ['capture_authorized_payment'];
+    case 'refund_payment': return ['refund_payment'];
     default: return ['deliver_recovery_link_email'];
   }
 }
 
 function checkAutonomyPolicy(name: string, policy: AutonomyPolicy | null): string | null {
   if (!policy) return null;
-  if (name.includes('email') && !policy.recoveryEmailEnabled) return 'recovery_email_disabled';
-  if (name.includes('subscription') && !policy.subscriptionRetryEnabled) return 'subscription_retry_disabled';
+  if (name === 'deliver_recovery_link_email' && !policy.recoveryEmailEnabled) return 'recovery_email_disabled';
+  if (name === 'submit_dispute_evidence' && !policy.disputeEvidenceEnabled) return 'dispute_evidence_disabled';
+  if (name === 'capture_authorized_payment' && !policy.captureEnabled) return 'capture_disabled';
+  if (name === 'refund_payment' && !policy.refundEnabled) return 'refund_disabled';
   return null;
 }
 
@@ -123,13 +128,7 @@ export function rankStrategies(
         const hoursAgo = (Date.now() - Date.parse(customerProfile.lastContactedAt)) / 3_600_000;
         if (hoursAgo < 24) adjustment -= 22;
       }
-      if (customerProfile.successfulPaymentMethods.length > 0) {
-        const preferred = customerProfile.successfulPaymentMethods[0];
-        if (name.includes(preferred)) adjustment += 12;
-      }
     }
-
-    if (incident.remainingAmountPaise > 1_000_000) adjustment -= 5;
 
     const finalScore = Math.max(0, Math.min(100, baseScore + adjustment));
     const expectedValuePaise = Math.round((finalScore / 100) * incident.remainingAmountPaise);
