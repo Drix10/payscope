@@ -115,7 +115,9 @@ export async function sendWebhook({ apiUrl, secret, scenario, eventId, reference
     return result;
 }
 
-if (import.meta.url === `file://${process.argv[1].replaceAll('\\', '/')}`) {
+import { pathToFileURL } from 'node:url';
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const flags = args(process.argv.slice(2));
     const apiUrl = flags['api-url'] ?? process.env.PAYSCOPE_DEMO_API_URL;
     const secret = flags.secret ?? process.env.PAYSCOPE_DEMO_WEBHOOK_SECRET;

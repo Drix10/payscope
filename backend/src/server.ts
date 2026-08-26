@@ -18,6 +18,8 @@ import { ExecutionRepository } from './execution/execution-repository';
 import { ExecutionWorker } from './execution/execution-worker';
 import { RecoveryEmailAdapter } from './providers/execution/email-adapter';
 import { RazorpayExecutionClient } from './providers/execution/razorpay-execution-client';
+import { RazorpayReadClient } from './providers/execution/razorpay-read-client';
+import { advanceSaga } from './pipeline/saga-runner';
 import { ExecutionWatchdog } from './providers/execution/watchdog';
 import { logger, metrics } from './observability';
 
@@ -83,12 +85,21 @@ async function start(): Promise<void> {
     const model = modelKey ? new MeshModelAdapter(modelKey, process.env.MESH_MODEL?.trim() || undefined, pipeline.config.modelTimeoutMs) : undefined;
     const enrichment = new HeuristicEnrichmentAdapter(keyId && keySecret ? new RazorpayHttpEnrichmentClient(keyId, keySecret, pipeline.config.enrichmentTimeoutMs) : undefined);
     const fallbackProvider = { async complete<T>(): Promise<never> { throw new Error('MESH_API_KEY is not configured on server'); } };
-    const processor = new PipelineJobProcessor(pipeline.repository, enrichment, async job => {
-      if (!job.incidentId) throw new Error('Investigation job is missing incidentId');
-      return runDurableInvestigation(pipeline.repository, model ?? fallbackProvider, job, { directExecution: pipeline.config.directExecutionEnabled });
-    });
+    const readClient = keyId && keySecret ? new RazorpayReadClient(keyId, keySecret) : null;
+    const processor = new PipelineJobProcessor(
+      pipeline.repository,
+      enrichment,
+      async job => {
+        if (!job.incidentId) throw new Error('Investigation job is missing incidentId');
+        return runDurableInvestigation(pipeline.repository, model ?? fallbackProvider, job, { directExecution: pipeline.config.directExecutionEnabled });
+      },
+      async job => {
+        const sagaId = String(job.sagaId ?? '');
+        if (!sagaId) return;
+        return advanceSaga(sagaId, job.organizationId, pipeline.repository, readClient, executionWorker ?? null);
+      }
+    );
     worker = new QueueWorker(pipeline.client, pipeline.config.workerId, job => processor.process(job));
-    worker.start();
     if (pipeline.config.directExecutionEnabled && pipeline.config.smtp && pipeline.config.emailEncryptionKey && keyId && keySecret) {
       const email = new RecoveryEmailAdapter(pipeline.config.smtp);
       try {
@@ -103,6 +114,7 @@ async function start(): Promise<void> {
         logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope SMTP readiness check failed; execution actions remain queued');
       }
     }
+    worker.start();
   }
   const server = app.listen(port, () => console.log(`PayScope API listening on ${port}`)); server.requestTimeout = 30_000; server.headersTimeout = 15_000; server.keepAliveTimeout = 5_000;
   let shuttingDown = false;

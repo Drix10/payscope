@@ -12,6 +12,9 @@ export const ActionTypeSchema = z.enum([
   'capture_authorized_payment',
   'refund_payment',
   'resolve_infrastructure',
+  'retry_subscription_charge',
+  'cancel_payment_link',
+  'fetch_payment_status',
 ]);
 
 const isoDateTime = z.string().datetime({ offset: true });
@@ -307,6 +310,25 @@ export const ExecutionActionSummarySchema = z.object({
   dispatchedAt: isoDateTime.nullable(),
   completedAt: isoDateTime.nullable(),
 }).strict();
+
+export const AutonomyPolicySchema = z.object({
+  organizationId: uuid,
+  maxAutoRecoveryPaise: z.number().int().nonnegative(),
+  maxAutoCapturePaise: z.number().int().nonnegative(),
+  maxAutoRefundPaise: z.number().int().nonnegative(),
+  recoveryEmailEnabled: z.boolean(),
+  subscriptionRetryEnabled: z.boolean(),
+  captureEnabled: z.boolean(),
+  refundEnabled: z.boolean(),
+  disputeEvidenceEnabled: z.boolean(),
+  maxContactsPerIncident: z.number().int().min(1).max(5),
+  maxContactsPer24h: z.number().int().min(1).max(3),
+  quietHoursStart: z.string().nullable(),
+  quietHoursEnd: z.string().nullable(),
+  updatedAt: isoDateTime,
+}).strict();
+
+export type AutonomyPolicy = z.infer<typeof AutonomyPolicySchema>;
 
 export type EnrichmentSource = z.infer<typeof EnrichmentSourceSchema>;
 export type IncidentStatus = z.infer<typeof IncidentStatusSchema>;

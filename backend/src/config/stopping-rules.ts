@@ -11,6 +11,7 @@ export const STOPPING_RULES = {
   NO_CONTACT_ON_FRAUD_CONFIRMED: true,
   NO_CONTACT_WITHOUT_MERCHANT_OPT_IN: true,
   AUTO_RESOLVE_RATE_CEILING_PER_ORG_PER_DAY: 0.90,
+  MAX_STEPS_PER_SAGA: 15,
 } as const;
 
 export const RECOVERY_WINDOW_MS = 72 * 60 * 60 * 1_000;
@@ -21,4 +22,6 @@ export const ENRICHMENT_TIMEOUT_MS = 5_000;
 // normal gateway latency as a failed payment investigation.
 export const MODEL_TIMEOUT_MS = 25_000;
 export const QUEUE_LOCK_TIMEOUT_MS = 45_000;
-export const QUEUE_RETRY_DELAYS_MS = [1_000, 5_000, 30_000] as const;
+// Exponential backoff up to 15 minutes — covers brief provider outages without
+// permanently losing saga state after only 36 seconds.
+export const QUEUE_RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 300_000, 900_000] as const;

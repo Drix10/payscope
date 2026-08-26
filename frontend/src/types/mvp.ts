@@ -35,3 +35,44 @@ export type DashboardMetrics = {
   evaluation: { status: 'not_run' | 'available'; split: 'development' | 'held_out' | null; fixtureSetVersion: string | null; runAt: string | null; configurationHash: string | null; modelId: string | null; sampleCount: number; precision: number | null; recall: number | null; f1: number | null; falsePositiveCostPaise: number | null }
   exceptions: string[]
 }
+
+// === New autonomous pipeline types ===
+export type AutonomyPolicy = {
+  organizationId: string;
+  maxAutoRecoveryPaise: number;
+  maxAutoCapturePaise: number;
+  maxAutoRefundPaise: number;
+  recoveryEmailEnabled: boolean;
+  subscriptionRetryEnabled: boolean;
+  captureEnabled: boolean;
+  refundEnabled: boolean;
+  disputeEvidenceEnabled: boolean;
+  maxContactsPerIncident: number;
+  maxContactsPer24h: number;
+  quietHoursStart: string | null;
+  quietHoursEnd: string | null;
+  updatedAt: string;
+}
+
+export type ActiveRescue = {
+  incidentId: string;
+  amountPaise: number;
+  strategyName: string;
+  strategyDisplayName: string;
+  vulcanAttribution: string;
+  vulcanDataSource: 'vulcan_direct' | 'razorpay_fields_heuristic';
+  sagaStep: string;
+  elapsedMs: number;
+}
+
+export type RevenueIntelligence = {
+  atRiskPaise: number;
+  recoverablePaise: number;
+  recoveredThisWeekPaise: number;
+  protectedPaise: number;
+  recoveryRate: number;
+  merchantInterventionCount: number;
+  vulcanSignalCoverage: number;
+  activeRescues: ActiveRescue[];
+  autonomous: { investigated: number; sagasCreated: number; actionsExecuted: number; paymentsRecovered: number };
+}

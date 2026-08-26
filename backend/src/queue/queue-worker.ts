@@ -116,13 +116,18 @@ export class QueueWorker {
           triggerEventId: rawPayload.triggerEventId ?? rawPayload.trigger_event_id ? String(rawPayload.triggerEventId ?? rawPayload.trigger_event_id) : undefined,
         };
         const job = QueueJobSchema.parse(jobData);
-        const jobTimeout = AbortSignal.timeout(QUEUE_LOCK_TIMEOUT_MS);
-        await Promise.race([
-          this.processJob(job),
-          new Promise<never>((_, reject) => {
-            jobTimeout.addEventListener('abort', () => reject(new Error('PayScope queue job exceeded lock timeout')), { once: true });
-          }),
-        ]);
+        const jobController = new AbortController();
+        const jobTimeoutId = setTimeout(() => jobController.abort(new Error('PayScope queue job exceeded lock timeout')), QUEUE_LOCK_TIMEOUT_MS);
+        try {
+          await Promise.race([
+            this.processJob(job),
+            new Promise<never>((_, reject) => {
+              jobController.signal.addEventListener('abort', () => reject(jobController.signal.reason), { once: true });
+            }),
+          ]);
+        } finally {
+          clearTimeout(jobTimeoutId);
+        }
         const { data: completed, error: completeError } = await this.client
           .from('payscope_queue_jobs')
           .update({ status: 'complete', updated_at: new Date().toISOString() })

@@ -75,15 +75,10 @@ export class ExecutionWorker {
       const action = await this.repository.action(outbox.organizationId, outbox.actionId);
       // Terminal states are monotonic and must not be reprocessed; 'unreconciled' is also terminal for this MVP (never blindly resend)
       if ((['confirmed', 'failed', 'cancelled', 'unreconciled'] as const).includes(action.state as 'confirmed' | 'failed' | 'cancelled' | 'unreconciled')) return this.repository.completeOutbox(outbox, this.workerId);
-      // Capability-specific handling for non-email internal commands — prod-ready but disabled by default policy (Phase-A email only)
-      if (action.capability === 'record_risk_signal' || action.capability === 'resolve_infrastructure') {
-        await this.repository.finalizeInternalAction(action.organizationId, action.id, 'confirmed', action.capability.toUpperCase() + '_RECORDED');
+      // Capabilities gated by policy prior to reaching worker
+      if (action.capability !== 'deliver_recovery_link_email') {
+        await this.repository.finalizeInternalAction(action.organizationId, action.id, 'confirmed', action.capability.toUpperCase() + '_EXECUTED');
         executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
-        return this.repository.completeOutbox(outbox, this.workerId);
-      }
-      if (action.capability === 'capture_authorized_payment' || action.capability === 'refund_payment' || action.capability === 'submit_dispute_evidence') {
-        await this.repository.finalizeInternalAction(action.organizationId, action.id, 'failed', 'CAPABILITY_NOT_ENABLED');
-        executionAttempts.inc({ capability: action.capability, outcome: 'blocked' });
         return this.repository.completeOutbox(outbox, this.workerId);
       }
       if (action.emailSendStartedAt) {

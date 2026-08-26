@@ -19,11 +19,16 @@ export class PipelineJobProcessor {
     private readonly repository: DurablePipelineRepository,
     private readonly enrichmentProvider: EnrichmentProvider,
     private readonly dispatchInvestigation: InvestigationDispatcher,
+    private readonly sagaHandler?: (job: QueueJob) => Promise<void>,
   ) {}
 
   async process(job: QueueJob): Promise<void> {
     if (job.type === 'enrich_event') return this.enrich(job);
     if (job.type === 'correlate_event') return this.correlate(job);
+    if (job.type === 'advance_saga_step') {
+      if (this.sagaHandler) return this.sagaHandler(job);
+      throw new Error('Saga handler not configured for advance_saga_step job');
+    }
     return this.dispatchInvestigation(job);
   }
 

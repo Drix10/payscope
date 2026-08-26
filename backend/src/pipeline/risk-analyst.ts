@@ -45,28 +45,38 @@ export async function runRiskAnalyst(provider: ModelProvider, tools: RiskAnalyst
     customerIncidentCount === null ? 'customer incident-count signal unavailable' : null,
   ].filter((value): value is string => value !== null);
   const safeTimeline = timeline.map(event => ({ eventType: event.eventType, occurredAt: event.occurredAt, amountPaise: event.amountPaise, paymentStatus: event.paymentStatus, paymentMethod: event.paymentMethod }));
-  const result = await provider.complete({
-    systemPrompt: SYSTEM_PROMPT,
-    userContent: JSON.stringify({ incident: input.incident, enrichment: input.enrichment, timeline: safeTimeline, merchantFailureRate, networkFailureRate, customerIncidentCount }),
-    maxInputTokens: 3_072,
-    maxTokens: 768,
-    responseSchema: RiskAnalysisModelOutputSchema,
-    tenantId,
-  });
-  const analysis = RiskAnalysisSchema.parse({
-    ...result.content,
-    missingEvidence: requiredMissingEvidence.length ? [...new Set([...requiredMissingEvidence, ...result.content.missingEvidence])].slice(0, 12) : result.content.missingEvidence,
-    toolResults: {
-      incidentTimelineEventCount: safeTimeline.length,
-      merchantFailureRate,
-      networkFailureRate,
-      customerIncidentCount,
-    },
-  });
-  if (!input.enrichment && !analysis.missingEvidence.length) throw new Error('Risk analysis must record missing enrichment evidence');
-  if (analysis.failureRootCause === 'fraud_confirmed' &&
-    (!input.enrichment?.crossBorderFlag || customerIncidentCount === null || customerIncidentCount < 3 || analysis.evidenceStrength !== 'strong')) {
-    throw new Error('Fraud-confirmed analysis requires cross-border evidence, at least three prior incidents, and strong evidence');
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const result = await provider.complete({
+        systemPrompt: SYSTEM_PROMPT,
+        userContent: JSON.stringify({ incident: input.incident, enrichment: input.enrichment, timeline: safeTimeline, merchantFailureRate, networkFailureRate, customerIncidentCount }),
+        maxInputTokens: 3_072,
+        maxTokens: 768,
+        responseSchema: RiskAnalysisModelOutputSchema,
+        tenantId,
+      });
+      const analysis = RiskAnalysisSchema.parse({
+        ...result.content,
+        missingEvidence: requiredMissingEvidence.length ? [...new Set([...requiredMissingEvidence, ...result.content.missingEvidence])].slice(0, 12) : result.content.missingEvidence,
+        toolResults: {
+          incidentTimelineEventCount: safeTimeline.length,
+          merchantFailureRate,
+          networkFailureRate,
+          customerIncidentCount,
+        },
+      });
+      if (!input.enrichment && !analysis.missingEvidence.length) throw new Error('Risk analysis must record missing enrichment evidence');
+      if (analysis.failureRootCause === 'fraud_confirmed' &&
+        (!input.enrichment?.crossBorderFlag || customerIncidentCount === null || customerIncidentCount < 3 || analysis.evidenceStrength !== 'strong')) {
+        throw new Error('Fraud-confirmed analysis requires cross-border evidence, at least three prior incidents, and strong evidence');
+      }
+      return { analysis, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 500));
+    }
   }
-  return { analysis, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
+  throw lastError;
 }

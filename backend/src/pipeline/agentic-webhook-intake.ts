@@ -21,6 +21,13 @@ export class AgenticWebhookIntake {
     const stored = await this.repository.ingestEventWithEnrichmentJob(organization.id, normalized.eventId, rawPayloadHash(rawBody), normalized);
     if (this.config.directExecutionEnabled && !stored.duplicate) {
       await this.repository.reconcileDirectPaymentLinkEvent(organization.id, normalized);
+      if (normalized.customerHash) {
+        if (normalized.eventType === 'payment.captured') {
+          await this.repository.upsertCustomerProfileOnCaptured(organization.id, normalized.customerHash, normalized.paymentMethod);
+        } else if (normalized.eventType === 'payment.failed') {
+          await this.repository.upsertCustomerProfileOnFailed(organization.id, normalized.customerHash, normalized.paymentMethod);
+        }
+      }
     }
     return { ...stored, ignored: false };
   }

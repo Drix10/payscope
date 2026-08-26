@@ -59,6 +59,18 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
       res.status(200).json({ success: true, data: await repository.dashboardQuery(organizationId, query, limit) });
     } catch (error) { next(error); }
   });
+  router.get('/autonomy-policy', async (_req, res, next) => {
+    try { res.status(200).json({ success: true, data: await repository.autonomyPolicy(organizationId) }); } catch (error) { next(error); }
+  });
+  router.put('/autonomy-policy', async (req, res, next) => {
+    try {
+      const update = typeof req.body === 'object' && req.body !== null ? req.body : {};
+      res.status(200).json({ success: true, data: await repository.updateAutonomyPolicy(organizationId, update) });
+    } catch (error) { next(error); }
+  });
+  router.get('/revenue-intelligence', async (_req, res, next) => {
+    try { res.status(200).json({ success: true, data: await repository.revenueIntelligence(organizationId) }); } catch (error) { next(error); }
+  });
   router.use((error: Error, _req: unknown, res: { status(code: number): { json(value: unknown): void } }, _next: unknown) => {
     const status = error instanceof ZodError ? 502 : /was not found/.test(error.message) ? 404 : 500;
     res.status(status).json({ success: false, error: { code: status === 404 ? 'INCIDENT_NOT_FOUND' : status === 502 ? 'INVALID_BACKEND_DATA' : 'MVP_API_ERROR', message: status === 500 ? 'The autonomous PayScope MVP API could not complete the request.' : error.message } });

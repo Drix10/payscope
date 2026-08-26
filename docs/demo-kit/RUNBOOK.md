@@ -19,6 +19,20 @@ This document is your exact step-by-step teleprompter and screen action guide fo
 
 ---
 
+## 🛠️ Demo Script Kit Command Line Utilities
+
+The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
+
+| Script | Command | Purpose |
+|---|---|---|
+| **Preflight Check** | `node scripts/demo-preflight.mjs` | Asserts deployed API health, organization UUID match, and `test` mode safety. |
+| **Self-Test** | `node scripts/self-test.mjs` | Verifies local HMAC-SHA256 signature generation and duplicate detection logic. |
+| **Send Webhook** | `node scripts/send-webhook.mjs --scenario failed-payment --event-id "evt_1"` | Constructs, HMAC-signs, and dispatches test webhooks for any scenario. |
+| **Automated Sequence** | `node scripts/run-demo.mjs --pause-ms 2000` | Runs all 4 core scenarios sequentially with customizable pause delays. |
+| **Verification Suite** | `node scripts/verify-demo.mjs` | Validates that incidents, execution outbox records, and audit entries exist in DB. |
+
+---
+
 ## 🎬 Step-by-Step Recording Teleprompter Script
 
 ---
@@ -36,7 +50,7 @@ This document is your exact step-by-step teleprompter and screen action guide fo
 > 
 > If merchants try to blindly spam customers with generic reminders, they risk payment disputes, SMTP spam bans, and chargeback penalties.
 > 
-> PayScope solves this. It is an autonomous payment operations platform built natively for Razorpay merchants. It ingests real-time payment telemetry, runs structured multi-agent root-cause investigation, and executes policy-bounded recovery actions with verified Razorpay callback reconciliation."
+> PayScope solves this. It is an autonomous payment operations platform built natively for Razorpay merchants. It ingests real-time payment telemetry, runs structured multi-agent root-cause investigation with 3x retry resilience, and executes policy-bounded recovery actions with verified Razorpay callback reconciliation."
 
 👉 **ON SLIDE 4:** Click the green **`[ Open Dashboard ]`** button.
 
@@ -57,7 +71,7 @@ This document is your exact step-by-step teleprompter and screen action guide fo
 > 
 > Instantly, PayScope verifies the HMAC signature and ingests Razorpay Vulcan telemetry—including acquirer health scores and failure attributions. 
 > 
-> Look at the 5-stage pipeline progression: The event is ingested, enriched by Vulcan AI, investigated by our multi-agent supervisor, cleared through 13 deterministic safety gates, and dispatched into the execution outbox.
+> Look at the 5-stage pipeline progression: The event is ingested, enriched by Vulcan AI, investigated by our multi-agent supervisor, cleared through 13 deterministic safety gates, and dispatched into the transactional execution outbox.
 > 
 > Our AI identified the exact root cause: 'Customer drop-off during UPI 2FA authentication', and automatically generated a branded 1-click Razorpay Payment Link."
 
@@ -95,7 +109,7 @@ This document is your exact step-by-step teleprompter and screen action guide fo
 > 
 > Let's dispatch a Razorpay dispute event.
 > 
-> Notice how PayScope immediately locks into 'Dispute Safety Mode'. Our deterministic policy engine intercepts the dispute and engages a Hard Stop.
+> Notice how PayScope immediately locks into 'Dispute Safety Mode'. Our deterministic policy engine intercepts the dispute and engages a Hard Stop across 13 safety gates.
 > 
 > All automated recovery actions are blocked instantly. AI proposes, but deterministic safety policy authorizes. The merchant is always 100% compliant."
 
@@ -120,7 +134,7 @@ This document is your exact step-by-step teleprompter and screen action guide fo
 
 ---
 
-### ⏱️ 4:00 – 5:00 | Segment 6: Cryptographic Audit Trail & Natural Language Query
+### ⏱️ 4:00 – 5:00 | Segment 6: Cryptographic Audit Trail & Operational Intelligence Query
 
 | Field | Detail / Instruction |
 |---|---|
@@ -143,4 +157,3 @@ This document is your exact step-by-step teleprompter and screen action guide fo
 2. **Narration Flow:** Speak with confidence and clear pacing (~130 words per minute).
 3. **Tab Demonstrations:** Click through `All active`, `Open`, `Monitoring`, `Disputes`, and `Resolved` to demonstrate that every single view is populated and responsive.
 4. **Resolution:** Record in 1080p or 1440p 60fps for high visual clarity.
-

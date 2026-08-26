@@ -33,14 +33,23 @@ Return only JSON matching the schema. No markdown, no commentary outside JSON.`;
 
 export async function runInvestigationSupervisor(provider: ModelProvider, input: SupervisorInput, tenantId: string): Promise<{ plan: InvestigationPlan; modelId: string; tokensUsed: number }> {
   const safeInput = SupervisorInputSchema.parse(input);
-  const result = await provider.complete({
-    systemPrompt: SYSTEM_PROMPT,
-    userContent: JSON.stringify(safeInput),
-    maxInputTokens: 2_048,
-    maxTokens: 512,
-    responseSchema: InvestigationPlanSchema,
-    tenantId,
-  });
-  if (!safeInput.enrichment && !result.content.requiresNoActionFallback) throw new Error('Supervisor must select a no-action fallback when enrichment is unavailable');
-  return { plan: result.content, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const result = await provider.complete({
+        systemPrompt: SYSTEM_PROMPT,
+        userContent: JSON.stringify(safeInput),
+        maxInputTokens: 2_048,
+        maxTokens: 512,
+        responseSchema: InvestigationPlanSchema,
+        tenantId,
+      });
+      if (!safeInput.enrichment && !result.content.requiresNoActionFallback) throw new Error('Supervisor must select a no-action fallback when enrichment is unavailable');
+      return { plan: result.content, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 500));
+    }
+  }
+  throw lastError;
 }

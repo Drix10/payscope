@@ -7,6 +7,8 @@ import { evaluatePolicy } from './policy-evaluator';
 import { runRecoveryPlanner } from './recovery-planner';
 import { runRiskAnalyst } from './risk-analyst';
 import { paymentLinkReferenceForProposalDirect } from '../evaluation/attribution';
+import { rankStrategies } from '../intelligence/recovery-value-engine';
+import { SAGAS } from './saga-engine';
 import { logger } from '../observability';
 
 const AGENT_PIPELINE_DEADLINE_MS = 35_000;
@@ -17,16 +19,20 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
   if (!job.triggerEventId) throw new Error('Investigation job is missing triggerEventId');
   const started = Date.now();
   const detail = await repository.incidentDetail(job.organizationId, job.incidentId);
+  const latest = detail.events.at(-1);
+  const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
+  let policyContextResult: Awaited<ReturnType<typeof repository.policyContext>> | null = null;
+  let executionContextResult: Awaited<ReturnType<typeof repository.executionPolicyContext>> | null = null;
   let output: { plan: Awaited<ReturnType<typeof runInvestigationSupervisor>>; risk: Awaited<ReturnType<typeof runRiskAnalyst>>; recovery: Awaited<ReturnType<typeof runRecoveryPlanner>>; policy: ReturnType<typeof PolicyDecisionSchema.parse> };
   try {
-    const latest = detail.events.at(-1);
-    const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
     const [policyContext, metrics, memory, executionContext] = await Promise.all([
       repository.policyContext(job.organizationId, job.incidentId, latest?.event.customerHash),
       repository.riskToolMetrics(job.organizationId, latest?.event.paymentMethod ?? 'unknown', latest?.event.customerHash, 1).catch(() => null),
       options.directExecution ? repository.incidentMemory(job.organizationId, job.incidentId).catch(() => []) : Promise.resolve([]),
       options.directExecution && typeof repository.executionPolicyContext === 'function' ? repository.executionPolicyContext(job.organizationId) : Promise.resolve(null),
     ]);
+    policyContextResult = policyContext;
+    executionContextResult = executionContext;
     const deadlineProvider = providerWithDeadline(provider, started + AGENT_PIPELINE_DEADLINE_MS);
     const supervisor = await runInvestigationSupervisor(deadlineProvider, {
       incident: detail.incident,
@@ -57,10 +63,22 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
 
     const latest = detail.events.at(-1);
     const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
-    const [policyContext, executionContext] = await Promise.all([
-      repository.policyContext(job.organizationId, job.incidentId, latest?.event.customerHash),
-      options.directExecution && typeof repository.executionPolicyContext === 'function' ? repository.executionPolicyContext(job.organizationId).catch(() => null) : Promise.resolve(null),
-    ]);
+
+    // Re-use cached context to avoid a second DB round-trip that might fail for the same reason.
+    const safeFallbackPolicy = {
+      id: 'payscope-fallback-policy',
+      enabled: false, minimumConfidence: 1, rootCauses: [] as never[], allowedActions: [] as never[], merchantOptedIn: false,
+    };
+    const policyContext = policyContextResult ?? {
+      policy: safeFallbackPolicy,
+      stats: { autoResolveFraction: 0 },
+      contact: { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false, customerReferenceAvailable: false },
+    };
+    const executionContext = executionContextResult ?? (
+      options.directExecution && typeof repository.executionPolicyContext === 'function'
+        ? await repository.executionPolicyContext(job.organizationId).catch(() => null)
+        : null
+    );
 
     const attr = enrichment?.failureAttribution ?? 'unknown';
     const primaryFailureCategory = attr === 'gateway_degraded' || attr === 'issuer_timeout' || attr === 'routing_suboptimal'
@@ -184,8 +202,26 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     };
   });
   const persistence = [job.organizationId, job.incidentId, job.triggerEventId, output.plan.plan, output.risk.analysis, output.recovery.plan, output.policy, proposals, [output.plan.modelId, output.risk.modelId, output.recovery.modelId].join(','), output.plan.tokensUsed + output.risk.tokensUsed + output.recovery.tokensUsed, Date.now() - started] as const;
-  // Direct execution is now the single system — legacy simulation path fully removed
+  // Direct execution persistence
   await repository.persistDirectInvestigation(...persistence);
+
+  // Instantiates recovery saga from top-ranked strategy when policy authorizes actions
+  if (output.policy.outcome === 'auto_with_proposals' && output.policy.permittedActions.length > 0 && typeof repository.createSaga === 'function') {
+    try {
+      const customerProfile = typeof repository.customerProfile === 'function' ? await repository.customerProfile(job.organizationId, latest?.event.customerHash ?? '') : null;
+      const autonomyPolicy = typeof repository.autonomyPolicy === 'function' ? await repository.autonomyPolicy(job.organizationId) : null;
+      const ranked = rankStrategies(detail.incident, enrichment, output.risk.analysis, customerProfile, autonomyPolicy);
+      const topStrategyName = ranked[0]?.name ?? 'recovery_email_same_method';
+      const sagaDef = SAGAS[topStrategyName] ?? SAGAS.recovery_email_same_method;
+      const vulcanSource = enrichment?.source === 'vulcan_direct' ? 'vulcan_direct' : 'razorpay_fields_heuristic';
+      const sagaId = await repository.createSaga(job.organizationId, detail.incident.id, sagaDef, vulcanSource);
+      if (typeof repository.scheduleSagaAdvancementJob === 'function') {
+        await repository.scheduleSagaAdvancementJob(sagaId, job.organizationId, new Date().toISOString());
+      }
+    } catch (err) {
+      logger.warn({ incidentId: job.incidentId, error: err instanceof Error ? err.message : String(err) }, 'PayScope saga creation warning');
+    }
+  }
 }
 
 function providerWithDeadline(provider: ModelProvider, deadlineAt: number): ModelProvider {

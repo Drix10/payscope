@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, AlertTriangle, ArrowLeft, Bot, ChevronDown, CircleCheck, FileSearch, ListFilter, LoaderCircle, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, Waypoints } from 'lucide-react'
+import { Activity, AlertTriangle, ArrowLeft, Bot, CircleCheck, FileSearch, LoaderCircle, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, Waypoints } from 'lucide-react'
 import { mvpApi } from './api'
 import { SpatialScroll } from './SpatialScroll'
 import { Navbar } from './components/layout/Navbar'
-import type { AuditEntry, AuditIntegrity, DashboardMetrics, DashboardQueryResult, Event, Incident, IncidentDetail as IncidentDetailRecord, MvpHealth, Proposal } from './types/mvp'
-
-type IncidentDetail = Omit<IncidentDetailRecord, 'execution'> & { execution: any[] }
+import type { AuditEntry, AuditIntegrity, DashboardMetrics, DashboardQueryResult, Event, Incident, IncidentDetail, MvpHealth, Proposal } from './types/mvp'
 
 const money = (paise: number, currency = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: /^[A-Z]{3}$/.test(currency) ? currency : 'INR', maximumFractionDigits: 0 }).format(paise / 100)
 const stamp = (value: string) => { const time = Date.parse(value); return Number.isFinite(time) ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(time) : 'Unknown time' }
@@ -589,12 +587,17 @@ function Timeline({ events }: { events: Event[] }) {
   </section>
 }
 
-function AiDecision({ detail, proposal, integrity }: { detail: IncidentDetail; proposal: Proposal | undefined; integrity: AuditIntegrity | null }) {
+type ExecutionOrProposal = import('./types/mvp').ExecutionActionSummary | Proposal
+
+function AiDecision({ detail, proposal, integrity }: { detail: IncidentDetail; proposal: ExecutionOrProposal | undefined; integrity: AuditIntegrity | null }) {
   const plan = detail.investigation?.plan;
   const risk = detail.investigation?.riskAnalysis;
   const policy = detail.investigation?.policyDecision;
-  const plannedAction = detail.investigation?.recoveryPlan?.proposedActions.find(action => action.actionType === proposal?.actionType);
-  const simulatedNote = proposal && typeof proposal.deliveryResult?.note === 'string' ? proposal.deliveryResult.note : null;
+  const actionType = proposal ? ('capability' in proposal ? proposal.capability : proposal.actionType) : undefined;
+  const actionStatus = proposal ? ('state' in proposal ? proposal.state : proposal.status) : undefined;
+  const plannedAction = detail.investigation?.recoveryPlan?.proposedActions.find(action => action.actionType === actionType);
+  const simulatedNote = proposal && 'deliveryResult' in proposal && typeof proposal.deliveryResult?.note === 'string' ? proposal.deliveryResult.note : null;
+  const actionRationale = proposal ? ('content' in proposal && typeof proposal.content?.rationale === 'string' ? proposal.content.rationale : ('terminalReason' in proposal && proposal.terminalReason ? proposal.terminalReason : 'Autonomous action recorded.')) : null;
 
   return <section className="rounded-2xl border border-white/[.09] bg-white/[.018] p-5 sm:p-6">
     <div className="flex items-start justify-between gap-3">
@@ -607,7 +610,7 @@ function AiDecision({ detail, proposal, integrity }: { detail: IncidentDetail; p
     <div className="mt-5 space-y-3">
       <DecisionRow icon={<Waypoints className="h-4 w-4" />} title={plan ? label(plan.primaryFailureCategory) : 'Investigation pending'} detail={plan ? `${plan.hypothesis} · ${plan.objectives[0]}` : 'The worker has not persisted an investigation yet.'} />
       <DecisionRow icon={<Sparkles className="h-4 w-4" />} title={risk ? `Likely cause: ${label(risk.failureRootCause)}` : 'Evidence being checked'} detail={risk?.causalNarrative ?? 'No unsupported conclusion is shown.'} />
-      <DecisionRow icon={<ShieldCheck className="h-4 w-4" />} title={proposal ? `${label(proposal.actionType)} · ${executionStateLabel[proposal.status] ?? label(proposal.status)}` : label(detail.incident.status)} detail={proposal ? simulatedNote ?? plannedAction?.expectedOutcome ?? String(proposal.content.rationale ?? 'Autonomous action recorded.') : (policy?.noActionReason ?? detail.investigation?.recoveryPlan?.noActionReason ?? 'The AI recorded no external action.')} />
+      <DecisionRow icon={<ShieldCheck className="h-4 w-4" />} title={proposal ? `${label(actionType)} · ${executionStateLabel[actionStatus || ''] ?? label(actionStatus)}` : label(detail.incident.status)} detail={proposal ? simulatedNote ?? plannedAction?.expectedOutcome ?? String(actionRationale) : (policy?.noActionReason ?? detail.investigation?.recoveryPlan?.noActionReason ?? 'The AI recorded no external action.')} />
     </div>
     {risk?.alternativeHypotheses.length ? <p className="mt-4 text-xs leading-5 text-neutral-500">Alternatives considered: {risk.alternativeHypotheses.join(' · ')}</p> : null}
     <div className={`mt-5 flex gap-2 rounded-xl border p-3 text-xs ${integrity?.status === 'intact' ? 'border-[#00ff87]/20 bg-[#00ff87]/[.06] text-[#b8f8d8]' : 'border-amber-300/20 bg-amber-300/[.06] text-amber-100'}`}>
@@ -719,7 +722,7 @@ function EmptyDetail({ loading }: { loading: boolean }) {
   </section>
 }
 
-function outcomeText(status: Incident['status'], proposal: Proposal | undefined) {
+function outcomeText(status: Incident['status'], proposal: ExecutionOrProposal | undefined) {
   if (!proposal) {
     if (status === 'DISPUTE_OPENED') return 'Dispute Active — Automated Outreach Blocked'
     if (status === 'RESOLVED') return 'Payment Recovered & Reconciled'

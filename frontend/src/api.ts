@@ -1,5 +1,5 @@
 import { APP_CONFIG, apiUrl } from './config'
-import type { AuditEntry, AuditIntegrity, DashboardMetrics, DashboardQueryResult, Incident, IncidentDetail, Investigation, MvpHealth, Proposal } from './types/mvp'
+import type { AuditEntry, AuditIntegrity, AutonomyPolicy, DashboardMetrics, DashboardQueryResult, Incident, IncidentDetail, Investigation, MvpHealth, Proposal, RevenueIntelligence } from './types/mvp'
 
 type Envelope<T> = { success: true; data: T } | { success: false; error?: { message?: string } }
 type Guard<T> = (value: unknown) => value is T
@@ -32,6 +32,8 @@ export const mvpApi = {
   auditIntegrity: (signal?: AbortSignal) => request<AuditIntegrity>('/api/mvp/audit/integrity', isAuditIntegrity, { signal }),
   dashboardMetrics: (signal?: AbortSignal) => request<DashboardMetrics>('/api/mvp/dashboard/metrics', isDashboardMetrics, { signal }),
   dashboardQuery: (query: string, signal?: AbortSignal) => request<DashboardQueryResult>(`/api/mvp/dashboard/query?q=${encodeURIComponent(query)}&limit=10`, isDashboardQuery, { signal }),
+  revenueIntelligence: (signal?: AbortSignal) => request<RevenueIntelligence>('/api/mvp/revenue-intelligence', isRevenueIntelligence, { signal }),
+  autonomyPolicy: (signal?: AbortSignal) => request<AutonomyPolicy>('/api/mvp/autonomy-policy', isAutonomyPolicy, { signal }),
 }
 
 const object = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -80,4 +82,17 @@ const isDashboardMetrics = (value: unknown): value is DashboardMetrics => {
   return evaluation.status === 'not_run'
     ? evaluation.sampleCount === 0 && metadata.every(item => item === null)
     : evaluation.sampleCount > 0 && metadata.every(item => item !== null)
+}
+const isActiveRescue = (value: unknown): boolean => {
+  const row = object(value)
+  return Boolean(row && text(row.incidentId) && typeof row.amountPaise === 'number' && text(row.strategyName) && text(row.strategyDisplayName) && text(row.vulcanAttribution) && ['vulcan_direct', 'razorpay_fields_heuristic'].includes(String(row.vulcanDataSource)) && text(row.sagaStep) && typeof row.elapsedMs === 'number')
+}
+const isRevenueIntelligence = (value: unknown): value is RevenueIntelligence => {
+  const row = object(value)
+  const autonomous = row && object(row.autonomous)
+  return Boolean(row && typeof row.atRiskPaise === 'number' && typeof row.recoverablePaise === 'number' && typeof row.recoveredThisWeekPaise === 'number' && typeof row.protectedPaise === 'number' && typeof row.recoveryRate === 'number' && typeof row.merchantInterventionCount === 'number' && typeof row.vulcanSignalCoverage === 'number' && Array.isArray(row.activeRescues) && row.activeRescues.every(isActiveRescue) && autonomous && typeof autonomous.investigated === 'number' && typeof autonomous.sagasCreated === 'number' && typeof autonomous.actionsExecuted === 'number' && typeof autonomous.paymentsRecovered === 'number')
+}
+const isAutonomyPolicy = (value: unknown): value is AutonomyPolicy => {
+  const row = object(value)
+  return Boolean(row && text(row.organizationId) && typeof row.maxAutoRecoveryPaise === 'number' && typeof row.recoveryEmailEnabled === 'boolean' && typeof row.captureEnabled === 'boolean' && typeof row.refundEnabled === 'boolean' && typeof row.disputeEvidenceEnabled === 'boolean' && typeof row.maxContactsPerIncident === 'number' && typeof row.maxContactsPer24h === 'number' && (row.quietHoursStart === null || text(row.quietHoursStart)) && (row.quietHoursEnd === null || text(row.quietHoursEnd)) && date(row.updatedAt))
 }
