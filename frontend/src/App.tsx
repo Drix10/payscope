@@ -316,9 +316,15 @@ export default function App() {
     detailSequence.current += 1;
     const seq = detailSequence.current;
     setSelectedId(incident.id);
-    setSelected(null);
-    setAudit([]);
-    setIntegrity(null);
+    if (!selected || selected.incident.id !== incident.id) {
+      setSelected({
+        incident,
+        events: [],
+        proposals: [],
+        investigation: null,
+        execution: [],
+      });
+    }
     setDetailLoading(true);
 
     try {

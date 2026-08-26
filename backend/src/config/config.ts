@@ -12,7 +12,7 @@ export const STOPPING_RULES = {
 export const RECOVERY_WINDOW_MS = 72 * 60 * 60 * 1_000;
 export const WEBHOOK_ACK_TARGET_MS = 500;
 export const ENRICHMENT_TIMEOUT_MS = 5_000;
-export const MODEL_TIMEOUT_MS = 15_000;
+export const MODEL_TIMEOUT_MS = 5_000;
 export const QUEUE_LOCK_TIMEOUT_MS = 300_000;
 export const QUEUE_RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 300_000, 900_000] as const;
 
