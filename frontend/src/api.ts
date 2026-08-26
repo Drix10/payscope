@@ -13,7 +13,9 @@ async function request<T>(path: string, guard: Guard<T>, options: RequestOptions
   options.signal?.addEventListener('abort', abortFromCaller, { once: true })
   const timeout = window.setTimeout(() => { timedOut = true; controller.abort() }, APP_CONFIG.apiTimeoutMs)
   try {
-    const response = await fetch(apiUrl(path), { headers: { Accept: 'application/json' }, signal: controller.signal })
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (APP_CONFIG.apiKey) headers['x-payscope-api-key'] = APP_CONFIG.apiKey
+    const response = await fetch(apiUrl(path), { headers, signal: controller.signal })
     const body = await response.json().catch(() => null) as Envelope<T> | null
     if (!response.ok || !body || body.success !== true) throw new Error(body && 'error' in body ? body.error?.message || options.failureMessage || 'Request failed' : options.failureMessage || 'Request failed')
     if (!guard(body.data)) throw new Error('The server returned an invalid MVP response. Refresh and try again if it persists.')
