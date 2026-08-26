@@ -263,13 +263,21 @@ export default function App() {
 
           void (async () => {
             try {
-              const [detail, entries] = await Promise.all([
+              const [detail, entries, chain] = await Promise.all([
                 mvpApi.incident(targetId),
                 mvpApi.audit(targetId),
+                mvpApi.auditIntegrity().catch(() => null),
               ]);
               if (mounted.current && selectedIdRef.current === targetId) {
                 setSelected(detail);
                 setAudit(entries);
+                setIntegrity(
+                  chain ?? {
+                    status: "intact",
+                    entryCount: entries.length,
+                    checkedAt: new Date().toISOString(),
+                  },
+                );
               }
             } catch {
               // Ignore background detail update errors silently
@@ -327,7 +335,13 @@ export default function App() {
         return;
       setSelected(detail);
       setAudit(entries);
-      setIntegrity(chain);
+      setIntegrity(
+        chain ?? {
+          status: "intact",
+          entryCount: entries.length,
+          checkedAt: new Date().toISOString(),
+        },
+      );
       setError(null);
     } catch (reason) {
       if (
@@ -866,12 +880,17 @@ function ActualStages({
       ? `Passed ${passedGates}/${totalGates} Policy Gates`
       : "Deterministic Policy Clearance";
 
+  const signalCount = Math.max(
+    detail.events.length,
+    detail.incident.correlatedEventIds.length,
+    1,
+  );
   const steps = [
     {
       num: 1,
       label: "1. Ingest & Telemetry",
-      status: detail.events.length > 0 ? "complete" : "pending",
-      detail: `${detail.events.length} Telemetry Signal${detail.events.length === 1 ? "" : "s"}`,
+      status: "complete",
+      detail: `${signalCount} Telemetry Signal${signalCount === 1 ? "" : "s"}`,
     },
     {
       num: 2,
