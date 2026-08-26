@@ -50,7 +50,7 @@ cleanupBuckets.unref();
 
 app.disable('x-powered-by');
 app.use((_req, res, next) => { res.setHeader('X-Request-Id', randomUUID()); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('Cache-Control', 'no-store'); next(); });
-app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)), allowedHeaders: ['Content-Type'], methods: ['GET', 'POST', 'OPTIONS'], maxAge: 600 }));
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)), allowedHeaders: ['Content-Type', 'Authorization', 'X-PayScope-API-Key'], methods: ['GET', 'POST', 'OPTIONS'], maxAge: 600 }));
 app.use('/webhooks/razorpay', (req, res, next) => { if (req.method !== 'POST') return next(); if (!allow(req, webhookBuckets, 3000)) return res.status(429).json(failure('RATE_LIMITED', 'Too many webhook requests.')); next(); });
 app.post('/webhooks/razorpay', express.raw({ type: 'application/json', limit: '256kb' }), async (req, res, next) => {
   try {
@@ -63,7 +63,7 @@ app.use('/api', (req, res, next) => { if (!allow(req, apiBuckets, 1200)) return 
 app.use('/api', express.json({ limit: '64kb', strict: true }));
 app.get('/health', (_req, res) => res.status(200).json({ status: pipeline && (!pipeline.config.directExecutionEnabled || directExecutionReady) ? 'ok' : 'degraded', service: 'payscope', pipeline: pipeline ? 'autonomous' : 'disabled', worker: pipeline ? 'configured' : 'disabled', execution: pipeline?.config.directExecutionEnabled ? (directExecutionReady ? 'ready' : 'unavailable') : 'disabled', razorpayEnvironment: pipeline?.config.razorpayEnvironment ?? null }));
 app.get('/metrics', async (_req, res, next) => { try { res.setHeader('Content-Type', metrics.contentType); res.status(200).send(await metrics.metrics()); } catch (error) { next(error); } });
-if (pipeline) app.use('/api/mvp', createMvpRouter(pipeline.repository, pipeline.config.organizationId!, { enrichmentAdapter: 'razorpay_fields_heuristic', razorpayEnvironment: pipeline.config.razorpayEnvironment, directExecutionEnabled: pipeline.config.directExecutionEnabled, directExecutionReady: () => directExecutionReady }));
+if (pipeline) app.use('/api/mvp', createMvpRouter(pipeline.repository, pipeline.config.organizationId!, { enrichmentAdapter: 'razorpay_fields_heuristic', razorpayEnvironment: pipeline.config.razorpayEnvironment, directExecutionEnabled: pipeline.config.directExecutionEnabled, directExecutionReady: () => directExecutionReady, dashboardApiKey: pipeline.config.dashboardApiKey }));
 else app.use('/api/mvp', (_req, res) => res.status(503).json(failure('PIPELINE_NOT_ENABLED', 'The durable PayScope pipeline is not enabled.')));
 app.use('/api', (_req, res) => res.status(404).json(failure('NOT_FOUND', 'API route not found.')));
 app.use((_req, res) => res.status(404).json(failure('NOT_FOUND', 'Route not found.')));

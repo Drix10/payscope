@@ -3,11 +3,18 @@ import { ZodError } from 'zod';
 import { MvpRepository } from '../db/mvp-repository';
 import { IncidentStatus } from '../domain/contracts';
 
-export type MvpRouterOptions = { enrichmentAdapter: 'razorpay_fields_heuristic'; razorpayEnvironment: 'test' | 'live'; directExecutionEnabled: boolean; directExecutionReady: () => boolean };
+export type MvpRouterOptions = { enrichmentAdapter: 'razorpay_fields_heuristic'; razorpayEnvironment: 'test' | 'live'; directExecutionEnabled: boolean; directExecutionReady: () => boolean; dashboardApiKey?: string };
 
 /** Read-only tenant dashboard API. Provider execution remains server-side. */
 export function createMvpRouter(repository: MvpRepository, organizationId: string, options: MvpRouterOptions): Router {
   const router = Router();
+  router.use((req, res, next) => {
+    if (!options.dashboardApiKey) return next();
+    const bearer = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+    const apiKey = req.header('x-payscope-api-key')?.trim();
+    if (bearer === options.dashboardApiKey || apiKey === options.dashboardApiKey) return next();
+    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'A valid PayScope dashboard API key is required.' } });
+  });
   router.get('/health', async (_req, res, next) => {
     try {
       await repository.healthCheck(organizationId);

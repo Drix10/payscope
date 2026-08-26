@@ -55,8 +55,29 @@ export function normalizeCallback(eventType: string, payload: Record<string, unk
   // Minimal normalized evidence; never store raw payload long-term.
   // Explicitly DO NOT echo raw provider payload; only redacted presence flags.
   const inner = (payload as Record<string, unknown>).payload as Record<string, unknown> | undefined;
-  const hasPayment = Boolean(inner && typeof inner === 'object' && (inner.payment || inner.order || inner.payment_link));
+  const payment = entity(inner?.payment);
+  const order = entity(inner?.order);
+  const paymentLink = entity(inner?.payment_link);
+  const hasPayment = Boolean(payment || order || paymentLink);
   // Clamp eventType to allowlist shape to avoid injection into DB/log.
   const safeEvent = /^[a-z0-9._-]{3,120}$/i.test(eventType) ? eventType : 'unknown';
-  return { eventType: safeEvent, normalizedAt: new Date().toISOString(), hasPayment, provider: 'razorpay' };
+  const result: Record<string, unknown> = { eventType: safeEvent, normalizedAt: new Date().toISOString(), hasPayment, provider: 'razorpay' };
+  const referenceId = text(paymentLink?.reference_id);
+  if (referenceId && /^ps_[a-f0-9]{32}$/i.test(referenceId)) result.referenceId = referenceId;
+  const paymentId = text(payment?.id);
+  if (paymentId) result.paymentId = paymentId;
+  const paymentLinkId = text(paymentLink?.id);
+  if (paymentLinkId) result.paymentLinkId = paymentLinkId;
+  return result;
+}
+
+function entity(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const wrapper = value as Record<string, unknown>;
+  const nested = wrapper.entity;
+  return nested && typeof nested === 'object' && !Array.isArray(nested) ? nested as Record<string, unknown> : wrapper;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, 160) : undefined;
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { logger, executionAttempts, executionTracer } from '../observability';
+import { logger, executionAttempts, executionTracer, strategyPerformanceEvents } from '../observability';
 import { decryptEmail } from '../security/encryption';
 import { RecoveryEmailAdapter } from '../providers/execution/email-adapter';
 import { RazorpayExecutionClient } from '../providers/execution/razorpay-execution-client';
@@ -75,66 +75,16 @@ export class ExecutionWorker {
       const action = await this.repository.action(outbox.organizationId, outbox.actionId);
       // Terminal states are monotonic and must not be reprocessed; 'unreconciled' is also terminal for this MVP (never blindly resend)
       if ((['confirmed', 'failed', 'cancelled', 'unreconciled'] as const).includes(action.state as 'confirmed' | 'failed' | 'cancelled' | 'unreconciled')) return this.repository.completeOutbox(outbox, this.workerId);
-      // Capabilities gated by policy prior to reaching worker
-      if (action.capability === 'capture_authorized_payment') {
-        const paymentId = text(action.commandPayload.paymentId, 160);
-        if (paymentId && action.amountPaise && action.currency) {
-          const res = await this.razorpay.capturePayment({ paymentId, amountPaise: action.amountPaise, currency: action.currency });
-          await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'razorpay', kind: 'payment_captured', providerOperationId: res.id, payload: res as unknown as Record<string, unknown>, state: 'confirmed' });
-        } else {
-          await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'payscope', kind: 'capture_logged', payload: { rationale: 'Authorization capture logged for incident' }, state: 'confirmed' });
-        }
-        executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
-        return this.repository.completeOutbox(outbox, this.workerId);
-      }
-      if (action.capability === 'refund_payment') {
-        const paymentId = text(action.commandPayload.paymentId, 160);
-        if (paymentId && action.amountPaise && action.currency) {
-          const res = await this.razorpay.createRefund({ paymentId, amountPaise: action.amountPaise, currency: action.currency, receipt: `ref_${action.id.slice(0, 20)}`, idempotencyKey: `idempotent_${action.id}` });
-          await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'razorpay', kind: 'payment_refunded', providerOperationId: res.id, payload: res as unknown as Record<string, unknown>, state: 'confirmed' });
-        } else {
-          await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'payscope', kind: 'refund_logged', payload: { rationale: 'Refund action recorded' }, state: 'confirmed' });
-        }
-        executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
-        return this.repository.completeOutbox(outbox, this.workerId);
-      }
-      if (action.capability === 'submit_dispute_evidence') {
-        const disputeId = text(action.commandPayload.disputeId, 160);
-        const docs = Array.isArray(action.commandPayload.documentIds) ? action.commandPayload.documentIds.map(String) : [];
-        if (disputeId && docs.length) {
-          const res = await this.razorpay.submitDisputeEvidence({ disputeId, documentIds: docs, text: String(action.commandPayload.comment ?? 'Dispute evidence package submitted') });
-          await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'razorpay', kind: 'dispute_evidence_submitted', providerOperationId: res.id, payload: res as unknown as Record<string, unknown>, state: 'confirmed' });
-        } else {
-          await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'payscope', kind: 'dispute_evidence_assembled', payload: { rationale: 'Dispute evidence package assembled for submission' }, state: 'confirmed' });
-        }
-        executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
-        return this.repository.completeOutbox(outbox, this.workerId);
-      }
-      if (action.capability === 'resolve_infrastructure') {
-        const rerouteReceipt = {
-          action: 'gateway_acquirer_reroute',
-          status: 'acquirer_priority_updated',
-          primaryGateway: 'razorpay_direct_acquirer_hsdc',
-          fallbackRoute: 'secondary_netbanking_switch',
-          timestamp: new Date().toISOString(),
-        };
-        await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'payscope', kind: 'action_executed', providerOperationId: `infra_${action.id.slice(0, 20)}`, payload: rerouteReceipt, state: 'confirmed' });
-        executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
-        return this.repository.completeOutbox(outbox, this.workerId);
-      }
-      if (action.capability === 'record_risk_signal') {
-        await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'payscope', kind: 'action_executed', payload: { rationale: 'Telemetry risk pattern recorded to merchant risk ledger' }, state: 'confirmed' });
-        executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
-        return this.repository.completeOutbox(outbox, this.workerId);
-      }
       if (action.capability !== 'deliver_recovery_link_email') {
-        await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'payscope', kind: 'action_executed', payload: { rationale: `Internal execution recorded for ${action.capability}` }, state: 'confirmed' });
-        executionAttempts.inc({ capability: action.capability, outcome: 'confirmed' });
+        await this.repository.finalizeInternalAction(action.organizationId, action.id, 'failed', 'CAPABILITY_NOT_PROVIDER_BACKED');
+        executionAttempts.inc({ capability: action.capability, outcome: 'blocked' });
+        strategyPerformanceEvents.inc({ strategy: action.capability, outcome: 'blocked' });
         return this.repository.completeOutbox(outbox, this.workerId);
       }
       if (action.emailSendStartedAt) {
         await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'unreconciled', payload: { reason: 'worker_reclaimed_after_email_send_started' }, state: 'unreconciled', terminalReason: 'SMTP_RESULT_AMBIGUOUS_NO_RESEND' });
         executionAttempts.inc({ capability: action.capability, outcome: 'unreconciled' });
+        strategyPerformanceEvents.inc({ strategy: action.capability, outcome: 'unreconciled' });
         return this.repository.completeOutbox(outbox, this.workerId);
       }
       const customerHash = text(action.commandPayload.customerHash, 64);
@@ -179,9 +129,11 @@ export class ExecutionWorker {
         if (latestAction.emailSendStartedAt) {
           await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'unreconciled', payload: { reason: 'email_send_marker_already_exists' }, state: 'unreconciled', terminalReason: 'SMTP_RESULT_AMBIGUOUS_NO_RESEND' });
           executionAttempts.inc({ capability: action.capability, outcome: 'unreconciled' });
+          strategyPerformanceEvents.inc({ strategy: action.capability, outcome: 'unreconciled' });
         } else {
           await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'failed', payload: { reason: 'pre_dispatch_policy_recheck_failed_or_command_expired' }, state: 'failed', terminalReason: 'PRE_DISPATCH_POLICY_RECHECK_FAILED_OR_COMMAND_EXPIRED' });
           executionAttempts.inc({ capability: action.capability, outcome: 'blocked' });
+          strategyPerformanceEvents.inc({ strategy: action.capability, outcome: 'blocked' });
         }
         return this.repository.completeOutbox(outbox, this.workerId);
       }
@@ -192,20 +144,24 @@ export class ExecutionWorker {
           await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'smtp_accepted', payload: { messageId: result.messageId, acceptedCount: result.acceptedCount, rejectedCount: result.rejectedCount, response: result.response }, state: 'accepted' });
           await this.repository.appendMemory(action.organizationId, action.incidentId, 'customer_message', action.id, { actionId: action.id, channel: 'email', status: 'smtp_accepted', referenceId }, 70);
           executionAttempts.inc({ capability: action.capability, outcome: 'accepted' });
+          strategyPerformanceEvents.inc({ strategy: action.capability, outcome: 'accepted' });
         } else {
           await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'smtp_rejected', payload: { messageId: result.messageId, response: result.response }, state: 'failed', terminalReason: 'SMTP_RECIPIENT_REJECTED' });
           executionAttempts.inc({ capability: action.capability, outcome: 'rejected' });
+          strategyPerformanceEvents.inc({ strategy: action.capability, outcome: 'rejected' });
         }
       } catch (error) {
         this.emailBreaker.onFailure();
         await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'unreconciled', payload: { reason: redactedErrorReason(error) }, state: 'unreconciled', terminalReason: 'SMTP_RESULT_AMBIGUOUS_NO_RESEND' });
         executionAttempts.inc({ capability: action.capability, outcome: 'unreconciled' });
+        strategyPerformanceEvents.inc({ strategy: action.capability, outcome: 'unreconciled' });
       }
       return this.repository.completeOutbox(outbox, this.workerId);
     } catch (error) {
       if (error instanceof ExecutionPreconditionError) {
         await this.repository.recordReceipt({ organizationId: outbox.organizationId, actionId: outbox.actionId, provider: 'smtp', kind: 'failed', payload: { reason: error.reason }, state: 'failed', terminalReason: `PRE_DISPATCH_${error.reason.toUpperCase()}` });
         executionAttempts.inc({ capability: outbox.commandType, outcome: 'blocked' });
+        strategyPerformanceEvents.inc({ strategy: outbox.commandType, outcome: 'blocked' });
         return this.repository.completeOutbox(outbox, this.workerId);
       }
       logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown', actionId: outbox.actionId, attempt: outbox.attemptNumber }, 'PayScope execution job will retry before SMTP dispatch');

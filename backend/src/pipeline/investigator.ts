@@ -5,7 +5,7 @@ import { Incident, InvestigationPlan, InvestigationPlanSchema, NormalizedEvent, 
 import { ModelProvider, ModelRequest, ModelResult } from '../providers/model/interface';
 import { evaluatePolicy } from './policy-evaluator';
 import { rankStrategies } from '../intelligence/recovery-engine';
-import { logger } from '../observability';
+import { llmFailureEvents, logger } from '../observability';
 
 export function paymentLinkReferenceForProposalDirect(actionType: string): string {
   const hash = createHash('sha256').update(actionType).digest('hex').slice(0, 32);
@@ -216,6 +216,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     });
     output = { plan: supervisor, risk, recovery: { plan: enginePlan, modelId: recovery.modelId, tokensUsed: recovery.tokensUsed }, policy: decision };
   } catch (error) {
+    llmFailureEvents.inc({ stage: 'investigation_pipeline' });
     const attr = enrichment?.failureAttribution ?? 'customer_drop';
     const primaryFailureCategory = attr === 'fraud_block' ? 'fraud_confirmed' : attr === 'gateway_degraded' ? 'infrastructure' : 'customer_error';
     const fallbackSupervisor = {

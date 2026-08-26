@@ -198,14 +198,26 @@ export type ReplanRepository = {
   incidentDetail(organizationId: string, incidentId: string): Promise<{
     incident: Incident;
     events: Array<{ id: string; event: { customerHash?: string; eventType: string; currency?: string }; enrichment?: VulcanEnrichment | null }>;
-    investigation: { riskAnalysis: RiskAnalysis } | null;
-    execution: Array<{ capability: ActionType; command_key?: string }>;
+    investigation: { riskAnalysis: RiskAnalysis | null } | null;
+    execution: Array<{ id?: string; capability: ActionType; command_key?: string; state?: 'queued' | 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'retry_scheduled' | 'compensating' | 'failed' | 'cancelled' }>;
   } | null>;
   customerProfile(organizationId: string, customerHash: string): Promise<CustomerProfile | null>;
   autonomyPolicy(organizationId: string): Promise<AutonomyPolicy | null>;
   policyContext?(organizationId: string, incidentId: string, customerHash?: string): Promise<{ policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats }>;
   executionPolicyContext?(organizationId: string): Promise<{ policy: ExecutionPolicy; existingCommandKeys: Set<string> }>;
   createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string>;
+  recordAdaptiveReplanDecision?(input: {
+    organizationId: string;
+    incidentId: string;
+    triggerReason: string;
+    decision: 'no_action' | 'policy_permitted' | 'action_created';
+    rationale: string;
+    priorActionId?: string | null;
+    adaptedStrategy?: string | null;
+    actionId?: string | null;
+    confidence?: number | null;
+    policyOutcome?: string | null;
+  }): Promise<void>;
 };
 
 export async function replanIncidentStrategy(
@@ -215,7 +227,28 @@ export async function replanIncidentStrategy(
   reason: string
 ): Promise<{ adaptedStrategy: RecoveryStrategy | null; actionId: string | null }> {
   const detail = await repository.incidentDetail(organizationId, incidentId).catch(() => null);
-  if (!detail || !detail.execution || detail.execution.length === 0 || detail.incident.status === 'RESOLVED' || detail.incident.status === 'DISMISSED' || detail.incident.status === 'DISPUTE_OPENED') {
+  if (!detail) {
+    return { adaptedStrategy: null, actionId: null };
+  }
+  if (!repository.recordAdaptiveReplanDecision) throw new Error('Adaptive replan audit persistence is not configured');
+  const audit = async (
+    decision: 'no_action' | 'policy_permitted' | 'action_created',
+    rationale: string,
+    extra: { priorActionId?: string | null; adaptedStrategy?: string | null; actionId?: string | null; confidence?: number | null; policyOutcome?: string | null } = {},
+  ): Promise<void> => repository.recordAdaptiveReplanDecision!({ organizationId, incidentId, triggerReason: reason, decision, rationale, ...extra });
+  if (!detail.execution || detail.execution.length === 0 || detail.incident.status === 'RESOLVED' || detail.incident.status === 'DISMISSED' || detail.incident.status === 'DISPUTE_OPENED') {
+    await audit('no_action', `Adaptive replan skipped for terminal incident or missing prior execution: ${detail.incident.status}.`);
+    return { adaptedStrategy: null, actionId: null };
+  }
+  // A prior command is not evidence of a failed intervention. Only a
+  // terminal failure/unknown/cancelled command can unlock adaptive planning;
+  // queued, dispatching, accepted, and confirmed actions remain in their
+  // normal execution/reconciliation lifecycle.
+  const priorFailedAction = [...detail.execution].reverse().find(action =>
+    action.state === 'failed' || action.state === 'unreconciled' || action.state === 'cancelled'
+  );
+  if (!priorFailedAction) {
+    await audit('no_action', 'Adaptive replan skipped because no prior action is failed, unreconciled, or cancelled.');
     return { adaptedStrategy: null, actionId: null };
   }
   const latest = detail.events.at(-1);
@@ -223,12 +256,14 @@ export async function replanIncidentStrategy(
 
   // Enforce fraud hard stop on telemetry attribution
   if (enrichment?.failureAttribution === 'fraud_block') {
+    await audit('no_action', 'Adaptive replan skipped by fraud telemetry hard stop.', { priorActionId: priorFailedAction.id ?? null });
     return { adaptedStrategy: null, actionId: null };
   }
 
   // Real risk analysis derived directly from existing durable investigation
   const realRiskAnalysis = detail.investigation?.riskAnalysis;
   if (!realRiskAnalysis) {
+    await audit('no_action', 'Adaptive replan skipped because no durable risk analysis exists for the incident.', { priorActionId: priorFailedAction.id ?? null });
     return { adaptedStrategy: null, actionId: null };
   }
 
@@ -242,12 +277,18 @@ export async function replanIncidentStrategy(
   });
 
   const adapted = adaptRecoveryStrategy(tried, detail.incident, enrichment, realRiskAnalysis, customerProfile, autonomyPolicy);
-  if (!adapted) return { adaptedStrategy: null, actionId: null };
+  if (!adapted) {
+    await audit('no_action', 'Adaptive replan skipped because no untried provider-backed strategy is available.', { priorActionId: priorFailedAction.id ?? null, confidence: realRiskAnalysis.confidence });
+    return { adaptedStrategy: null, actionId: null };
+  }
 
   // Replanning has exactly the same authorization boundary as initial
   // execution.  A repository that cannot supply fresh durable policy context
   // fails closed rather than creating an outbox command from strategy ranking.
-  if (!repository.policyContext || !repository.executionPolicyContext) return { adaptedStrategy: null, actionId: null };
+  if (!repository.policyContext || !repository.executionPolicyContext) {
+    await audit('no_action', 'Adaptive replan skipped because durable policy context is unavailable.', { priorActionId: priorFailedAction.id ?? null, adaptedStrategy: adapted.name, confidence: realRiskAnalysis.confidence });
+    return { adaptedStrategy: null, actionId: null };
+  }
   const policyContext = await repository.policyContext(organizationId, incidentId, latest?.event.customerHash);
   const executionContext = await repository.executionPolicyContext(organizationId);
   const replan = RecoveryPlanSchema.parse({
@@ -272,6 +313,7 @@ export async function replanIncidentStrategy(
     currency: latest?.event.currency ?? 'INR',
   });
   if (decision.outcome !== 'auto_with_proposals' || decision.permittedActions.length !== 1 || decision.permittedActions[0].actionType !== adapted.capabilities[0]) {
+    await audit('no_action', `Adaptive replan blocked by deterministic policy: ${decision.noActionReason ?? 'NO_PERMITTED_ACTION'}.`, { priorActionId: priorFailedAction.id ?? null, adaptedStrategy: adapted.name, confidence: realRiskAnalysis.confidence, policyOutcome: decision.outcome });
     return { adaptedStrategy: null, actionId: null };
   }
 
@@ -281,9 +323,11 @@ export async function replanIncidentStrategy(
     a.capability === adapted.capabilities[0] || a.command_key === canonicalKey
   );
   if (existingExecution) {
+    await audit('no_action', 'Adaptive replan skipped by idempotency: capability already exists for this incident.', { priorActionId: priorFailedAction.id ?? null, adaptedStrategy: adapted.name, confidence: realRiskAnalysis.confidence, policyOutcome: decision.outcome });
     return { adaptedStrategy: null, actionId: null };
   }
 
+  await audit('policy_permitted', 'Adaptive replan passed deterministic policy and will enqueue a provider-backed command.', { priorActionId: priorFailedAction.id ?? null, adaptedStrategy: adapted.name, confidence: realRiskAnalysis.confidence, policyOutcome: decision.outcome });
   const actionId = await repository.createExecutionActionForSaga(
     organizationId,
     incidentId,
@@ -291,6 +335,7 @@ export async function replanIncidentStrategy(
     `Adaptive recovery execution (Replan reason: ${reason})`,
     detail.incident.remainingAmountPaise
   );
+  await audit('action_created', 'Adaptive replan created an immutable provider-backed execution action.', { priorActionId: priorFailedAction.id ?? null, adaptedStrategy: adapted.name, actionId, confidence: realRiskAnalysis.confidence, policyOutcome: decision.outcome });
 
   return { adaptedStrategy: adapted, actionId };
 }

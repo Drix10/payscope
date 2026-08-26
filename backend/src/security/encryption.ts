@@ -21,6 +21,14 @@ export function encryptEmail(value: string, encodedKey: string): EncryptedValue 
   return { version: 1, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), ciphertext: ciphertext.toString('base64') };
 }
 
+export function encryptOpaqueBuffer(value: Buffer, encodedKey: string): EncryptedValue {
+  if (!Buffer.isBuffer(value) || value.length === 0 || value.length > 512 * 1024) throw new Error('Encrypted callback payload is invalid');
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGORITHM, keyFromBase64(encodedKey), iv);
+  const ciphertext = Buffer.concat([cipher.update(value), cipher.final()]);
+  return { version: 1, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), ciphertext: ciphertext.toString('base64') };
+}
+
 export function decryptEmail(value: EncryptedValue, encodedKey: string): string {
   if (value.version !== 1) throw new Error('Unsupported encrypted recipient version');
   const decipher = createDecipheriv(ALGORITHM, keyFromBase64(encodedKey), Buffer.from(value.iv, 'base64'));

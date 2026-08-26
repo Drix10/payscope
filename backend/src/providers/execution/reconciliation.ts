@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { stableHash } from '../../execution/execution-repository';
+import { strategyPerformanceEvents } from '../../observability';
 
 /**
  * Monotonic reconciliation: duplicate/late callbacks enrich but never regress terminal states.
@@ -17,11 +18,6 @@ export class Reconciler {
     const row = data as Record<string, unknown> | null;
     if (!row || typeof row.id !== 'string') return; // unknown callback -> no second action (do NOT create one)
     const actionId = row.id as string;
-    // Idempotent replay guard: use dedicated inbox table with unique (org, provider_event_id)
-    // Cross-tenant replay is already rejected by organizationId scoping above.
-    const { data: existing, error: checkError } = await this.client.from('payscope_callback_inbox').select('id').eq('organization_id', organizationId).eq('provider', 'razorpay').eq('provider_event_id', eventId).maybeSingle();
-    if (checkError) throw new Error(`Callback dedupe check failed: ${checkError.message}`);
-    if (existing) return; // idempotent replay -> skip without state change
     const payload = { referenceId, razorpayEventId: eventId, paymentId: paymentId ?? null };
     const receiptHash = stableHash(payload);
     // First record receipt idempotently (unique on org,action,provider,receipt_kind,hash handles duplicate hash)
@@ -36,6 +32,25 @@ export class Reconciler {
     });
     // If monotonic skipped, error is null and function logs skipped; we swallow
     if (reconcileError && !/monotonic|skipped/i.test(reconcileError.message)) throw new Error(`Reconciliation transition failed: ${reconcileError.message}`);
+    strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'confirmed' });
+  }
+
+  async reconcilePaymentLinkExpired(organizationId: string, referenceId: string, eventId: string): Promise<void> {
+    if (!/^ps_[a-f0-9]{32}$/i.test(referenceId)) return;
+    if (!organizationId || !eventId || eventId.length > 320) return;
+    const { data, error } = await this.client.from('payscope_execution_actions').select('id, state').eq('organization_id', organizationId).eq('capability', 'deliver_recovery_link_email').eq('command_payload->>referenceId', referenceId).limit(1).maybeSingle();
+    if (error) throw new Error(`Expired-link reconciliation lookup failed: ${error.message}`);
+    const row = data as Record<string, unknown> | null;
+    if (!row || typeof row.id !== 'string') return;
+    const { error: compensationError } = await this.client.rpc('payscope_record_compensation', {
+      p_organization_id: organizationId,
+      p_action_id: row.id,
+      p_parent_action_id: null,
+      p_reason: `payment_link_expired:${eventId.slice(0, 240)}`,
+      p_target_state: compensationTarget('link_expired'),
+    });
+    if (compensationError) throw new Error(`Expired-link compensation failed: ${compensationError.message}`);
+    strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'cancelled' });
   }
 
   async verifyAndStoreCallback(input: { organizationId: string; provider: 'razorpay'; providerEventId: string; dedupeKey: string; rawBodyEncrypted: Record<string, unknown>; verifiedSecretVersion: 1 | 2; source: string; normalized: Record<string, unknown>; actionMatch: Record<string, unknown> | null }): Promise<void> {

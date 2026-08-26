@@ -14,6 +14,7 @@ export type ExecutionPolicy = {
   retryBudget: number;
   quietHoursStart?: number;
   quietHoursEnd?: number;
+  timezone?: string;
 };
 export type PolicyGate = { name: 'fraud' | 'dispute' | 'auto_resolve_ceiling' | 'critical_tier' | 'contact_limits' | 'merchant_policy' | 'execution_capability' | 'provider_health' | 'amount_currency' | 'consent_quiet_hours' | 'emergency_pause' | 'idempotency' | 'retry_budget'; result: 'passed' | 'blocked' | 'restricted' | 'skipped'; rationale: string };
 export type PolicyDecision = { outcome: 'auto_with_proposals' | 'auto_no_action'; permittedActions: RecoveryPlan['proposedActions']; noActionReason: string | null; matchedPolicyId: string | null; gates: PolicyGate[]; executionPolicyVersion?: string };
@@ -111,7 +112,7 @@ export function evaluatePolicy(
     }
     gates.push({ name: 'amount_currency', result: 'passed', rationale: `Amount ${amount} ${currency} within caps.` });
 
-    // consent / quiet hours — validate 0..23 integers, use Asia/Kolkata (IST, UTC+5:30) as documented storage timezone
+    // consent / quiet hours
     const now = directOptions.now ?? new Date();
     const validateHour = (v: unknown): number | undefined => {
       if (v === undefined) return undefined;
@@ -121,13 +122,11 @@ export function evaluatePolicy(
     const qStart = validateHour(ep.quietHoursStart);
     const qEnd = validateHour(ep.quietHoursEnd);
     const inQuiet = qStart !== undefined && qEnd !== undefined ? (() => {
-      // Convert UTC now to IST (UTC+5:30) consistently via total minutes
-      const istTotalMinutes = (now.getUTCHours() * 60 + now.getUTCMinutes() + 330) % 1440;
-      const istH = Math.floor(istTotalMinutes / 60);
-      return isInQuietHours(istH, qStart, qEnd);
+      const merchantHour = hourInTimezone(now, ep.timezone ?? 'Asia/Kolkata');
+      return isInQuietHours(merchantHour, qStart, qEnd);
     })() : false;
     if (inQuiet && permittedActions.some(a => OUTREACH.has(a.actionType))) {
-      gates.push({ name: 'consent_quiet_hours', result: 'blocked', rationale: `Quiet hours active (${ep.quietHoursStart}-${ep.quietHoursEnd} IST).` });
+      gates.push({ name: 'consent_quiet_hours', result: 'blocked', rationale: `Quiet hours active (${ep.quietHoursStart}-${ep.quietHoursEnd} ${ep.timezone ?? 'Asia/Kolkata'}).` });
       for (const n of ['idempotency', 'retry_budget'] as const) if (!gates.some(g => g.name === n)) gates.push({ name: n, result: 'skipped', rationale: 'Skipped after quiet hours blocked.' });
       return { outcome: 'auto_no_action', permittedActions: [], noActionReason: 'QUIET_HOURS_ACTIVE', matchedPolicyId: matched?.id ?? null, gates: sortGates(gates) };
     }
@@ -186,4 +185,12 @@ function isInQuietHours(nowHour: number, start: number, end: number): boolean {
   if (start === end) return false;
   if (start < end) return nowHour >= start && nowHour < end;
   return nowHour >= start || nowHour < end; // wraps midnight
+}
+
+function hourInTimezone(now: Date, timezone: string): number {
+  if (!/^[A-Za-z_]+\/[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)?$/.test(timezone)) throw new Error('Execution policy timezone is invalid');
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+  const hour = Number(parts.find(part => part.type === 'hour')?.value);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) throw new Error('Execution policy timezone could not be evaluated');
+  return hour;
 }

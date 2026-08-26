@@ -1,8 +1,9 @@
-import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, randomUUID } from 'crypto';
 import { AppError, Incident, IncidentStatus, NormalizedEvent, NormalizedEventSchema, RiskTier, VulcanEnrichment } from '../domain/contracts';
 import { RECOVERY_WINDOW_MS } from '../config/config';
-import { replanIncidentStrategy } from '../intelligence/recovery-engine';
-import { logger } from '../observability';
+import { encryptOpaqueBuffer } from '../security/encryption';
+import { normalizeCallback, parseCallbackEnvelope, verifyRazorpayCallbackSignature, VerifiedCallback } from '../providers/execution/callback-verifier';
+import { callbackVerification } from '../observability';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -53,12 +54,6 @@ function hashCustomer(customerReference: string | undefined, customerHashSecret:
 
 export function rawPayloadHash(rawBody: Buffer): string {
   return createHash('sha256').update(rawBody).digest('hex');
-}
-
-function validWebhookSignature(rawBody: Buffer, signature: string, secret: string): boolean {
-  const provided = Buffer.from(signature.trim(), 'hex');
-  const expected = Buffer.from(createHmac('sha256', secret).update(rawBody).digest('hex'), 'hex');
-  return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
 export function normalizeRazorpayWebhook(rawBody: Buffer, razorpayEventId: string, customerHashSecret: string, receivedAt = new Date().toISOString()): NormalizedEvent {
@@ -245,49 +240,32 @@ export async function receiveWebhook(
   rawBody: Buffer,
   signatureHeader: string | undefined,
   eventIdHeader: string | undefined,
-  repository: any,
-  config: { webhookSecret?: string; previousWebhookSecret?: string; organizationId?: string }
+  repository: { recordWebhookIntake(organizationId: string, rawBody: Buffer, normalized: NormalizedEvent): Promise<{ duplicate: boolean; eventId: string }>; recordVerifiedCallback?(organizationId: string, callback: VerifiedCallback, rawBodyEncrypted: Record<string, unknown>, source: string): Promise<void> },
+  config: { webhookSecret?: string; previousWebhookSecret?: string; organizationId?: string; callbackEncryptionKey?: string }
 ): Promise<{ duplicate: boolean; ignored: boolean; eventId: string }> {
   if (!config.webhookSecret || !config.organizationId) throw new AppError('PIPELINE_NOT_CONFIGURED', 503, 'Webhook secret or organization ID not configured');
+  if (!config.callbackEncryptionKey) throw new AppError('PIPELINE_NOT_CONFIGURED', 503, 'Callback encryption key not configured');
   if (!signatureHeader) throw new AppError('INVALID_RAZORPAY_SIGNATURE', 400, 'x-razorpay-signature header is required');
-  if (!eventIdHeader) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'x-razorpay-event-id header is required');
 
-  const secret = config.webhookSecret;
-  const verifiedWithCurrentSecret = validWebhookSignature(rawBody, signatureHeader, secret);
-  const verifiedWithPreviousSecret = !verifiedWithCurrentSecret
-    && Boolean(config.previousWebhookSecret)
-    && validWebhookSignature(rawBody, signatureHeader, config.previousWebhookSecret!);
-  if (!verifiedWithCurrentSecret && !verifiedWithPreviousSecret) {
-    throw new AppError('INVALID_RAZORPAY_SIGNATURE', 400, 'x-razorpay-signature header is invalid');
-  }
+  const verifiedSecretVersion = verifyRazorpayCallbackSignature(rawBody, signatureHeader, config.webhookSecret, config.previousWebhookSecret);
+  const envelope = parseCallbackEnvelope(rawBody);
+  if (eventIdHeader && eventIdHeader.trim() && eventIdHeader.trim() !== envelope.eventId) throw new AppError('INVALID_RAZORPAY_EVENT', 422, 'x-razorpay-event-id does not match the signed webhook body');
 
-  const normalized = normalizeRazorpayWebhook(rawBody, eventIdHeader, secret);
+  const normalizedCallback = normalizeCallback(envelope.eventType, envelope.payload);
+  const callback: VerifiedCallback = {
+    provider: 'razorpay',
+    providerEventId: envelope.eventId,
+    dedupeKey: rawPayloadHash(rawBody),
+    verifiedSecretVersion,
+    normalized: normalizedCallback,
+    actionMatch: typeof normalizedCallback.referenceId === 'string' ? { referenceId: normalizedCallback.referenceId } : null,
+  };
+  if (typeof repository.recordVerifiedCallback !== 'function') throw new AppError('PIPELINE_NOT_CONFIGURED', 503, 'Callback evidence persistence is not configured');
+  await repository.recordVerifiedCallback(config.organizationId, callback, encryptOpaqueBuffer(rawBody, config.callbackEncryptionKey), 'http_webhook');
+  callbackVerification.inc({ provider: 'razorpay', result: `verified_secret_v${verifiedSecretVersion}` });
+
+  const normalized = normalizeRazorpayWebhook(rawBody, envelope.eventId, config.webhookSecret);
   const result = await repository.recordWebhookIntake(config.organizationId, rawBody, normalized);
   
-  if (!result.duplicate && result.incidentId && !result.createdNewIncident && (normalized.eventType === 'payment.failed' || normalized.eventType === 'payment_link.expired' || normalized.eventType === 'recovery.failed')) {
-    const eventReason = normalized.eventType === 'payment_link.expired' ? 'payment_link_expired' : normalized.eventType === 'recovery.failed' ? 'recovery_failed' : 'linked_risk_event';
-    try {
-      await handleIncidentAdaptiveLifecycle(repository, config.organizationId, result.incidentId, eventReason);
-    } catch (err) {
-      logger.error({ incidentId: result.incidentId, eventReason, error: err instanceof Error ? err.message : String(err) }, 'Adaptive incident lifecycle replan error');
-      if (typeof repository.recordAuditEntry === 'function') {
-        await repository.recordAuditEntry(config.organizationId, result.incidentId, 'adaptive_replan_error', { eventReason, error: err instanceof Error ? err.message : String(err) }).catch(() => null);
-      }
-    }
-  }
-
   return { duplicate: result.duplicate, ignored: false, eventId: result.eventId };
-}
-
-export async function handleIncidentAdaptiveLifecycle(
-  repository: any,
-  organizationId: string,
-  incidentId: string,
-  eventReason: string
-): Promise<{ adapted: boolean; actionId: string | null }> {
-  if (['linked_risk_event', 'recovery_failed', 'payment_link_expired'].includes(eventReason)) {
-    const res = await replanIncidentStrategy(repository, organizationId, incidentId, eventReason);
-    return { adapted: res.adaptedStrategy !== null, actionId: res.actionId };
-  }
-  return { adapted: false, actionId: null };
 }

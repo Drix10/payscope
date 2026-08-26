@@ -5,6 +5,7 @@ import { ActionProposal, ActionProposalSchema, ActionType, ActionTypeSchema, Aud
 import { CustomerContactStats, ExecutionPolicy, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
 import { canCorrelateWithTerminalIncident, CorrelationEvent, IncidentCandidate } from '../pipeline/intake';
 import { Reconciler } from '../providers/execution/reconciliation';
+import { VerifiedCallback } from '../providers/execution/callback-verifier';
 import { CustomerProfile } from '../intelligence/recovery-engine';
 import { logger } from '../observability';
 
@@ -127,13 +128,42 @@ export class MvpRepository {
     return { eventId: result.eventId, duplicate: result.duplicate, incidentId: null, createdNewIncident: false };
   }
 
+  async recordVerifiedCallback(organizationId: string, callback: VerifiedCallback, rawBodyEncrypted: Record<string, unknown>, source: string): Promise<void> {
+    let actionMatch = callback.actionMatch;
+    const referenceId = typeof callback.normalized.referenceId === 'string' ? callback.normalized.referenceId : undefined;
+    if (referenceId && /^ps_[a-f0-9]{32}$/i.test(referenceId)) {
+      const { data, error } = await this.client
+        .from('payscope_execution_actions')
+        .select('id, incident_id, capability, state')
+        .eq('organization_id', organizationId)
+        .eq('capability', 'deliver_recovery_link_email')
+        .eq('command_payload->>referenceId', referenceId)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw databaseError('callback action match lookup', error.message);
+      const row = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : null;
+      if (row && typeof row.id === 'string') {
+        actionMatch = {
+          actionId: row.id,
+          incidentId: typeof row.incident_id === 'string' ? row.incident_id : null,
+          capability: row.capability,
+          state: row.state,
+          referenceId,
+        };
+      }
+    }
+    const reconciler = new Reconciler(this.client);
+    await reconciler.verifyAndStoreCallback({ ...callback, actionMatch, organizationId, rawBodyEncrypted, source, provider: 'razorpay' });
+  }
+
   /** Reconciles a verified Payment Link completion to the immutable email action. */
   async reconcileDirectPaymentLinkEvent(organizationId: string, event: NormalizedEvent): Promise<void> {
-    if (event.eventType !== 'payment_link.paid') return;
+    if (event.eventType !== 'payment_link.paid' && event.eventType !== 'payment_link.expired') return;
     const referenceId = typeof event.providerData.payment_link_reference_id === 'string' ? event.providerData.payment_link_reference_id : undefined;
     if (!referenceId || !/^ps_[a-f0-9]{32}$/.test(referenceId)) return;
     const reconciler = new Reconciler(this.client);
-    await reconciler.reconcilePaymentLinkPaid(organizationId, referenceId, event.eventId, event.paymentId ?? null);
+    if (event.eventType === 'payment_link.paid') await reconciler.reconcilePaymentLinkPaid(organizationId, referenceId, event.eventId, event.paymentId ?? null);
+    else await reconciler.reconcilePaymentLinkExpired(organizationId, referenceId, event.eventId);
   }
 
   async eventById(organizationId: string, eventId: string): Promise<StoredEvent> {
@@ -231,7 +261,7 @@ export class MvpRepository {
           ? Array.from(new Set([...parsed.policy.rootCauses, 'gateway_degraded' as const, 'issuer_block' as const, 'customer_error' as const, 'unknown' as const]))
           : parsed.policy.rootCauses,
         allowedActions: merchantOptedIn
-          ? Array.from(new Set([...parsed.policy.allowedActions, 'deliver_recovery_link_email' as const, 'resolve_infrastructure' as const, 'record_risk_signal' as const]))
+          ? Array.from(new Set([...parsed.policy.allowedActions, 'deliver_recovery_link_email' as const]))
           : parsed.policy.allowedActions,
       },
       contact: {
@@ -261,14 +291,16 @@ export class MvpRepository {
       retryBudget: typeof row.retry_budget === 'number' ? row.retry_budget : 3,
       quietHoursStart: typeof row.quiet_hours_start === 'number' ? row.quiet_hours_start : undefined,
       quietHoursEnd: typeof row.quiet_hours_end === 'number' ? row.quiet_hours_end : undefined,
+      timezone: typeof row.merchant_timezone === 'string' ? row.merchant_timezone : 'Asia/Kolkata',
     } : {
-      enabledCapabilities: ['deliver_recovery_link_email', 'record_risk_signal', 'submit_dispute_evidence', 'capture_authorized_payment', 'refund_payment', 'resolve_infrastructure'],
+      enabledCapabilities: ['deliver_recovery_link_email'],
       maxAmountPaise: 5000000,
       allowedCurrencies: ['INR'],
       emailConsentRequired: false,
       providerHealthy: true,
       emergencyPaused: false,
       retryBudget: 3,
+      timezone: 'Asia/Kolkata',
     };
 
     return {
@@ -466,185 +498,140 @@ export class MvpRepository {
     if (error) throw databaseError('direct investigation persistence', error.message);
   }
 
-  // === Autonomy Policy ===
-  private static autonomyPolicyStore = new Map<string, AutonomyPolicy>();
-
   async autonomyPolicy(organizationId: string): Promise<AutonomyPolicy> {
-    const existing = MvpRepository.autonomyPolicyStore.get(organizationId);
-    if (existing) return existing;
-
-    const defaultPolicy: AutonomyPolicy = {
+    const [{ data: merchant, error: merchantError }, { data: execution, error: executionError }] = await Promise.all([
+      this.client.from('payscope_merchant_policies').select('merchant_opted_in_to_recovery, allowed_actions').eq('organization_id', organizationId).maybeSingle(),
+      this.client.from('payscope_organization_execution_policy').select('max_amount_paise, enabled_capabilities, quiet_hours_start, quiet_hours_end').eq('organization_id', organizationId).maybeSingle(),
+    ]);
+    if (merchantError) throw databaseError('autonomy merchant policy lookup', merchantError.message);
+    if (executionError) throw databaseError('autonomy execution policy lookup', executionError.message);
+    const merchantRow = merchant && typeof merchant === 'object' && !Array.isArray(merchant) ? merchant as Record<string, unknown> : {};
+    const executionRow = execution && typeof execution === 'object' && !Array.isArray(execution) ? execution as Record<string, unknown> : {};
+    const allowedActions = new Set(Array.isArray(merchantRow.allowed_actions) ? merchantRow.allowed_actions.map(String) : []);
+    const enabledCapabilities = new Set(Array.isArray(executionRow.enabled_capabilities) ? executionRow.enabled_capabilities.map(String) : []);
+    return {
       organizationId,
-      maxAutoRecoveryPaise: 2_500_000,
+      maxAutoRecoveryPaise: Number.isSafeInteger(Number(executionRow.max_amount_paise)) ? Number(executionRow.max_amount_paise) : 500_000,
       maxAutoCapturePaise: 0,
       maxAutoRefundPaise: 0,
-      recoveryEmailEnabled: true,
-      subscriptionRetryEnabled: true,
-      captureEnabled: false,
-      refundEnabled: false,
-      disputeEvidenceEnabled: true,
+      recoveryEmailEnabled: allowedActions.has('deliver_recovery_link_email') || enabledCapabilities.has('deliver_recovery_link_email'),
+      subscriptionRetryEnabled: false,
+      captureEnabled: allowedActions.has('capture_authorized_payment') && enabledCapabilities.has('capture_authorized_payment'),
+      refundEnabled: allowedActions.has('refund_payment') && enabledCapabilities.has('refund_payment'),
+      disputeEvidenceEnabled: allowedActions.has('submit_dispute_evidence') && enabledCapabilities.has('submit_dispute_evidence'),
       maxContactsPerIncident: 2,
       maxContactsPer24h: 1,
-      quietHoursStart: null,
-      quietHoursEnd: null,
+      quietHoursStart: Number.isInteger(executionRow.quiet_hours_start) ? String(executionRow.quiet_hours_start) : null,
+      quietHoursEnd: Number.isInteger(executionRow.quiet_hours_end) ? String(executionRow.quiet_hours_end) : null,
       updatedAt: new Date().toISOString(),
     };
-
-    MvpRepository.autonomyPolicyStore.set(organizationId, defaultPolicy);
-    return defaultPolicy;
   }
 
   async updateAutonomyPolicy(organizationId: string, update: Partial<AutonomyPolicy>): Promise<AutonomyPolicy> {
-    const current = await this.autonomyPolicy(organizationId);
-    const updated: AutonomyPolicy = {
-      ...current,
-      ...update,
-      organizationId,
-      updatedAt: new Date().toISOString(),
-    };
-    MvpRepository.autonomyPolicyStore.set(organizationId, updated);
-    return updated;
+    void organizationId;
+    void update;
+    throw new Error('Autonomy policy mutation is not exposed through this repository; use the service-role policy migration workflow.');
   }
-
-  // === Customer Profile ===
-  private static customerProfileStore = new Map<string, CustomerProfile>();
 
   async customerProfile(organizationId: string, customerHash: string): Promise<CustomerProfile | null> {
     if (!customerHash) return null;
-    const key = `${organizationId}:${customerHash}`;
     const now = new Date().toISOString();
-    let current = MvpRepository.customerProfileStore.get(key);
-
-    // Evict cached profiles older than 5 minutes to prevent stale customer history
-    if (current && (Date.now() - Date.parse(current.lastSeenAt)) > 300_000) {
-      MvpRepository.customerProfileStore.delete(key);
-      current = undefined;
-    }
-
-    if (!current) {
-      let customerEvents: Array<Record<string, unknown>> = [];
-      try {
-        const { data } = await this.client.from('payscope_events')
-          .select('normalized, created_at')
-          .eq('organization_id', organizationId)
-          .eq('customer_hash', customerHash)
-          .order('created_at', { ascending: false })
-          .limit(50);
-        if (Array.isArray(data)) customerEvents = data;
-      } catch {}
-
-      const capturedEvents = customerEvents.filter(e => (e.normalized as any)?.eventType === 'payment.captured');
-      const failedEvents = customerEvents.filter(e => (e.normalized as any)?.eventType === 'payment.failed');
-
-      const successfulMethods = Array.from(new Set(capturedEvents.map(e => (e.normalized as any)?.paymentMethod).filter(Boolean)));
-      const failedMethods = Array.from(new Set(failedEvents.map(e => (e.normalized as any)?.paymentMethod).filter(Boolean)));
-      
-      let actionsCount = 0;
-      let recoveryEmailsPaid = 0;
-      let lastContact: string | null = null;
-      try {
-        const { data: actions } = await this.client.from('payscope_execution_actions')
-          .select('dispatched_at, created_at, state, command_payload')
-          .eq('organization_id', organizationId)
-          .order('created_at', { ascending: false })
-          .limit(50);
-        if (Array.isArray(actions)) {
-          const customerActions = actions.filter(a => {
-            const payload = a.command_payload as Record<string, unknown> | null;
-            return payload?.customerHash === customerHash;
-          });
-          actionsCount = customerActions.length;
-          const dispatched = customerActions.find(d => typeof d.dispatched_at === 'string');
-          if (dispatched) lastContact = dispatched.dispatched_at as string;
-        }
-
-        // Correlate recovery conversion strictly from captured payment_link events for this customer
-        const paidLinkEvents = customerEvents.filter(e => {
-          const norm = (e.normalized as any);
-          return norm?.eventType === 'payment_link.paid' || (norm?.eventType === 'payment.captured' && norm?.providerData?.payment_link_reference_id);
-        });
-        recoveryEmailsPaid = paidLinkEvents.length;
-      } catch (err) {
-        logger.warn({ organizationId, customerHash, error: err instanceof Error ? err.message : String(err) }, 'PayScope failed to fetch execution action history for customer profile');
-      }
-
-      current = {
-        organizationId,
-        customerHash,
-        successfulPaymentMethods: successfulMethods.length ? successfulMethods : ['upi'],
-        failedPaymentMethods: failedMethods.length ? failedMethods : ['card'],
-        successfulPaymentCount: capturedEvents.length,
-        totalIncidentCount: Math.max(failedEvents.length, 1),
-        recoveryEmailsSent: actionsCount,
-        recoveryEmailsPaid,
-        lastContactedAt: lastContact,
-        firstSeenAt: (customerEvents.at(-1)?.created_at as string) ?? now,
-        lastSeenAt: (customerEvents.at(0)?.created_at as string) ?? now,
-      };
-      MvpRepository.customerProfileStore.set(key, current);
-    }
-    return current;
+    const [{ data: eventRows, error: eventError }, { data: actionRows, error: actionError }] = await Promise.all([
+      this.client.from('payscope_events')
+        .select('normalized, created_at')
+        .eq('organization_id', organizationId)
+        .eq('customer_hash', customerHash)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      this.client.from('payscope_execution_actions')
+        .select('dispatched_at, created_at, state, command_payload')
+        .eq('organization_id', organizationId)
+        .eq('command_payload->>customerHash', customerHash)
+        .order('created_at', { ascending: false })
+        .limit(50),
+    ]);
+    if (eventError) throw databaseError('customer profile event lookup', eventError.message);
+    if (actionError) throw databaseError('customer profile execution lookup', actionError.message);
+    const customerEvents = (eventRows ?? []).flatMap(row => {
+      const value = row as Record<string, unknown>;
+      const normalized = value.normalized && typeof value.normalized === 'object' && !Array.isArray(value.normalized) ? value.normalized as Record<string, unknown> : null;
+      return normalized && typeof value.created_at === 'string' ? [{ normalized, createdAt: value.created_at }] : [];
+    });
+    if (!customerEvents.length && !(actionRows ?? []).length) return null;
+    const capturedEvents = customerEvents.filter(event => event.normalized.eventType === 'payment.captured');
+    const failedEvents = customerEvents.filter(event => event.normalized.eventType === 'payment.failed');
+    const successfulMethods = Array.from(new Set(capturedEvents.map(event => typeof event.normalized.paymentMethod === 'string' ? event.normalized.paymentMethod : null).filter((value): value is string => Boolean(value))));
+    const failedMethods = Array.from(new Set(failedEvents.map(event => typeof event.normalized.paymentMethod === 'string' ? event.normalized.paymentMethod : null).filter((value): value is string => Boolean(value))));
+    const actions = (actionRows ?? []).map(row => row as Record<string, unknown>);
+    const dispatched = actions.find(action => typeof action.dispatched_at === 'string');
+    const paidLinkEvents = customerEvents.filter(event => {
+      const providerData = event.normalized.providerData && typeof event.normalized.providerData === 'object' && !Array.isArray(event.normalized.providerData) ? event.normalized.providerData as Record<string, unknown> : {};
+      return event.normalized.eventType === 'payment_link.paid' || (event.normalized.eventType === 'payment.captured' && typeof providerData.payment_link_reference_id === 'string');
+    });
+    return {
+      organizationId,
+      customerHash,
+      successfulPaymentMethods: successfulMethods,
+      failedPaymentMethods: failedMethods,
+      successfulPaymentCount: capturedEvents.length,
+      totalIncidentCount: failedEvents.length,
+      recoveryEmailsSent: actions.length,
+      recoveryEmailsPaid: paidLinkEvents.length,
+      lastContactedAt: typeof dispatched?.dispatched_at === 'string' ? dispatched.dispatched_at : null,
+      firstSeenAt: customerEvents.at(-1)?.createdAt ?? now,
+      lastSeenAt: customerEvents.at(0)?.createdAt ?? now,
+    };
   }
 
   async upsertCustomerProfileOnCaptured(organizationId: string, customerHash: string, paymentMethod?: string): Promise<void> {
-    const key = `${organizationId}:${customerHash}`;
-    const now = new Date().toISOString();
-    const current = MvpRepository.customerProfileStore.get(key) ?? {
-      organizationId,
-      customerHash,
-      successfulPaymentMethods: [],
-      failedPaymentMethods: [],
-      successfulPaymentCount: 0,
-      totalIncidentCount: 0,
-      recoveryEmailsSent: 0,
-      recoveryEmailsPaid: 0,
-      lastContactedAt: null,
-      firstSeenAt: now,
-      lastSeenAt: now,
-    };
-
-    const methods = new Set(current.successfulPaymentMethods);
-    if (paymentMethod) methods.add(paymentMethod);
-
-    MvpRepository.customerProfileStore.set(key, {
-      ...current,
-      successfulPaymentMethods: Array.from(methods),
-      successfulPaymentCount: current.successfulPaymentCount + 1,
-      lastSeenAt: now,
-    });
+    void organizationId;
+    void customerHash;
+    void paymentMethod;
   }
 
   async upsertCustomerProfileOnFailed(organizationId: string, customerHash: string, paymentMethod?: string): Promise<void> {
-    const key = `${organizationId}:${customerHash}`;
-    const now = new Date().toISOString();
-    const current = MvpRepository.customerProfileStore.get(key) ?? {
-      organizationId,
-      customerHash,
-      successfulPaymentMethods: [],
-      failedPaymentMethods: [],
-      successfulPaymentCount: 0,
-      totalIncidentCount: 0,
-      recoveryEmailsSent: 0,
-      recoveryEmailsPaid: 0,
-      lastContactedAt: null,
-      firstSeenAt: now,
-      lastSeenAt: now,
-    };
-
-    const methods = new Set(current.failedPaymentMethods);
-    if (paymentMethod) methods.add(paymentMethod);
-
-    MvpRepository.customerProfileStore.set(key, {
-      ...current,
-      failedPaymentMethods: Array.from(methods),
-      totalIncidentCount: current.totalIncidentCount + 1,
-      lastSeenAt: now,
-    });
+    void organizationId;
+    void customerHash;
+    void paymentMethod;
   }
 
   async incident(organizationId: string, incidentId: string): Promise<Incident | null> {
     const detail = await this.incidentDetail(organizationId, incidentId).catch(() => null);
     return detail?.incident ?? null;
+  }
+
+  async recordAdaptiveReplanDecision(input: {
+    organizationId: string;
+    incidentId: string;
+    triggerReason: string;
+    decision: 'no_action' | 'policy_permitted' | 'action_created';
+    rationale: string;
+    priorActionId?: string | null;
+    adaptedStrategy?: string | null;
+    actionId?: string | null;
+    confidence?: number | null;
+    policyOutcome?: string | null;
+  }): Promise<void> {
+    const { error } = await this.client.rpc('payscope_append_audit_entry', {
+      p_organization_id: input.organizationId,
+      p_incident_id: input.incidentId,
+      p_event_type: 'adaptive_replan_decision',
+      p_actor_type: 'system',
+      p_actor_id: 'payscope-adaptive-replanner',
+      p_actor_session_hash: null,
+      p_decision: input.decision,
+      p_rationale: input.rationale.slice(0, 1_000),
+      p_confidence: input.confidence ?? null,
+      p_enrichment_snapshot: {
+        source: 'durable_adaptive_replan',
+        triggerReason: input.triggerReason.slice(0, 120),
+        priorActionId: input.priorActionId ?? null,
+        adaptedStrategy: input.adaptedStrategy ?? null,
+        actionId: input.actionId ?? null,
+        policyOutcome: input.policyOutcome ?? null,
+      },
+    });
+    if (error) throw databaseError('adaptive replan audit', error.message);
   }
 
   async createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string> {

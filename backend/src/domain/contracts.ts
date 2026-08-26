@@ -272,6 +272,28 @@ export const DashboardMetricsSchema = z.object({
     compensated: z.number().int().nonnegative(),
     unresolvedReceipts: z.number().int().nonnegative(),
   }).strict(),
+  incidentMetrics: z.object({
+    opened: z.number().int().nonnegative(),
+    active: z.number().int().nonnegative(),
+    resolved: z.number().int().nonnegative(),
+    dismissed: z.number().int().nonnegative(),
+    disputesOpened: z.number().int().nonnegative(),
+  }).strict(),
+  recoveryMetrics: z.object({
+    recoveryRate: z.number().min(0).max(1),
+    medianTimeToRecoveryMs: paise.nullable(),
+  }).strict(),
+  strategyPerformance: z.array(z.object({
+    strategy: ActionTypeSchema,
+    attempted: z.number().int().nonnegative(),
+    confirmed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    cancelled: z.number().int().nonnegative(),
+    recoveryRate: z.number().min(0).max(1),
+  }).strict()).max(16),
+  llmMetrics: z.object({
+    failuresLast24Hours: z.number().int().nonnegative(),
+  }).strict(),
   evaluation: z.object({
     status: z.enum(['not_run', 'available']),
     split: z.enum(['development', 'held_out']).nullable(),

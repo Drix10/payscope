@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { Counter, Registry, Histogram } from 'prom-client';
+import { Counter, Registry, Histogram, Gauge } from 'prom-client';
 import { trace } from '@opentelemetry/api';
 
 export const logger = pino({
@@ -28,5 +28,10 @@ export const executionAttempts = new Counter({ name: 'payscope_execution_attempt
 export const executionLatency = new Histogram({ name: 'payscope_execution_latency_ms', help: 'Execution adapter latency', labelNames: ['capability', 'provider'] as const, buckets: [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000], registers: [metrics] });
 export const callbackVerification = new Counter({ name: 'payscope_callback_verification_total', help: 'Callback verification outcomes', labelNames: ['provider', 'result'] as const, registers: [metrics] });
 export const auditChainBreaks = new Counter({ name: 'payscope_audit_chain_broken_total', help: 'Audit chain break detections', registers: [metrics] });
+export const incidentLifecycleEvents = new Counter({ name: 'payscope_incident_lifecycle_events_total', help: 'Incident lifecycle events observed by the durable worker.', labelNames: ['event', 'status'] as const, registers: [metrics] });
+export const strategyPerformanceEvents = new Counter({ name: 'payscope_strategy_performance_events_total', help: 'Strategy outcomes observed by the execution and reconciliation paths.', labelNames: ['strategy', 'outcome'] as const, registers: [metrics] });
+export const llmFailureEvents = new Counter({ name: 'payscope_llm_failures_total', help: 'LLM investigation failures that caused deterministic fallback/no-action handling.', labelNames: ['stage'] as const, registers: [metrics] });
+export const timeToRecoveryMs = new Histogram({ name: 'payscope_time_to_recovery_ms', help: 'Time from incident open to full recovery.', buckets: [1_000, 10_000, 60_000, 300_000, 900_000, 3_600_000, 21_600_000, 86_400_000, 259_200_000], registers: [metrics] });
+export const recoveryRateGauge = new Gauge({ name: 'payscope_recovery_rate', help: 'Latest observed tenant recovery rate from dashboard metrics.', registers: [metrics] });
 /** No exporter is required for local/VPS operation; hosts can attach one later. */
 export const executionTracer = trace.getTracer('payscope.execution');

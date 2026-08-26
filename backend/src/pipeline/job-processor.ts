@@ -2,7 +2,8 @@ import { Incident, QueueJob, VulcanEnrichment } from '../domain/contracts';
 import { MvpRepository, StoredEvent } from '../db/mvp-repository';
 import { EnrichmentProvider } from '../providers/enrichment/interface';
 import { correlateEvent, IncidentCandidate } from './intake';
-import { logger } from '../observability';
+import { replanIncidentStrategy, ReplanRepository } from '../intelligence/recovery-engine';
+import { incidentLifecycleEvents, logger, timeToRecoveryMs } from '../observability';
 
 export interface DurablePipelineRepository {
   eventById(organizationId: string, eventId: string): Promise<StoredEvent>;
@@ -10,6 +11,13 @@ export interface DurablePipelineRepository {
   correlationCandidates(organizationId: string, incoming: StoredEvent): Promise<IncidentCandidate[]>;
   persistCorrelation(event: StoredEvent, incident: Incident | undefined, enqueueInvestigation: boolean): Promise<void>;
   reconcileDirectPaymentLinkEvent?(organizationId: string, event: StoredEvent['event']): Promise<void>;
+  incidentDetail: ReplanRepository['incidentDetail'];
+  customerProfile: ReplanRepository['customerProfile'];
+  autonomyPolicy: ReplanRepository['autonomyPolicy'];
+  policyContext: NonNullable<ReplanRepository['policyContext']>;
+  executionPolicyContext: NonNullable<ReplanRepository['executionPolicyContext']>;
+  createExecutionActionForSaga: ReplanRepository['createExecutionActionForSaga'];
+  recordAdaptiveReplanDecision: NonNullable<ReplanRepository['recordAdaptiveReplanDecision']>;
 }
 
 export type InvestigationDispatcher = (job: QueueJob) => Promise<void>;
@@ -49,11 +57,22 @@ export class PipelineJobProcessor {
     const result = correlateEvent(event, candidates, job.organizationId);
     const shouldInvestigate = Boolean(result && ['risk_event_opened_incident', 'linked_risk_event', 'dispute_opened'].includes(result.reason));
     await this.repository.persistCorrelation(event, result?.incident, shouldInvestigate);
+    if (result?.incident) {
+      incidentLifecycleEvents.inc({ event: result.reason, status: result.incident.status });
+      if (result.incident.status === 'RESOLVED') {
+        const openedAt = Date.parse(result.incident.openedAt);
+        const resolvedAt = result.incident.resolvedAt ? Date.parse(result.incident.resolvedAt) : NaN;
+        if (Number.isFinite(openedAt) && Number.isFinite(resolvedAt) && resolvedAt >= openedAt) timeToRecoveryMs.observe(resolvedAt - openedAt);
+      }
+    }
     // Reconciliation is downstream of durable event/correlation persistence.
-    // A repeated worker delivery is safe because the reconciler has its own
-    // organization-scoped provider-event inbox guard.
-    if (event.event.eventType === 'payment_link.paid') {
+    // A repeated worker delivery is safe because receipt/compensation writes
+    // are idempotent and execution transitions are monotonic.
+    if (event.event.eventType === 'payment_link.paid' || event.event.eventType === 'payment_link.expired') {
       await this.repository.reconcileDirectPaymentLinkEvent?.(job.organizationId, event.event);
+    }
+    if (!result?.created && result?.incident && ['payment_link.expired', 'recovery.failed'].includes(event.event.eventType)) {
+      await replanIncidentStrategy(this.repository, job.organizationId, result.incident.id, event.event.eventType.replace('.', '_'));
     }
   }
 }

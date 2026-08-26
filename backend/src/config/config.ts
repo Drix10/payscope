@@ -32,6 +32,8 @@ export type RuntimeConfig = {
   directExecutionEnabled: boolean;
   executionPollIntervalMs: number;
   emailEncryptionKey?: string;
+  callbackEncryptionKey?: string;
+  dashboardApiKey?: string;
   smtp?: {
     host: string;
     port: number;
@@ -92,6 +94,10 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   const directExecutionEnabled = boolean(env.PAYSCOPE_DIRECT_EXECUTION_ENABLED, false, 'PAYSCOPE_DIRECT_EXECUTION_ENABLED');
   const directSmtp = smtpConfig(env);
   const emailEncryptionKey = optional(env.PAYSCOPE_EMAIL_ENCRYPTION_KEY);
+  const callbackEncryptionKey = optional(env.PAYSCOPE_CALLBACK_ENCRYPTION_KEY);
+  const dashboardApiKey = optional(env.PAYSCOPE_DASHBOARD_API_KEY);
+  if (callbackEncryptionKey && Buffer.from(callbackEncryptionKey, 'base64').length !== 32) throw new Error('PAYSCOPE_CALLBACK_ENCRYPTION_KEY must be a base64-encoded 32-byte key');
+  if (declaredEnvironment === 'production' && !dashboardApiKey) throw new Error('Production PayScope API requires PAYSCOPE_DASHBOARD_API_KEY');
   if (directExecutionEnabled) {
     if (!razorpayKeyId || !optional(env.RAZORPAY_KEY_SECRET)) throw new Error('Direct execution requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET');
     if (!directSmtp) throw new Error('Direct execution requires SMTP configuration');
@@ -119,6 +125,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     directExecutionEnabled,
     executionPollIntervalMs: positiveInteger(env.PAYSCOPE_EXECUTION_POLL_INTERVAL_MS, 2_000, 'PAYSCOPE_EXECUTION_POLL_INTERVAL_MS'),
     emailEncryptionKey,
+    callbackEncryptionKey,
+    dashboardApiKey,
     smtp: directSmtp,
   };
 }
