@@ -1,15 +1,5 @@
 import { ActionType, AutonomyPolicy, Incident, RiskAnalysis, VulcanEnrichment } from '../domain/contracts';
 
-export type SagaStepType = 'observe' | 'act' | 'wait' | 'replan';
-export type SagaStepDef =
-  | { type: 'observe'; description: string }
-  | { type: 'act'; capability: ActionType; rationale: string }
-  | { type: 'wait'; durationMs: number; description: string }
-  | { type: 'replan'; description: string };
-export type SagaDef = { name: string; displayName: string; steps: SagaStepDef[] };
-export type RecoverySagaRecord = { id: string; organizationId: string; incidentId: string; strategyName: string; status: 'active' | 'completed' | 'abandoned'; currentStepIndex: number; totalSteps: number; outcome: string | null; recoveredPaise: number; vulcanDataSource: string; createdAt: string; completedAt: string | null };
-export type SagaStepRecord = { id: string; organizationId: string; sagaId: string; stepIndex: number; stepType: SagaStepType; capability: ActionType | null; waitDurationMs: number | null; scheduledAt: string; status: string; executedAt: string | null; outcome: Record<string, unknown> | null };
-
 export type CustomerProfile = {
   organizationId: string;
   customerHash: string;
@@ -30,7 +20,7 @@ export type RecoveryStrategy = {
   capabilities: ActionType[];
   baseScore: number;
   customerAdjustment: number;
-  finalScore: number;
+  recoveryValueScore: number;
   expectedValuePaise: number;
   dataSource: 'razorpay_fields_heuristic';
   blockedBy: string | null;
@@ -130,8 +120,8 @@ export function rankStrategies(
       }
     }
 
-    const finalScore = Math.max(0, Math.min(100, baseScore + adjustment));
-    const expectedValuePaise = Math.round((finalScore / 100) * incident.remainingAmountPaise);
+    const recoveryValueScore = Math.max(0, Math.min(100, baseScore + adjustment));
+    const expectedValuePaise = Math.round((recoveryValueScore / 100) * incident.remainingAmountPaise);
     const blockedBy = checkAutonomyPolicy(name, autonomyPolicy);
 
     strategies.push({
@@ -140,7 +130,7 @@ export function rankStrategies(
       capabilities: strategyCaps(name),
       baseScore,
       customerAdjustment: adjustment,
-      finalScore,
+      recoveryValueScore,
       expectedValuePaise,
       dataSource,
       blockedBy,

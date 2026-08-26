@@ -169,7 +169,38 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       memory,
     }, job.organizationId);
 
-    const decision = evaluatePolicy(detail.incident, risk.analysis, recovery.plan, [policyContext.policy], policyContext.stats, policyContext.contact, {
+    // Dynamic Recovery Engine Selection: The Recovery Engine ranks optimal economic strategies based on telemetry & risk
+    const customerProfile = latest?.event.customerHash ? await repository.customerProfile(job.organizationId, latest.event.customerHash).catch(() => null) : null;
+    const autonomyPolicy = await repository.autonomyPolicy(job.organizationId).catch(() => null);
+    const rankedStrategies = rankStrategies(detail.incident, enrichment, risk.analysis, customerProfile, autonomyPolicy);
+    const topStrategy = rankedStrategies[0];
+
+    logger.info({
+      incidentId: job.incidentId,
+      topStrategy: topStrategy?.name ?? 'deliver_recovery_link_email',
+      recoveryValueScore: topStrategy?.recoveryValueScore ?? 0,
+      expectedValuePaise: topStrategy?.expectedValuePaise ?? 0,
+    }, 'Recovery Engine calculated optimal strategy');
+
+    const llmCopyIntent = recovery.plan.proposedActions.find(a => a.emailCopyIntent)?.emailCopyIntent;
+    const strategyCapabilities = topStrategy ? topStrategy.capabilities : ['deliver_recovery_link_email' as const];
+
+    const enginePlan: RecoveryPlan = RecoveryPlanSchema.parse({
+      proposedActions: strategyCapabilities.map(cap => ({
+        actionType: cap,
+        rationale: `Optimal strategy chosen by Recovery Engine: ${topStrategy?.displayName ?? cap} (Score: ${topStrategy?.recoveryValueScore ?? 80}).`,
+        preconditions: ['Merchant opted in to recovery', 'Deterministic policy clearance'],
+        expectedOutcome: `Recover ${detail.incident.remainingAmountPaise} paise via ${topStrategy?.displayName ?? cap}`,
+        estimatedRecoveryPaise: topStrategy?.expectedValuePaise ?? detail.incident.remainingAmountPaise,
+        requiresAutonomousExecution: true,
+        emailCopyIntent: cap === 'deliver_recovery_link_email' ? (llmCopyIntent ?? 'Complete your recent payment securely using our 1-click Razorpay payment link. Reply STOP to opt out.') : undefined,
+      })),
+      noActionReason: topStrategy ? undefined : 'NO_RECOVERY_STRATEGY_AVAILABLE',
+      recoveryProbability: topStrategy ? (topStrategy.recoveryValueScore / 100) : 0,
+      confidence: risk.analysis.confidence,
+    });
+
+    const decision = evaluatePolicy(detail.incident, risk.analysis, enginePlan, [policyContext.policy], policyContext.stats, policyContext.contact, {
       executionPolicy: executionContext?.policy ?? undefined,
       existingCommandKeys: new Set((detail.execution || []).map(action => action.capability)),
       commandKeyForAction: actionType => `${job.organizationId}:${actionType}:${job.incidentId}`,
@@ -177,7 +208,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       amountPaise: detail.incident.remainingAmountPaise,
       currency: latest?.event.currency ?? 'INR',
     });
-    output = { plan: supervisor, risk, recovery, policy: decision };
+    output = { plan: supervisor, risk, recovery: { plan: enginePlan, modelId: recovery.modelId, tokensUsed: recovery.tokensUsed }, policy: decision };
   } catch (error) {
     const attr = enrichment?.failureAttribution ?? 'customer_drop';
     const primaryFailureCategory = attr === 'fraud_block' ? 'fraud_confirmed' : attr === 'gateway_degraded' ? 'infrastructure' : 'customer_error';
@@ -281,7 +312,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       const customerProfile = typeof repository.customerProfile === 'function' ? await repository.customerProfile(job.organizationId, latest?.event.customerHash ?? '') : null;
       const autonomyPolicy = typeof repository.autonomyPolicy === 'function' ? await repository.autonomyPolicy(job.organizationId) : null;
       const ranked = rankStrategies(detail.incident, enrichment, output.risk.analysis, customerProfile, autonomyPolicy);
-      logger.info({ incidentId: job.incidentId, topStrategy: ranked[0]?.name ?? 'deliver_recovery_link_email', score: ranked[0]?.finalScore ?? 0 }, 'PayScope strategy ranked for recovery outbox execution');
+      logger.info({ incidentId: job.incidentId, topStrategy: ranked[0]?.name ?? 'deliver_recovery_link_email', score: ranked[0]?.recoveryValueScore ?? 0 }, 'PayScope strategy ranked for recovery outbox execution');
     } catch (err) {
       logger.warn({ incidentId: job.incidentId, error: err instanceof Error ? err.message : String(err) }, 'PayScope strategy ranking evaluation warning');
     }
