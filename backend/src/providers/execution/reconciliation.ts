@@ -33,6 +33,13 @@ export class Reconciler {
     // If monotonic skipped, error is null and function logs skipped; we swallow
     if (reconcileError && !/monotonic|skipped/i.test(reconcileError.message)) throw new Error(`Reconciliation transition failed: ${reconcileError.message}`);
     strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'confirmed' });
+    // Close learning ledger (idempotent: only pending -> paid transitions)
+    await this.client.rpc('payscope_record_recovery_outcome', {
+      p_organization_id: organizationId, p_action_id: actionId, p_outcome: 'paid', p_actual_recovery_paise: null,
+    }).then(
+      () => {},
+      (e) => { try { const { logger } = require('../../observability'); logger.warn({ organizationId, actionId, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (paid)'); } catch {} }
+    );
     return typeof row.incident_id === 'string' ? row.incident_id : null;
   }
 
@@ -52,6 +59,12 @@ export class Reconciler {
     });
     if (compensationError) throw new Error(`Expired-link compensation failed: ${compensationError.message}`);
     strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'cancelled' });
+    await this.client.rpc('payscope_record_recovery_outcome', {
+      p_organization_id: organizationId, p_action_id: row.id, p_outcome: 'expired', p_actual_recovery_paise: 0,
+    }).then(
+      () => {},
+      (e) => { try { const { logger } = require('../../observability'); logger.warn({ organizationId, actionId: row.id, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (expired)'); } catch {} }
+    );
     return typeof row.incident_id === 'string' ? row.incident_id : null;
   }
 

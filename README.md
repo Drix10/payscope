@@ -13,7 +13,7 @@
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-RLS%20%2B%20Audit-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
 </p>
 
-PayScope turns raw Razorpay webhook events into a tenant-scoped, evidence-backed recovery loop. It correlates payment-failure signals into incident timelines, enriches allowlisted Razorpay payment fields and downtime signals, runs a structured Mesh investigation, ranks a deterministic recovery strategy, enforces 13 policy gates, and—when direct execution is enabled and healthy—dispatches a Razorpay Payment Link through SMTP.
+PayScope turns raw Razorpay webhook events into a tenant-scoped, evidence-backed recovery loop. It correlates payment-failure signals into incident timelines, enriches allowlisted Razorpay payment fields and downtime signals, runs a structured Mesh investigation, ranks a deterministic recovery strategy with merchant-specific learned performance, enforces 13 policy gates, and—when direct execution is enabled and healthy—dispatches a Razorpay Payment Link through SMTP. Every outcome is recorded as an experiment, updating future strategy selection deterministically.
 
 ---
 
@@ -23,7 +23,8 @@ PayScope turns raw Razorpay webhook events into a tenant-scoped, evidence-backed
 2. **Structured Investigation + Deterministic Strategy:** Supervisor, Risk Analyst, and Recovery Planner use bounded JSON with 3 attempts. The model supplies evidence and copy intent; the deterministic Recovery Engine selects the executable strategy.
 3. **Deterministic Policy Safety Engine:** 13 gates validate merchant consent, dispute locks, amount caps, quiet hours, contact frequency limits, provider health, and idempotency before any provider command is dispatched.
 4. **Idempotent Execution & Callback Reconciliation:** Creates traceable recovery actions with unique references (`ps_...`), reconciles ambiguous provider results before retry, marks expired recovery links terminal before adaptive replanning, and confirms financial recovery only from a causally matched, signed callback. When no untried provider-backed capability remains, the engine stops with a durably audited decision instead of inventing actions.
-5. **Real SHA-256 Cryptographic Audit Chain:** Serves real-time merchant revenue analytics (`/api/mvp/revenue-intelligence`) and computes SHA-256 entry hashes across the audit ledger.
+5. **Recovery Policy Learning:** Every intervention is an experiment. Paid/expired outcomes close a durable ledger (`payscope_recovery_outcomes`), updating merchant×failure×segment recovery rates via Beta-Binomial posterior with Thompson sampling. Future rankings use empirical expected recovery value — deterministic, no LLM policy mutation, with 5% exploration and cold-start prior.
+6. **Real SHA-256 Cryptographic Audit Chain:** Serves real-time merchant revenue analytics (`/api/mvp/revenue-intelligence`) and computes SHA-256 entry hashes across the audit ledger.
 
 ---
 

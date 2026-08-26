@@ -1,5 +1,6 @@
-import { ActionType, AutonomyPolicy, Incident, RecoveryPlanSchema, RiskAnalysis, TelemetryEnrichment } from '../domain/contracts';
+import { ActionType, AutonomyPolicy, Incident, RecoveryOutcomeStats, RecoveryPlanSchema, RiskAnalysis, TelemetryEnrichment } from '../domain/contracts';
 import { evaluatePolicy, ExecutionPolicy, MerchantPolicy, OrgDailyStats, CustomerContactStats } from '../pipeline/policy-evaluator';
+import { scoreStrategy } from './recovery-policy-learner';
 
 export type CustomerProfile = {
   organizationId: string;
@@ -25,6 +26,10 @@ export type RecoveryStrategy = {
   heuristicRecoveryEstimatePaise: number;
   dataSource: 'razorpay_fields_heuristic';
   blockedBy: string | null;
+  posteriorRate?: number;
+  historicalRate?: number | null;
+  sampleSize?: number;
+  exploration?: boolean;
 };
 
 const ATTRIBUTION_STRATEGY_SCORES: Record<string, Record<string, number>> = {
@@ -95,12 +100,21 @@ function checkAutonomyPolicy(name: string, policy: AutonomyPolicy | null): strin
   return null;
 }
 
+function customerSegmentForLearner(profile: CustomerProfile | null, amountPaise: number): 'new' | 'repeat' | 'high' | 'unknown' {
+  if (!profile) return 'unknown';
+  if (amountPaise >= 500_000) return 'high';
+  if (profile.successfulPaymentCount >= 5) return 'repeat';
+  return 'new';
+}
+
 export function rankStrategies(
   incident: Incident,
   enrichment: TelemetryEnrichment | null,
   riskAnalysis: RiskAnalysis,
   customerProfile: CustomerProfile | null,
-  autonomyPolicy: AutonomyPolicy | null
+  autonomyPolicy: AutonomyPolicy | null,
+  historicalByStrategy?: Map<string, RecoveryOutcomeStats | null>,
+  explorationSeed?: string
 ): RecoveryStrategy[] {
   if (riskAnalysis.failureRootCause === 'fraud_confirmed' || riskAnalysis.failureRootCause === 'fraud_suspected' || enrichment?.failureAttribution === 'fraud_block') {
     return [];
@@ -131,9 +145,23 @@ export function rankStrategies(
       }
     }
 
-    const recoveryValueScore = Math.max(0, Math.min(100, baseScore + adjustment));
-    const heuristicRecoveryEstimatePaise = Math.round((recoveryValueScore / 100) * incident.remainingAmountPaise);
+    let recoveryValueScore: number;
+    let heuristicRecoveryEstimatePaise: number;
+    let strategyRationale = '';
+    let isExploration = false;
+    if (historicalByStrategy && process.env.PAYSCOPE_LEARNING_ENABLED !== 'false') {
+      const hist = historicalByStrategy.get(name) ?? null;
+      const scored = scoreStrategy({ baseScore, historical: hist, amountPaise: incident.remainingAmountPaise, confidence: riskAnalysis.confidence, customerAdjustment: adjustment }, explorationSeed ?? incident.id + ':' + name);
+      recoveryValueScore = scored.recoveryValueScore;
+      heuristicRecoveryEstimatePaise = scored.heuristicRecoveryEstimatePaise;
+      strategyRationale = scored.rationale;
+      isExploration = scored.exploration;
+    } else {
+      recoveryValueScore = Math.max(0, Math.min(100, baseScore + adjustment));
+      heuristicRecoveryEstimatePaise = Math.round((recoveryValueScore / 100) * incident.remainingAmountPaise);
+    }
     const blockedBy = checkAutonomyPolicy(name, autonomyPolicy);
+    const histForLedger = historicalByStrategy?.get(name) ?? null;
 
     strategies.push({
       name,
@@ -145,6 +173,10 @@ export function rankStrategies(
       heuristicRecoveryEstimatePaise,
       dataSource,
       blockedBy,
+      posteriorRate: historicalByStrategy ? (histForLedger ? histForLedger.recoveryRate : 0.18) : undefined,
+      historicalRate: histForLedger ? histForLedger.recoveryRate : null,
+      sampleSize: histForLedger?.attempts ?? 0,
+      exploration: isExploration || undefined,
     });
   }
 
@@ -175,7 +207,9 @@ export function adaptRecoveryStrategy(
   enrichment: TelemetryEnrichment | null,
   riskAnalysis: RiskAnalysis,
   customerProfile: CustomerProfile | null,
-  autonomyPolicy: AutonomyPolicy | null
+  autonomyPolicy: AutonomyPolicy | null,
+  historicalByStrategy?: Map<string, import('../domain/contracts').RecoveryOutcomeStats | null>,
+  explorationSeed?: string
 ): RecoveryStrategy | null {
   // Fraud and dispute hard stops
   if (
@@ -186,7 +220,7 @@ export function adaptRecoveryStrategy(
   ) {
     return null;
   }
-  const ranked = rankStrategies(incident, enrichment, riskAnalysis, customerProfile, autonomyPolicy);
+  const ranked = rankStrategies(incident, enrichment, riskAnalysis, customerProfile, autonomyPolicy, historicalByStrategy, explorationSeed ?? incident.id + ':adapt');
   const untried = ranked.filter(s =>
     !previousStrategiesTried.includes(s.name) &&
     s.capabilities.every(cap => !previousStrategiesTried.includes(cap))
@@ -197,7 +231,7 @@ export function adaptRecoveryStrategy(
 export type ReplanRepository = {
   incidentDetail(organizationId: string, incidentId: string): Promise<{
     incident: Incident;
-    events: Array<{ id: string; event: { customerHash?: string; eventType: string; currency?: string }; enrichment?: TelemetryEnrichment | null }>;
+    events: Array<{ id: string; event: { customerHash?: string; eventType: string; currency?: string; paymentMethod?: string }; enrichment?: TelemetryEnrichment | null }>;
     investigation: { riskAnalysis: RiskAnalysis | null } | null;
     execution: Array<{ id?: string; capability: ActionType; command_key?: string; state?: 'queued' | 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'retry_scheduled' | 'compensating' | 'failed' | 'cancelled' }>;
   } | null>;
@@ -205,7 +239,8 @@ export type ReplanRepository = {
   autonomyPolicy(organizationId: string): Promise<AutonomyPolicy | null>;
   policyContext?(organizationId: string, incidentId: string, customerHash?: string): Promise<{ policy: MerchantPolicy; stats: OrgDailyStats; contact: CustomerContactStats }>;
   executionPolicyContext?(organizationId: string): Promise<{ policy: ExecutionPolicy; existingCommandKeys: Set<string> }>;
-  createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string>;
+  createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number, ledgerContext?: unknown): Promise<string>;
+  recoveryOutcomeStats?(organizationId: string, strategy: string, failureCategory: string, customerSegment: string): Promise<import('../domain/contracts').RecoveryOutcomeStats | null>;
   recordAdaptiveReplanDecision?(input: {
     organizationId: string;
     incidentId: string;
@@ -272,6 +307,19 @@ export async function replanIncidentStrategy(
   // synthetic "customer without history" profile that could unlock action.
   const customerProfile = latest?.event.customerHash ? await repository.customerProfile(organizationId, latest.event.customerHash) : null;
   const autonomyPolicy = await repository.autonomyPolicy(organizationId);
+  // Learning context for adaptive ranking (deterministic, no LLM)
+  const customerSegmentForAdapt = customerProfile
+    ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfile.successfulPaymentCount >= 5 ? 'repeat' : 'new')
+    : 'unknown';
+  const failureCatForAdapt = enrichment?.failureAttribution ?? 'unknown';
+  let histForAdapt: Map<string, RecoveryOutcomeStats | null> | undefined;
+  if (process.env.PAYSCOPE_LEARNING_ENABLED !== 'false' && typeof (repository as unknown as { recoveryOutcomeStats?: unknown }).recoveryOutcomeStats === 'function') {
+    try {
+      const h = await (repository as unknown as { recoveryOutcomeStats: (o: string, s: string, c: string, seg: string) => Promise<RecoveryOutcomeStats | null> })
+        .recoveryOutcomeStats(organizationId, 'deliver_recovery_link_email', failureCatForAdapt, customerSegmentForAdapt);
+      histForAdapt = new Map([['deliver_recovery_link_email', h]]);
+    } catch { /* stats failure degrades to baseScore-only, never blocks replan */ }
+  }
 
   const tried = (detail.execution || []).flatMap((a: { capability: ActionType; command_key?: string }) => {
     const list: string[] = [a.capability];
@@ -279,7 +327,7 @@ export async function replanIncidentStrategy(
     return list;
   });
 
-  const adapted = adaptRecoveryStrategy(tried, detail.incident, enrichment, realRiskAnalysis, customerProfile, autonomyPolicy);
+  const adapted = adaptRecoveryStrategy(tried, detail.incident, enrichment, realRiskAnalysis, customerProfile, autonomyPolicy, histForAdapt, incidentId + ':adapt');
   if (!adapted) {
     await audit('no_action', 'Adaptive replan skipped because no untried provider-backed strategy is available.', { priorActionId: priorFailedAction.id ?? null, confidence: realRiskAnalysis.confidence });
     return { adaptedStrategy: null, actionId: null };
@@ -331,12 +379,24 @@ export async function replanIncidentStrategy(
   }
 
   await audit('policy_permitted', 'Adaptive replan passed deterministic policy and will enqueue a provider-backed command.', { priorActionId: priorFailedAction.id ?? null, adaptedStrategy: adapted.name, confidence: realRiskAnalysis.confidence, policyOutcome: decision.outcome });
+  const consideredForLedger = [{ strategy: adapted.capabilities[0], baseScore: adapted.baseScore, historicalRate: adapted.historicalRate ?? null, sampleSize: adapted.sampleSize ?? 0 }];
   const actionId = await repository.createExecutionActionForSaga(
     organizationId,
     incidentId,
     adapted.capabilities[0],
     `Adaptive recovery execution (Replan reason: ${reason})`,
-    detail.incident.remainingAmountPaise
+    detail.incident.remainingAmountPaise,
+    {
+      customerHash: latest?.event.customerHash,
+      failureCategory: failureCatForAdapt,
+      paymentMethod: latest?.event.paymentMethod,
+      customerSegment: customerSegmentForAdapt,
+      expectedRecoveryPaise: adapted.heuristicRecoveryEstimatePaise,
+      consideredStrategies: consideredForLedger,
+      exploration: adapted.exploration ?? false,
+      confidence: realRiskAnalysis.confidence,
+      riskScore: realRiskAnalysis.confidence,
+    }
   );
   await audit('action_created', 'Adaptive replan created an immutable provider-backed execution action.', { priorActionId: priorFailedAction.id ?? null, adaptedStrategy: adapted.name, actionId, confidence: realRiskAnalysis.confidence, policyOutcome: decision.outcome });
 

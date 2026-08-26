@@ -35,6 +35,8 @@ export type RuntimeConfig = {
   callbackEncryptionKey?: string;
   /** dashboardApiKeys[0] is the active key; any further entries are previous keys still accepted during rotation. */
   dashboardApiKeys: string[];
+  learningEnabled: boolean;
+  agentDeadlineMs: number;
   smtp?: {
     host: string;
     port: number;
@@ -114,6 +116,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     if (!emailEncryptionKey) throw new Error('Direct execution requires PAYSCOPE_EMAIL_ENCRYPTION_KEY');
     if (Buffer.from(emailEncryptionKey, 'base64').length !== 32) throw new Error('PAYSCOPE_EMAIL_ENCRYPTION_KEY must be a base64-encoded 32-byte key');
   }
+  const learningEnabled = boolean(env.PAYSCOPE_LEARNING_ENABLED, true, 'PAYSCOPE_LEARNING_ENABLED');
+  const agentDeadlineMs = positiveInteger(env.PAYSCOPE_AGENT_DEADLINE_MS, 240_000, 'PAYSCOPE_AGENT_DEADLINE_MS');
 
   return {
     environment: declaredEnvironment as RuntimeConfig['environment'],
@@ -137,6 +141,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     emailEncryptionKey,
     callbackEncryptionKey,
     dashboardApiKeys,
+    learningEnabled,
+    agentDeadlineMs,
     smtp: directSmtp,
   };
 }

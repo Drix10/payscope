@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ActionProposal, ActionProposalSchema, ActionType, ActionTypeSchema, AuditEntry, AuditEntrySchema, AutonomyPolicy, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, ExecutionActionSummary, ExecutionActionSummarySchema, ExecutionStateSchema, Incident, IncidentSchema, IncidentStatus, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, TelemetryEnrichment, TelemetryEnrichmentSchema } from '../domain/contracts';
+import { ActionProposal, ActionProposalSchema, ActionType, ActionTypeSchema, AuditEntry, AuditEntrySchema, AutonomyPolicy, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, ExecutionActionSummary, ExecutionActionSummarySchema, ExecutionStateSchema, Incident, IncidentSchema, IncidentStatus, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryOutcome, RecoveryOutcomeSchema, RecoveryOutcomeStats, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, TelemetryEnrichment, TelemetryEnrichmentSchema } from '../domain/contracts';
 import { CustomerContactStats, ExecutionPolicy, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
 import { canCorrelateWithTerminalIncident, CorrelationEvent, IncidentCandidate } from '../pipeline/intake';
 import { Reconciler } from '../providers/execution/reconciliation';
@@ -631,7 +631,48 @@ export class MvpRepository {
     if (error) throw databaseError('adaptive replan audit', error.message);
   }
 
-  async createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string> {
+  // Helpers for recovery outcome learning (deterministic, no LLM)
+  customerSegmentForProfile(profile: CustomerProfile | null, amountPaise: number): 'new' | 'repeat' | 'high' | 'unknown' {
+    if (!profile) return 'unknown';
+    if (amountPaise >= 500_000) return 'high';
+    if (profile.successfulPaymentCount >= 5) return 'repeat';
+    return 'new';
+  }
+
+  async recoveryOutcomeStats(organizationId: string, strategy: string, failureCategory: string, customerSegment: string): Promise<RecoveryOutcomeStats | null> {
+    const { data, error } = await this.client
+      .from('payscope_recovery_outcomes')
+      .select('outcome, time_to_recovery_ms')
+      .eq('organization_id', organizationId)
+      .eq('strategy', strategy)
+      .eq('failure_category', failureCategory)
+      .eq('customer_segment', customerSegment)
+      .neq('outcome', 'pending')
+      .limit(200);
+    if (error) throw databaseError('recovery outcome stats', error.message);
+    const rows = (data ?? []) as Array<{ outcome: string; time_to_recovery_ms: number | null }>;
+    if (!rows.length) return null;
+    const attempts = rows.length;
+    const paid = rows.filter(r => r.outcome === 'paid').length;
+    const times = rows.map(r => r.time_to_recovery_ms).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    return {
+      strategy, failureCategory, customerSegment, attempts, paid,
+      recoveryRate: attempts ? paid / attempts : 0,
+      avgTimeToRecoveryMs: times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null,
+    };
+  }
+
+  async recordRecoveryOutcome(organizationId: string, actionId: string, outcome: 'paid' | 'expired' | 'failed' | 'cancelled', actualRecoveryPaise: number | null): Promise<void> {
+    const { error } = await this.client.rpc('payscope_record_recovery_outcome', {
+      p_organization_id: organizationId,
+      p_action_id: actionId,
+      p_outcome: outcome,
+      p_actual_recovery_paise: actualRecoveryPaise,
+    });
+    if (error) throw databaseError('recovery outcome close', error.message);
+  }
+
+  async createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number, ledgerContext?: { customerHash?: string; failureCategory?: string; paymentMethod?: string; customerSegment?: string; expectedRecoveryPaise?: number | null; consideredStrategies?: Array<{ strategy: ActionType; baseScore: number; historicalRate: number | null; sampleSize: number }>; exploration?: boolean; confidence?: number | null; riskScore?: number | null }): Promise<string> {
     // Replans may only enqueue the capability backed by the transactional
     // direct-execution RPC. Other ranked strategies remain no-action until
     // they have their own provider contract and atomic outbox function.
@@ -639,10 +680,47 @@ export class MvpRepository {
     const commandKey = `${organizationId}:${capability}:${incidentId}`;
     const detail = await this.incidentDetail(organizationId, incidentId).catch(() => null);
     const latestEvent = detail?.events.at(-1);
-    const customerHash = latestEvent?.event.customerHash ?? createHash('sha256').update(`${organizationId}:${incidentId}`).digest('hex').slice(0, 64);
+    const customerHash = ledgerContext?.customerHash ?? latestEvent?.event.customerHash ?? createHash('sha256').update(`${organizationId}:${incidentId}`).digest('hex').slice(0, 64);
     const referenceId = `ps_${randomUUID().replace(/-/g, '')}`;
     const payload = { customerHash, referenceId, copyIntent: rationale };
     const payloadHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+
+    // Atomic path with ledger when learning context is supplied (PAYSCOPE_LEARNING_ENABLED, default on).
+    if (ledgerContext && process.env.PAYSCOPE_LEARNING_ENABLED !== 'false') {
+      try {
+        const { data: ledgerData, error: ledgerError } = await this.client.rpc('payscope_enqueue_with_ledger', {
+          p_organization_id: organizationId,
+          p_incident_id: incidentId,
+          p_proposal_id: null,
+          p_command_key: commandKey,
+          p_command_payload: payload,
+          p_command_payload_hash: payloadHash,
+          p_payment_id: latestEvent?.event.paymentId ?? null,
+          p_order_id: latestEvent?.event.orderId ?? null,
+          p_amount_paise: amountPaise,
+          p_currency: latestEvent?.event.currency ?? 'INR',
+          p_customer_hash: ledgerContext.customerHash ?? customerHash,
+          p_failure_category: ledgerContext.failureCategory ?? 'unknown',
+          p_payment_method: (ledgerContext.paymentMethod ?? latestEvent?.event.paymentMethod ?? 'unknown').slice(0, 80),
+          p_customer_segment: ledgerContext.customerSegment ?? 'unknown',
+          p_strategy: capability,
+          p_expected_recovery_paise: ledgerContext.expectedRecoveryPaise ?? null,
+          p_considered_strategies: (ledgerContext.consideredStrategies ?? []).slice(0, 6) as unknown as never,
+          p_exploration: ledgerContext.exploration ?? false,
+          p_confidence: ledgerContext.confidence ?? null,
+          p_risk_score: ledgerContext.riskScore ?? null,
+        });
+        if (!ledgerError && typeof ledgerData === 'string') return ledgerData;
+        // If ledger function not yet deployed, fall through to legacy path (migration 015 pending)
+        if (ledgerError && !/could not find|does not exist|PGRST202/i.test(ledgerError.message)) throw ledgerError;
+      } catch (e) {
+        if (e instanceof Error && /could not find|does not exist|PGRST202/i.test(e.message)) {
+          // fall through
+        } else if (e instanceof Error) {
+          throw databaseError('atomic ledger enqueue', e.message);
+        }
+      }
+    }
 
     const { data, error } = await this.client.rpc('payscope_enqueue_recovery_email_action', {
       p_organization_id: organizationId,
@@ -658,6 +736,13 @@ export class MvpRepository {
     });
     if (error || typeof data !== 'string') throw databaseError('atomic replan action enqueue', error?.message ?? 'invalid action id');
     return data;
+  }
+
+  async delayOutboxForAction(organizationId: string, actionId: string, delayMs: number): Promise<void> {
+    if (!Number.isSafeInteger(delayMs) || delayMs <= 0 || delayMs > 12 * 3600_000) return;
+    const nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
+    const { error } = await this.client.from('payscope_execution_outbox').update({ next_attempt_at: nextAttemptAt, updated_at: new Date().toISOString() }).eq('organization_id', organizationId).eq('action_id', actionId).eq('status', 'pending');
+    if (error) logger.warn({ organizationId, actionId, error: error.message }, 'Adaptive timing outbox delay failed');
   }
 
   async updateIncidentStatus(incidentId: string, organizationId: string, status: IncidentStatus, recoveredAmountPaise: number, remainingAmountPaise: number): Promise<void> {

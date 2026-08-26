@@ -340,6 +340,37 @@ export const ExecutionActionSummarySchema = z.object({
   completedAt: isoDateTime.nullable(),
 }).strict();
 
+export const RecoveryOutcomeSchema = z.object({
+  id: uuid,
+  organizationId: uuid,
+  incidentId: uuid,
+  actionId: uuid.nullable(),
+  customerHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  failureCategory: z.string().min(1).max(80),
+  paymentMethod: z.string().min(1).max(80),
+  amountPaise: paise,
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  customerSegment: z.enum(['new', 'repeat', 'high', 'unknown']),
+  strategy: ActionTypeSchema,
+  policyVersion: z.string().max(160).nullable(),
+  capabilityVersion: z.string().max(160).nullable(),
+  sendAt: isoDateTime,
+  channel: z.enum(['email']),
+  riskScore: z.number().min(0).max(1).nullable(),
+  confidence: z.number().min(0).max(1).nullable(),
+  expectedRecoveryPaise: paise.nullable(),
+  consideredStrategies: z.array(z.object({ strategy: ActionTypeSchema, baseScore: z.number().min(0).max(100), historicalRate: z.number().min(0).max(1).nullable(), sampleSize: z.number().int().nonnegative() }).strict()).max(6),
+  exploration: z.boolean(),
+  outcome: z.enum(['pending', 'paid', 'expired', 'failed', 'cancelled']),
+  actualRecoveryPaise: paise.nullable(),
+  timeToRecoveryMs: z.number().int().nonnegative().nullable(),
+  reconciledAt: isoDateTime.nullable(),
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+}).strict();
+
+export type RecoveryOutcome = z.infer<typeof RecoveryOutcomeSchema>;
+
 export const AutonomyPolicySchema = z.object({
   organizationId: uuid,
   maxAutoRecoveryPaise: z.number().int().nonnegative(),
@@ -378,3 +409,5 @@ export type QueueJob = z.infer<typeof QueueJobSchema>;
 export type DashboardQueryResponse = z.infer<typeof DashboardQueryResponseSchema>;
 export type DashboardMetrics = z.infer<typeof DashboardMetricsSchema>;
 export type ExecutionActionSummary = z.infer<typeof ExecutionActionSummarySchema>;
+export type RecoveryOutcomeStatsInput = { strategy: string; failureCategory: string; customerSegment: string; attempts: number; paid: number };
+export type RecoveryOutcomeStats = { strategy: string; failureCategory: string; customerSegment: string; attempts: number; paid: number; recoveryRate: number; avgTimeToRecoveryMs: number | null };

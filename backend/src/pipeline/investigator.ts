@@ -192,7 +192,23 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     const customerHash = latest?.event.customerHash;
     const customerProfile = customerHash ? await guardDurableRead(() => repository.customerProfile(job.organizationId, customerHash)) : null;
     const autonomyPolicy = await guardDurableRead(() => repository.autonomyPolicy(job.organizationId));
-    const rankedStrategies = rankStrategies(detail.incident, enrichment, risk.analysis, customerProfile, autonomyPolicy);
+    // Learning: merchant-specific historical performance (deterministic, no LLM)
+    const customerSegment = customerProfile
+      ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfile.successfulPaymentCount >= 5 ? 'repeat' : 'new')
+      : 'unknown';
+    const failureCategory = enrichment?.failureAttribution ?? 'unknown';
+    let historicalByStrategy: Map<string, import('../domain/contracts').RecoveryOutcomeStats | null> | undefined;
+    if (process.env.PAYSCOPE_LEARNING_ENABLED !== 'false' && typeof (repository as unknown as { recoveryOutcomeStats?: unknown }).recoveryOutcomeStats === 'function') {
+      let hist: import('../domain/contracts').RecoveryOutcomeStats | null = null;
+      try {
+        hist = await (repository as unknown as { recoveryOutcomeStats: (org: string, strat: string, cat: string, seg: string) => Promise<import('../domain/contracts').RecoveryOutcomeStats | null> })
+          .recoveryOutcomeStats(job.organizationId, 'deliver_recovery_link_email', failureCategory, customerSegment);
+      } catch {
+        hist = null; // learning degradation is soft — fallback to prior, never fail-closed
+      }
+      historicalByStrategy = new Map([['deliver_recovery_link_email', hist]]);
+    }
+    const rankedStrategies = rankStrategies(detail.incident, enrichment, risk.analysis, customerProfile, autonomyPolicy, historicalByStrategy, job.incidentId);
     const topStrategy = rankedStrategies[0];
 
     logger.info({
@@ -344,10 +360,64 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
 
   if (output.policy.outcome === 'auto_with_proposals' && output.policy.permittedActions.length > 0) {
     try {
-      const customerProfile = typeof repository.customerProfile === 'function' ? await repository.customerProfile(job.organizationId, latest?.event.customerHash ?? '') : null;
-      const autonomyPolicy = typeof repository.autonomyPolicy === 'function' ? await repository.autonomyPolicy(job.organizationId) : null;
-      const ranked = rankStrategies(detail.incident, enrichment, output.risk.analysis, customerProfile, autonomyPolicy);
-      logger.info({ incidentId: job.incidentId, topStrategy: ranked[0]?.name ?? 'no_strategy_available', score: ranked[0]?.recoveryValueScore ?? 0 }, 'PayScope strategy ranked for recovery outbox execution');
+      const customerProfileForLog = typeof repository.customerProfile === 'function' ? await repository.customerProfile(job.organizationId, latest?.event.customerHash ?? '').catch(() => null) : null;
+      const autonomyPolicyForLog = typeof repository.autonomyPolicy === 'function' ? await repository.autonomyPolicy(job.organizationId).catch(() => null) : null;
+      // Recompute with learning for log consistency (no extra DB cost if stats already fetched above; recompute is cheap)
+      let histForLog: Map<string, import('../domain/contracts').RecoveryOutcomeStats | null> | undefined;
+      if (process.env.PAYSCOPE_LEARNING_ENABLED !== 'false' && typeof (repository as unknown as { recoveryOutcomeStats?: unknown }).recoveryOutcomeStats === 'function' && latest?.event.customerHash) {
+        const seg = customerProfileForLog ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfileForLog.successfulPaymentCount >= 5 ? 'repeat' : 'new') : 'unknown';
+        const cat = enrichment?.failureAttribution ?? 'unknown';
+        const h = await (repository as unknown as { recoveryOutcomeStats: (o: string, s: string, c: string, seg: string) => Promise<import('../domain/contracts').RecoveryOutcomeStats | null> }).recoveryOutcomeStats(job.organizationId, 'deliver_recovery_link_email', cat, seg).catch(() => null);
+        histForLog = new Map([['deliver_recovery_link_email', h]]);
+      }
+      const ranked = rankStrategies(detail.incident, enrichment, output.risk.analysis, customerProfileForLog, autonomyPolicyForLog, histForLog, job.incidentId);
+      logger.info({ incidentId: job.incidentId, topStrategy: ranked[0]?.name ?? 'no_strategy_available', score: ranked[0]?.recoveryValueScore ?? 0, exploration: ranked[0]?.exploration ?? false }, 'PayScope strategy ranked for recovery outbox execution');
+      // Enqueue direct execution action with outcome ledger (atomic) — only when direct execution is enabled and a strategy exists
+      if (options.directExecution && ranked[0] && ranked[0].capabilities.includes('deliver_recovery_link_email') && typeof (repository as unknown as { createExecutionActionForSaga?: unknown }).createExecutionActionForSaga === 'function') {
+        const top = ranked[0];
+        const seg = customerProfileForLog ? (detail.incident.remainingAmountPaise >= 500_000 ? 'high' : customerProfileForLog.successfulPaymentCount >= 5 ? 'repeat' : 'new') : 'unknown';
+        const cat = enrichment?.failureAttribution ?? 'unknown';
+        const hist = histForLog?.get('deliver_recovery_link_email') ?? null;
+        const considered = ranked.slice(0, 3).map(s => ({ strategy: s.capabilities[0], baseScore: s.baseScore, historicalRate: s.historicalRate ?? null, sampleSize: s.sampleSize ?? 0 }));
+        try {
+          const actionId = await (repository as unknown as { createExecutionActionForSaga: (o: string, i: string, c: import('../domain/contracts').ActionType, r: string, a: number, ctx?: unknown) => Promise<string> }).createExecutionActionForSaga(
+            job.organizationId, job.incidentId, 'deliver_recovery_link_email',
+            `Autonomous recovery: ${top.displayName} (score ${top.recoveryValueScore})`,
+            detail.incident.remainingAmountPaise,
+            {
+              customerHash: latest?.event.customerHash,
+              failureCategory: cat,
+              paymentMethod: latest?.event.paymentMethod,
+              customerSegment: seg,
+              expectedRecoveryPaise: top.heuristicRecoveryEstimatePaise,
+              consideredStrategies: considered,
+              exploration: top.exploration ?? false,
+              confidence: output.risk.analysis.confidence,
+              riskScore: output.risk.analysis.confidence,
+            }
+          );
+          // Adaptive timing: night (0-6h IST) → delay to 09:00 IST, capped 12h, via outbox next_attempt_at.
+          try {
+            const tz = executionContextResult?.policy?.timezone ?? 'Asia/Kolkata';
+            const now = new Date();
+            const hourStr = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', hourCycle: 'h23' }).format(now);
+            const hour = Number(hourStr);
+            if (Number.isInteger(hour) && hour >= 0 && hour < 6) {
+              const target = new Date(now);
+              target.setHours(9, 15, 0, 0);
+              // If target is in the past (should not happen for 0-6), roll to next day
+              if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+              const delayMs = target.getTime() - now.getTime();
+              if (delayMs > 0 && delayMs <= 12 * 3600_000 && typeof (repository as unknown as { delayOutboxForAction?: unknown }).delayOutboxForAction === 'function') {
+                await (repository as unknown as { delayOutboxForAction: (o: string, a: string, d: number) => Promise<void> }).delayOutboxForAction(job.organizationId, actionId, delayMs);
+                logger.info({ incidentId: job.incidentId, actionId, delayMs, hour }, 'Adaptive timing deferred recovery to business morning');
+              }
+            }
+          } catch { /* timing is best-effort, never blocks enqueue */ }
+        } catch (enqueueErr) {
+          logger.warn({ incidentId: job.incidentId, error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr) }, 'Direct execution enqueue with ledger failed');
+        }
+      }
     } catch (err) {
       logger.warn({ incidentId: job.incidentId, error: err instanceof Error ? err.message : String(err) }, 'PayScope strategy ranking evaluation warning');
     }
