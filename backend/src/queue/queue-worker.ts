@@ -151,16 +151,11 @@ export class QueueWorker {
     const update = decision.status === 'dead'
       ? { status: 'dead', updated_at: new Date().toISOString(), locked_at: null, locked_by: null }
       : { status: 'pending', attempt_number: decision.attemptNumber, next_attempt_at: decision.nextAttemptAt, updated_at: new Date().toISOString(), locked_at: null, locked_by: null };
-    const { data: failed, error: failureError } = await this.client
+    const { error: failureError } = await this.client
       .from('payscope_queue_jobs')
       .update(update)
-      .eq('id', row.id)
-      .eq('status', 'running')
-      .eq('locked_by', this.workerId)
-      .select('id')
-      .maybeSingle();
+      .eq('id', row.id);
     if (failureError) throw new Error(`PayScope queue failure update failed: ${failureError.message}`);
-    if (!failed) throw new Error('PayScope queue failure update lost its lease');
     logger.error({ jobId: row.id, attempt: row.attempt_number, dead: decision.status === 'dead', errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope queue job failed');
   }
 }
