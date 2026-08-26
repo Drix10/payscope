@@ -37,6 +37,7 @@ export type RuntimeConfig = {
   dashboardApiKeys: string[];
   learningEnabled: boolean;
   agentDeadlineMs: number;
+  recoveryPriorRate: number;
   smtp?: {
     host: string;
     port: number;
@@ -118,6 +119,13 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   }
   const learningEnabled = boolean(env.PAYSCOPE_LEARNING_ENABLED, true, 'PAYSCOPE_LEARNING_ENABLED');
   const agentDeadlineMs = positiveInteger(env.PAYSCOPE_AGENT_DEADLINE_MS, 240_000, 'PAYSCOPE_AGENT_DEADLINE_MS');
+  const recoveryPriorRate = (() => {
+    const raw = optional(env.PAYSCOPE_RECOVERY_PRIOR_RATE);
+    if (!raw) return 0.18;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0 || n >= 1) throw new Error('PAYSCOPE_RECOVERY_PRIOR_RATE must be a number between 0 and 1 exclusive');
+    return n;
+  })();
 
   return {
     environment: declaredEnvironment as RuntimeConfig['environment'],
@@ -143,6 +151,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     dashboardApiKeys,
     learningEnabled,
     agentDeadlineMs,
+    recoveryPriorRate,
     smtp: directSmtp,
   };
 }

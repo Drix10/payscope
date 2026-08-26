@@ -61,7 +61,8 @@ export type ActiveRescue = {
   strategyDisplayName: string;
   telemetryAttribution: string;
   telemetryDataSource: 'razorpay_fields_heuristic';
-  sagaStep: string;
+  sagaStep: string; // deprecated: use step
+  step: string;
   elapsedMs: number;
 }
 
@@ -74,5 +75,5 @@ export type RevenueIntelligence = {
   merchantInterventionCount: number;
   telemetrySignalCoverage: number;
   activeRescues: ActiveRescue[];
-  autonomous: { investigated: number; sagasCreated: number; actionsExecuted: number; paymentsRecovered: number };
+  autonomous: { investigated: number; sagasCreated: number; investigationsCreated: number; actionsExecuted: number; paymentsRecovered: number };
 }

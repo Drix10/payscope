@@ -134,7 +134,20 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 
 ---
 
-### ⏱️ 4:00 – 5:00 | Segment 6: Cryptographic Audit Trail & Operational Intelligence Query
+### ⏱️ 4:00 – 4:40 | Segment 6: Recovery Policy Learning — Why PayScope Chose This Action
+
+| Field | Detail / Instruction |
+|---|---|
+| **Screen State** | Full-Screen Right Window (Dashboard) — Recovery Intelligence panel. |
+| **Operator Action** | 1. Hover the **"Why this action?"** tooltip on the latest incident (shows historical rate, sample size, Wilson interval, and exploration flag).<br />2. Point to the **Strategy Performance** table (merchant × failure × segment).<br />3. Note the **"Estimated ₹42,500 (n=47, 34% [28%–41%])"** — never *Expected* — and the 5% exploration badge when present. |
+| **Visual Target** | Highlight that ranking used empirical posterior (Beta-Binomial, prior 18% configurable) with Thompson-inspired deterministic exploration, not a static score. |
+
+🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
+> "This is where PayScope learns. For this merchant, this failure category, and this customer segment, we've observed 47 prior attempts — 34% recovered, Wilson interval 28 to 41%. The engine's posterior, not a hard-coded score, drove the choice.
+> 
+> Every intervention is an experiment: send time, channel, expected recovery, and actual outcome are written to the durable `recovery_outcomes` ledger. Paid, expired, failed and cancelled all close the loop exactly once — so the next decision is measurably different. No LLM ever mutates policy; statistics do."
+
+### ⏱️ 4:40 – 5:00 | Segment 7: Cryptographic Audit Trail & Operational Intelligence Query
 
 | Field | Detail / Instruction |
 |---|---|
@@ -143,11 +156,11 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 | **Visual Target** | Highlight the unbroken cryptographic audit sequence and the instant structured query answer. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "Every action taken by PayScope is 100% auditable. Every decision, evidence evaluation, and provider command is logged to an immutable cryptographic audit chain with real-time integrity verification.
+> "Every action remains 100% auditable — decisions, receipts, and callbacks are hash-chained with DB-serialized sequencing, and any audit write failure retries the job instead of silently disappearing.
 > 
-> Merchants can also query their entire payment operations dataset in natural language. I'll ask: 'show open high-risk incidents'—and PayScope instantly returns a structured, accurate operational breakdown.
+> Merchants can also query in natural language. I'll ask: 'show open high-risk incidents' — instant, structured answer.
 > 
-> That is PayScope: evidence-backed payment recovery with deterministic authorization, durable execution, and verified Razorpay reconciliation. Thank you!"
+> That is PayScope: evidence-backed, policy-bounded, and now *merchant-learning* revenue recovery. Thank you!"
 
 ---
 

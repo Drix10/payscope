@@ -85,12 +85,14 @@ const isDashboardMetrics = (value: unknown): value is DashboardMetrics => {
 }
 const isActiveRescue = (value: unknown): boolean => {
   const row = object(value)
-  return Boolean(row && text(row.incidentId) && typeof row.amountPaise === 'number' && text(row.strategyName) && text(row.strategyDisplayName) && text(row.telemetryAttribution) && ['razorpay_fields_heuristic'].includes(String(row.telemetryDataSource)) && text(row.sagaStep) && typeof row.elapsedMs === 'number')
+  const step = row && (text(row.step) ? row.step : text(row.sagaStep) ? row.sagaStep : null)
+  return Boolean(row && text(row.incidentId) && typeof row.amountPaise === 'number' && text(row.strategyName) && text(row.strategyDisplayName) && text(row.telemetryAttribution) && ['razorpay_fields_heuristic'].includes(String(row.telemetryDataSource)) && text(step) && typeof row.elapsedMs === 'number')
 }
 const isRevenueIntelligence = (value: unknown): value is RevenueIntelligence => {
   const row = object(value)
   const autonomous = row && object(row.autonomous)
-  return Boolean(row && typeof row.atRiskPaise === 'number' && typeof row.recoverablePaise === 'number' && typeof row.recoveredThisWeekPaise === 'number' && typeof row.protectedPaise === 'number' && typeof row.recoveryRate === 'number' && typeof row.merchantInterventionCount === 'number' && typeof row.telemetrySignalCoverage === 'number' && Array.isArray(row.activeRescues) && row.activeRescues.every(isActiveRescue) && autonomous && typeof autonomous.investigated === 'number' && typeof autonomous.sagasCreated === 'number' && typeof autonomous.actionsExecuted === 'number' && typeof autonomous.paymentsRecovered === 'number')
+  const sagas = autonomous && (typeof autonomous.sagasCreated === 'number' ? autonomous.sagasCreated : typeof autonomous.investigationsCreated === 'number' ? autonomous.investigationsCreated : null)
+  return Boolean(row && typeof row.atRiskPaise === 'number' && typeof row.recoverablePaise === 'number' && typeof row.recoveredThisWeekPaise === 'number' && typeof row.protectedPaise === 'number' && typeof row.recoveryRate === 'number' && typeof row.merchantInterventionCount === 'number' && typeof row.telemetrySignalCoverage === 'number' && Array.isArray(row.activeRescues) && row.activeRescues.every(isActiveRescue) && autonomous && typeof autonomous.investigated === 'number' && typeof sagas === 'number' && typeof autonomous.actionsExecuted === 'number' && typeof autonomous.paymentsRecovered === 'number')
 }
 const isAutonomyPolicy = (value: unknown): value is AutonomyPolicy => {
   const row = object(value)

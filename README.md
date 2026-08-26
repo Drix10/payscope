@@ -160,6 +160,8 @@ node docs/demo-kit/scripts/generate-test-payments.mjs
 # Backend suites: integration scenarios (strategy selection/exhaustion, policy gates,
 # adaptive replanning, webhook rotation, encrypted callback evidence, fail-closed DB reads)
 # plus a real-HTTP suite that boots the actual server and posts signed webhooks over the wire
+# plus deterministic learning tests (cold start, 1 paid, 10 expired, merchant/segment isolation,
+# outcome idempotency, amount attribution, and the killer loop: outcomes change next decision)
 cd backend && npm run test
 
 # Frontend TypeScript compilation & production build check
@@ -167,4 +169,9 @@ cd frontend && npm run build
 
 # Demo kit HMAC signature & replay test
 node docs/demo-kit/scripts/self-test.mjs
+
+# Live Supabase + Razorpay boundary checks (against deployed DB, test-mode Razorpay — no mocks)
+# Proves: paid/expired reconciliation closes ledger exactly once, concurrent outbox claims are
+# exactly-once, ambiguous dispatch never resends, and late verified webhooks reconcile monotonically.
+# node backend/scripts/verify-provider-boundary.js  # requires SUPABASE_ + RAZORPAY_ env
 ```

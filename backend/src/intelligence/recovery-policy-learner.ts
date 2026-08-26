@@ -1,12 +1,20 @@
 import { RecoveryOutcomeStats } from '../domain/contracts';
 
-// Deterministic recovery policy learner — no LLM mutation.
-// Uses Beta-Binomial posterior with global prior; Thompson sampling for exploration.
+// Deterministic posterior exploration heuristic — deterministic, no LLM mutation.
+// Uses Beta-Binomial posterior with configurable global prior; hash-seeded exploration.
+// Called "Thompson-inspired" — not true Beta sampling, but deterministic and reproducible.
 
-const GLOBAL_PRIOR_RATE = 0.18;
+const DEFAULT_PRIOR_RATE = 0.18;
 const PSEUDO_COUNT = 20;
-const PRIOR_ALPHA = GLOBAL_PRIOR_RATE * PSEUDO_COUNT; // 3.6
-const PRIOR_BETA = (1 - GLOBAL_PRIOR_RATE) * PSEUDO_COUNT; // 16.4
+
+function getPriorRate(): number {
+  const raw = process.env.PAYSCOPE_RECOVERY_PRIOR_RATE?.trim();
+  if (!raw) return DEFAULT_PRIOR_RATE;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 && n < 1 ? n : DEFAULT_PRIOR_RATE;
+}
+function priorAlpha(): number { return getPriorRate() * PSEUDO_COUNT; }
+function priorBeta(): number { return (1 - getPriorRate()) * PSEUDO_COUNT; }
 
 export type StrategyScoreInput = {
   baseScore: number;
@@ -31,10 +39,9 @@ function hashToUnit(seed: string): number {
   return (h >>> 0) / 0xffffffff;
 }
 
-// Approximate Beta sample via inverse transform using hash — deterministic given seed.
-// For true Thompson we want stochastic; we use hash-seeded deterministic pseudo-sample
-// so ranking is reproducible for same incident, but 5% epsilon forces exploration.
-function betaSample(alpha: number, beta: number, seed: string): number {
+// Deterministic posterior sample — hash-seeded normal approximation of Beta (not true Beta sampling).
+// Reproducible per incident:strategy, with 5% epsilon using sampled vs posterior mean.
+function deterministicPosteriorSample(alpha: number, beta: number, seed: string): number {
   // Use hash to drive a uniform, then approximate via Wilson-like sampling.
   // For small α,β this is approximate but deterministic and sufficient for ranking.
   const u = hashToUnit(seed + ':' + alpha + ':' + beta);
@@ -57,19 +64,20 @@ export function scoreStrategy(input: StrategyScoreInput, explorationSeed: string
   const attempts = Number.isSafeInteger(historical?.attempts) && (historical?.attempts ?? 0) >= 0 ? historical!.attempts : 0;
   const paidRaw = Number.isSafeInteger(historical?.paid) && (historical?.paid ?? 0) >= 0 ? historical!.paid : 0;
   const paid = Math.min(paidRaw, attempts);
-  const alpha = PRIOR_ALPHA + paid;
-  const beta = PRIOR_BETA + (attempts - paid);
+  const alpha = priorAlpha() + paid;
+  const beta = priorBeta() + (attempts - paid);
   const posteriorRate = alpha / (alpha + beta);
-  const sampledRate = betaSample(alpha, beta, explorationSeed || 'default');
+  const sampledRate = deterministicPosteriorSample(alpha, beta, explorationSeed || 'default');
   // 5% epsilon: use sampled rate, otherwise MAP (posterior mean)
   const isExploration = hashToUnit((explorationSeed || 'default') + ':explore') < 0.05;
   const effectiveRate = isExploration ? sampledRate : posteriorRate;
   const rawScore = safeBase * 0.5 + effectiveRate * 100 * 0.5 + safeAdj;
   const recoveryValueScore = Math.max(0, Math.min(100, Math.round(rawScore)));
   const heuristicRecoveryEstimatePaise = Math.round(effectiveRate * safeConfidence * safeAmount);
+  const priorRate = getPriorRate();
   const rationale = historical
     ? `posterior ${(posteriorRate * 100).toFixed(1)}% (n=${attempts}, paid=${paid})${isExploration ? ' [exploration]' : ''}`
-    : `prior ${(GLOBAL_PRIOR_RATE * 100).toFixed(1)}% (cold start)`;
+    : `prior ${(priorRate * 100).toFixed(1)}% (cold start, configurable via PAYSCOPE_RECOVERY_PRIOR_RATE)`;
   return { recoveryValueScore, heuristicRecoveryEstimatePaise, posteriorRate: effectiveRate, exploration: isExploration, rationale };
 }
 

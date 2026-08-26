@@ -24,12 +24,14 @@ export type RevenueIntelligence = {
     strategyDisplayName: string;
     telemetryAttribution: string;
     telemetryDataSource: 'razorpay_fields_heuristic';
-    sagaStep: string;
+    sagaStep: string; // deprecated: use step
+    step: string;
     elapsedMs: number;
   }>;
   autonomous: {
     investigated: number;
-    sagasCreated: number;
+    sagasCreated: number; // deprecated: use investigationsCreated
+    investigationsCreated: number;
     actionsExecuted: number;
     paymentsRecovered: number;
   };
@@ -685,41 +687,40 @@ export class MvpRepository {
     const payload = { customerHash, referenceId, copyIntent: rationale };
     const payloadHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
-    // Atomic path with ledger when learning context is supplied (PAYSCOPE_LEARNING_ENABLED, default on).
-    if (ledgerContext && process.env.PAYSCOPE_LEARNING_ENABLED !== 'false') {
-      try {
-        const { data: ledgerData, error: ledgerError } = await this.client.rpc('payscope_enqueue_with_ledger', {
-          p_organization_id: organizationId,
-          p_incident_id: incidentId,
-          p_proposal_id: null,
-          p_command_key: commandKey,
-          p_command_payload: payload,
-          p_command_payload_hash: payloadHash,
-          p_payment_id: latestEvent?.event.paymentId ?? null,
-          p_order_id: latestEvent?.event.orderId ?? null,
-          p_amount_paise: amountPaise,
-          p_currency: latestEvent?.event.currency ?? 'INR',
-          p_customer_hash: ledgerContext.customerHash ?? customerHash,
-          p_failure_category: ledgerContext.failureCategory ?? 'unknown',
-          p_payment_method: (ledgerContext.paymentMethod ?? latestEvent?.event.paymentMethod ?? 'unknown').slice(0, 80),
-          p_customer_segment: ledgerContext.customerSegment ?? 'unknown',
-          p_strategy: capability,
-          p_expected_recovery_paise: ledgerContext.expectedRecoveryPaise ?? null,
-          p_considered_strategies: (ledgerContext.consideredStrategies ?? []).slice(0, 6) as unknown as never,
-          p_exploration: ledgerContext.exploration ?? false,
-          p_confidence: ledgerContext.confidence ?? null,
-          p_risk_score: ledgerContext.riskScore ?? null,
-        });
-        if (!ledgerError && typeof ledgerData === 'string') return ledgerData;
-        // If ledger function not yet deployed, fall through to legacy path (migration 015 pending)
-        if (ledgerError && !/could not find|does not exist|PGRST202/i.test(ledgerError.message)) throw ledgerError;
-      } catch (e) {
-        if (e instanceof Error && /could not find|does not exist|PGRST202/i.test(e.message)) {
-          // fall through
-        } else if (e instanceof Error) {
-          throw databaseError('atomic ledger enqueue', e.message);
-        }
-      }
+    // Atomic path with ledger — when learning is enabled, ledger MUST succeed (fail-closed).
+    const learningEnabled = process.env.PAYSCOPE_LEARNING_ENABLED !== 'false';
+    if (ledgerContext && learningEnabled) {
+      const { data: ledgerData, error: ledgerError } = await this.client.rpc('payscope_enqueue_with_ledger', {
+        p_organization_id: organizationId,
+        p_incident_id: incidentId,
+        p_proposal_id: null,
+        p_command_key: commandKey,
+        p_command_payload: payload,
+        p_command_payload_hash: payloadHash,
+        p_payment_id: latestEvent?.event.paymentId ?? null,
+        p_order_id: latestEvent?.event.orderId ?? null,
+        p_amount_paise: amountPaise,
+        p_currency: latestEvent?.event.currency ?? 'INR',
+        p_customer_hash: ledgerContext.customerHash ?? customerHash,
+        p_failure_category: ledgerContext.failureCategory ?? 'unknown',
+        p_payment_method: (ledgerContext.paymentMethod ?? latestEvent?.event.paymentMethod ?? 'unknown').slice(0, 80),
+        p_customer_segment: ledgerContext.customerSegment ?? 'unknown',
+        p_strategy: capability,
+        p_expected_recovery_paise: ledgerContext.expectedRecoveryPaise ?? null,
+        p_considered_strategies: (ledgerContext.consideredStrategies ?? []).slice(0, 6) as unknown as never,
+        p_exploration: ledgerContext.exploration ?? false,
+        p_confidence: ledgerContext.confidence ?? null,
+        p_risk_score: ledgerContext.riskScore ?? null,
+      });
+      if (ledgerError) throw databaseError('atomic ledger enqueue', ledgerError.message);
+      if (typeof ledgerData !== 'string') throw databaseError('atomic ledger enqueue', 'invalid action id');
+      return ledgerData;
+    }
+    if (ledgerContext && !learningEnabled) {
+      // Learning explicitly disabled — fall through to legacy path without ledger
+      // (no learning record will be created)
+    } else if (ledgerContext) {
+      // Should not reach here — learningEnabled true but ledgerContext missing handled above
     }
 
     const { data, error } = await this.client.rpc('payscope_enqueue_recovery_email_action', {
@@ -746,51 +747,33 @@ export class MvpRepository {
   }
 
   async updateIncidentStatus(incidentId: string, organizationId: string, status: IncidentStatus, recoveredAmountPaise: number, remainingAmountPaise: number): Promise<void> {
-    try {
-      await this.client.from('payscope_incidents').update({
-        status,
-        recovered_amount_paise: recoveredAmountPaise,
-        remaining_amount_paise: remainingAmountPaise,
-        resolved_at: status === 'RESOLVED' ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', incidentId).eq('organization_id', organizationId);
-    } catch (error) {
-      logger.error({ incidentId, organizationId, status, error: error instanceof Error ? error.message : String(error) }, 'PayScope failed to update incident status');
-    }
+    // Financial state — fail closed, let caller/job retry; never swallow.
+    const { error, count } = await this.client.from('payscope_incidents').update({
+      status,
+      recovered_amount_paise: recoveredAmountPaise,
+      remaining_amount_paise: remainingAmountPaise,
+      resolved_at: status === 'RESOLVED' ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }, { count: 'exact' }).eq('id', incidentId).eq('organization_id', organizationId);
+    if (error) throw databaseError('incident status update', error.message);
+    if (count === 0) throw databaseError('incident status update', 'incident not found or outside organization');
   }
 
   async appendAuditEntry(entry: { organizationId: string; incidentId: string | null; eventType: string; actorType: 'system' | 'human'; actorId: string; decision: string; rationale: string; confidence: number | null }): Promise<void> {
-    const sequenceNumber = Date.now();
-    let prevHash = '0000000000000000000000000000000000000000000000000000000000000000';
-    try {
-      const { data: last } = await this.client.from('payscope_audit_entries').select('entry_hash').eq('organization_id', entry.organizationId).order('sequence_number', { ascending: false }).limit(1).maybeSingle();
-      if (last && typeof last === 'object' && typeof (last as Record<string, unknown>).entry_hash === 'string') {
-        prevHash = (last as Record<string, unknown>).entry_hash as string;
-      }
-    } catch {}
-
-    const payloadToHash = `${prevHash}:${entry.organizationId}:${entry.incidentId ?? ''}:${sequenceNumber}:${entry.eventType}:${entry.decision}:${entry.actorId}`;
-    const entryHash = createHash('sha256').update(payloadToHash).digest('hex');
-
-    try {
-      await this.client.from('payscope_audit_entries').insert({
-        id: randomUUID(),
-        organization_id: entry.organizationId,
-        incident_id: entry.incidentId,
-        sequence_number: sequenceNumber,
-        event_type: entry.eventType,
-        actor_type: entry.actorType,
-        actor_id: entry.actorId,
-        decision: entry.decision,
-        rationale: entry.rationale.slice(0, 1000),
-        confidence: entry.confidence,
-        prev_entry_hash: prevHash,
-        entry_hash: entryHash,
-        created_at: new Date().toISOString(),
-      });
-    } catch (error) {
-      logger.error({ organizationId: entry.organizationId, incidentId: entry.incidentId, eventType: entry.eventType, error: error instanceof Error ? error.message : String(error) }, 'PayScope failed to append audit entry');
-    }
+    // Concurrency-safe, DB-serialized append via RPC — never client-side Date.now() sequencing.
+    const { error } = await this.client.rpc('payscope_append_audit_entry', {
+      p_organization_id: entry.organizationId,
+      p_incident_id: entry.incidentId,
+      p_event_type: entry.eventType,
+      p_actor_type: entry.actorType,
+      p_actor_id: entry.actorId,
+      p_actor_session_hash: null,
+      p_decision: entry.decision,
+      p_rationale: entry.rationale.slice(0, 1_000),
+      p_confidence: entry.confidence,
+      p_enrichment_snapshot: null,
+    });
+    if (error) throw databaseError('audit append', error.message);
   }
 
   // === Revenue Intelligence ===
@@ -814,16 +797,64 @@ export class MvpRepository {
     const totalEndedIncidents = incidents.filter(i => i.status === 'RESOLVED' || i.status === 'HUMAN_RESOLVED' || i.status === 'DISMISSED').length;
     const recoveryRate = totalEndedIncidents > 0 ? resolvedIncidentsCount / totalEndedIncidents : 0;
 
-    const activeRescues = incidents.filter(i => i.status === 'OPEN' || i.status === 'MONITORING').map(inc => ({
-      incidentId: inc.id,
-      amountPaise: inc.remainingAmountPaise,
-      strategyName: 'deliver_recovery_link_email',
-      strategyDisplayName: '1-Click Razorpay Payment Link Email',
-      telemetryAttribution: 'customer_drop',
-      telemetryDataSource: 'razorpay_fields_heuristic' as const,
-      sagaStep: 'Execution action active',
-      elapsedMs: Math.max(0, Date.now() - Date.parse(inc.openedAt)),
-    }));
+    // Real telemetry coverage: fraction of incidents with at least one enriched correlated event
+    let telemetrySignalCoverage = 0;
+    try {
+      const { data: coverageData } = await this.client.rpc('payscope_telemetry_coverage', { p_organization_id: organizationId });
+      if (typeof coverageData === 'number' && Number.isFinite(coverageData)) telemetrySignalCoverage = Math.max(0, Math.min(1, coverageData));
+      else if (coverageData !== null && typeof coverageData === 'object') {
+        // fallback if RPC returns jsonb
+        const v = (coverageData as Record<string, unknown>).coverage ?? coverageData;
+        if (typeof v === 'number') telemetrySignalCoverage = Math.max(0, Math.min(1, v));
+      }
+    } catch {
+      // coverage stays 0; never fabricate 0.95
+    }
+    // Fallback direct count if RPC unavailable (migration 016 pending)
+    if (telemetrySignalCoverage === 0 && incidents.length > 0) {
+      try {
+        const allIds = incidents.flatMap(i => i.correlatedEventIds).slice(0, 200);
+        if (allIds.length) {
+          const { data: covRows } = await this.client.from('payscope_events').select('id').eq('organization_id', organizationId).in('id', allIds).not('enrichment', 'is', null).limit(200);
+          const enrichedCount = new Set((covRows ?? []).map(r => (r as Record<string, unknown>).id as string)).size;
+          // approximate: incidents with at least one enriched event / total incidents
+          const incidentsWithEnrichment = incidents.filter(inc => inc.correlatedEventIds.some(id => (covRows ?? []).some(r => (r as Record<string, unknown>).id === id))).length;
+          telemetrySignalCoverage = incidents.length ? incidentsWithEnrichment / incidents.length : 0;
+        }
+      } catch {}
+    }
+
+    // Real active rescues: derive attribution from latest enriched event per incident
+    const activeIncidents = incidents.filter(i => i.status === 'OPEN' || i.status === 'MONITORING').slice(0, 10);
+    let enrichmentByEventId = new Map<string, { failureAttribution?: string; source?: string }>();
+    if (activeIncidents.length) {
+      const activeEventIds = activeIncidents.flatMap(i => i.correlatedEventIds).slice(0, 100);
+      if (activeEventIds.length) {
+        try {
+          const { data: activeEvents } = await this.client.from('payscope_events').select('id, enrichment, enrichment_source').eq('organization_id', organizationId).in('id', activeEventIds);
+          for (const row of (activeEvents ?? []) as Array<Record<string, unknown>>) {
+            const eid = row.id as string;
+            const enr = row.enrichment as Record<string, unknown> | null;
+            if (eid && enr && typeof enr.failureAttribution === 'string') enrichmentByEventId.set(eid, { failureAttribution: enr.failureAttribution as string, source: row.enrichment_source as string });
+          }
+        } catch {}
+      }
+    }
+    const activeRescues = activeIncidents.map(inc => {
+      const latestEventId = inc.correlatedEventIds.at(-1);
+      const enr = latestEventId ? enrichmentByEventId.get(latestEventId) : undefined;
+      return {
+        incidentId: inc.id,
+        amountPaise: inc.remainingAmountPaise,
+        strategyName: 'deliver_recovery_link_email',
+        strategyDisplayName: '1-Click Razorpay Payment Link Email',
+        telemetryAttribution: enr?.failureAttribution ?? 'unknown',
+        telemetryDataSource: (enr?.source as 'razorpay_fields_heuristic' | undefined) ?? 'razorpay_fields_heuristic' as const,
+        sagaStep: 'Execution action active', // deprecated alias, kept for frontend compat; use `step` going forward
+        step: 'Execution action active',
+        elapsedMs: Math.max(0, Date.now() - Date.parse(inc.openedAt)),
+      };
+    });
 
     return {
       atRiskPaise,
@@ -832,11 +863,12 @@ export class MvpRepository {
       protectedPaise,
       recoveryRate,
       merchantInterventionCount: 0,
-      telemetrySignalCoverage: 0.95,
+      telemetrySignalCoverage,
       activeRescues,
       autonomous: {
         investigated: incidents.length,
         sagasCreated: activeActionsCount + completedActionsCount,
+        investigationsCreated: activeActionsCount + completedActionsCount,
         actionsExecuted: activeActionsCount + completedActionsCount,
         paymentsRecovered: resolvedIncidentsCount,
       },
