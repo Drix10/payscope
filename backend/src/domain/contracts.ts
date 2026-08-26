@@ -55,7 +55,7 @@ export const NormalizedEventSchema = z.object({
   providerData: providerData.default({}),
 }).strict();
 
-export const VulcanEnrichmentSchema = z.object({
+export const TelemetryEnrichmentSchema = z.object({
   failureAttribution: z.enum(['gateway_degraded', 'issuer_timeout', 'fraud_block', 'insufficient_funds', 'customer_drop', 'routing_suboptimal', 'subscription_lapse', 'unknown']),
   gatewayHealthScore: z.number().min(0).max(1),
   gatewayInDowntime: z.boolean(),
@@ -342,7 +342,9 @@ export type IncidentStatus = z.infer<typeof IncidentStatusSchema>;
 export type RiskTier = z.infer<typeof RiskTierSchema>;
 export type ActionType = z.infer<typeof ActionTypeSchema>;
 export type NormalizedEvent = z.infer<typeof NormalizedEventSchema>;
-export type VulcanEnrichment = z.infer<typeof VulcanEnrichmentSchema>;
+export const VulcanEnrichmentSchema = TelemetryEnrichmentSchema;
+export type TelemetryEnrichment = z.infer<typeof TelemetryEnrichmentSchema>;
+export type VulcanEnrichment = TelemetryEnrichment;
 export type Incident = z.infer<typeof IncidentSchema>;
 export type InvestigationPlan = z.infer<typeof InvestigationPlanSchema>;
 export type RiskAnalysis = z.infer<typeof RiskAnalysisSchema>;

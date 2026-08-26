@@ -141,3 +141,16 @@ export function rankStrategies(
     .filter(s => s.blockedBy === null)
     .sort((a, b) => b.expectedValuePaise - a.expectedValuePaise);
 }
+
+export function adaptRecoveryStrategy(
+  previousStrategiesTried: string[],
+  incident: Incident,
+  enrichment: VulcanEnrichment | null,
+  riskAnalysis: RiskAnalysis,
+  customerProfile: CustomerProfile | null,
+  autonomyPolicy: AutonomyPolicy | null
+): RecoveryStrategy | null {
+  const ranked = rankStrategies(incident, enrichment, riskAnalysis, customerProfile, autonomyPolicy);
+  const untried = ranked.filter(s => !previousStrategiesTried.includes(s.name));
+  return untried[0] ?? null;
+}
