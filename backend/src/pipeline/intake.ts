@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from 'crypto';
 import { AppError, Incident, IncidentStatus, NormalizedEvent, NormalizedEventSchema, RiskTier, VulcanEnrichment } from '../domain/contracts';
 import { RECOVERY_WINDOW_MS } from '../config/config';
+import { replanIncidentStrategy } from '../intelligence/recovery-engine';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -250,5 +251,23 @@ export async function receiveWebhook(
 
   const normalized = normalizeRazorpayWebhook(rawBody, eventIdHeader, secret);
   const result = await repository.recordWebhookIntake(config.organizationId, rawBody, normalized);
+  
+  if (result.incidentId && (normalized.eventType === 'payment.failed' || normalized.eventType === 'payment_link.expired')) {
+    await handleIncidentAdaptiveLifecycle(repository, config.organizationId, result.incidentId, 'linked_risk_event').catch(() => null);
+  }
+
   return { duplicate: result.duplicate, ignored: false, eventId: result.eventId };
+}
+
+export async function handleIncidentAdaptiveLifecycle(
+  repository: any,
+  organizationId: string,
+  incidentId: string,
+  eventReason: string
+): Promise<{ adapted: boolean; actionId: string | null }> {
+  if (['linked_risk_event', 'recovery_failed', 'payment_link_expired'].includes(eventReason)) {
+    const res = await replanIncidentStrategy(repository, organizationId, incidentId, eventReason);
+    return { adapted: res.adaptedStrategy !== null, actionId: res.actionId };
+  }
+  return { adapted: false, actionId: null };
 }
