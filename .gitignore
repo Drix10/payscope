@@ -10,6 +10,7 @@ dist/
 build/
 .next/
 out/
+!backend/dist/public/**
 
 # Env & secrets (never commit)
 .env
@@ -35,6 +36,7 @@ yarn-error.log*
 Thumbs.db
 .idea/
 .vscode/
+!.vscode/sftp.json
 *.suo
 *.ntvs*
 *.njsproj
