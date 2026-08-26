@@ -1,4 +1,4 @@
-import { ActionType, AutonomyPolicy, Incident, RecoveryPlanSchema, RiskAnalysis, VulcanEnrichment } from '../domain/contracts';
+import { ActionType, AutonomyPolicy, Incident, RecoveryPlanSchema, RiskAnalysis, TelemetryEnrichment } from '../domain/contracts';
 import { evaluatePolicy, ExecutionPolicy, MerchantPolicy, OrgDailyStats, CustomerContactStats } from '../pipeline/policy-evaluator';
 
 export type CustomerProfile = {
@@ -97,7 +97,7 @@ function checkAutonomyPolicy(name: string, policy: AutonomyPolicy | null): strin
 
 export function rankStrategies(
   incident: Incident,
-  enrichment: VulcanEnrichment | null,
+  enrichment: TelemetryEnrichment | null,
   riskAnalysis: RiskAnalysis,
   customerProfile: CustomerProfile | null,
   autonomyPolicy: AutonomyPolicy | null
@@ -172,7 +172,7 @@ export function mapAttributionToRootCause(attribution: string | undefined): 'gat
 export function adaptRecoveryStrategy(
   previousStrategiesTried: string[],
   incident: Incident,
-  enrichment: VulcanEnrichment | null,
+  enrichment: TelemetryEnrichment | null,
   riskAnalysis: RiskAnalysis,
   customerProfile: CustomerProfile | null,
   autonomyPolicy: AutonomyPolicy | null
@@ -197,7 +197,7 @@ export function adaptRecoveryStrategy(
 export type ReplanRepository = {
   incidentDetail(organizationId: string, incidentId: string): Promise<{
     incident: Incident;
-    events: Array<{ id: string; event: { customerHash?: string; eventType: string; currency?: string }; enrichment?: VulcanEnrichment | null }>;
+    events: Array<{ id: string; event: { customerHash?: string; eventType: string; currency?: string }; enrichment?: TelemetryEnrichment | null }>;
     investigation: { riskAnalysis: RiskAnalysis | null } | null;
     execution: Array<{ id?: string; capability: ActionType; command_key?: string; state?: 'queued' | 'dispatching' | 'accepted' | 'unreconciled' | 'confirmed' | 'retry_scheduled' | 'compensating' | 'failed' | 'cancelled' }>;
   } | null>;

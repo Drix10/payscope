@@ -48,9 +48,6 @@ export interface RazorpayPaymentDetails {
   errorStep: string | null;
   errorReason: string | null;
   acquirerData: { authCode?: string; rrn?: string } | null;
-  vulcanAttribution: string | null;
-  vulcanScore: number | null;
-  vulcanGatewayHealth: number | null;
 }
 
 /**
@@ -168,9 +165,6 @@ export class RazorpayReadClient {
         authCode: typeof acq.auth_code === 'string' ? acq.auth_code : undefined,
         rrn: typeof acq.rrn === 'string' ? acq.rrn : undefined,
       } : null,
-      vulcanAttribution: typeof raw.vulcan_attribution === 'string' ? raw.vulcan_attribution : null,
-      vulcanScore: typeof raw.vulcan_score === 'number' ? raw.vulcan_score : null,
-      vulcanGatewayHealth: typeof raw.vulcan_gateway_health === 'number' ? raw.vulcan_gateway_health : null,
     };
   }
 

@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomUUID } from 'crypto';
-import { AppError, Incident, IncidentStatus, NormalizedEvent, NormalizedEventSchema, RiskTier, VulcanEnrichment } from '../domain/contracts';
+import { AppError, Incident, IncidentStatus, NormalizedEvent, NormalizedEventSchema, RiskTier, TelemetryEnrichment } from '../domain/contracts';
 import { RECOVERY_WINDOW_MS } from '../config/config';
 import { encryptOpaqueBuffer } from '../security/encryption';
 import { normalizeCallback, parseCallbackEnvelope, verifyRazorpayCallbackSignature, VerifiedCallback } from '../providers/execution/callback-verifier';
@@ -111,7 +111,7 @@ function allowlistedAcquirerData(input: UnknownRecord): UnknownRecord {
 export type CorrelationEvent = {
   id: string;
   event: NormalizedEvent;
-  enrichment: VulcanEnrichment | null;
+  enrichment: TelemetryEnrichment | null;
 };
 
 export type IncidentCandidate = { incident: Incident; events: CorrelationEvent[] };

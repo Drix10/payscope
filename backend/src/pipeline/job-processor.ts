@@ -1,4 +1,4 @@
-import { Incident, QueueJob, VulcanEnrichment } from '../domain/contracts';
+import { Incident, QueueJob, TelemetryEnrichment } from '../domain/contracts';
 import { MvpRepository, StoredEvent } from '../db/mvp-repository';
 import { EnrichmentProvider } from '../providers/enrichment/interface';
 import { correlateEvent, IncidentCandidate } from './intake';
@@ -7,7 +7,7 @@ import { incidentLifecycleEvents, logger, timeToRecoveryMs } from '../observabil
 
 export interface DurablePipelineRepository {
   eventById(organizationId: string, eventId: string): Promise<StoredEvent>;
-  completeEnrichmentAndEnqueueCorrelation(event: StoredEvent, enrichment: VulcanEnrichment | null): Promise<void>;
+  completeEnrichmentAndEnqueueCorrelation(event: StoredEvent, enrichment: TelemetryEnrichment | null): Promise<void>;
   correlationCandidates(organizationId: string, incoming: StoredEvent): Promise<IncidentCandidate[]>;
   persistCorrelation(event: StoredEvent, incident: Incident | undefined, enqueueInvestigation: boolean): Promise<void>;
   reconcileDirectPaymentLinkEvent?(organizationId: string, event: StoredEvent['event']): Promise<{ incidentId: string | null }>;
@@ -39,7 +39,7 @@ export class PipelineJobProcessor {
   private async enrich(job: QueueJob): Promise<void> {
     if (!job.eventId) throw new Error('Enrichment job is missing eventId');
     const event = await this.repository.eventById(job.organizationId, job.eventId);
-    let enrichment: VulcanEnrichment | null = null;
+    let enrichment: TelemetryEnrichment | null = null;
     try {
       enrichment = await this.enrichmentProvider.enrich(event.event);
     } catch (error) {

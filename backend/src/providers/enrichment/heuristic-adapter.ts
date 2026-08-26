@@ -1,5 +1,5 @@
 import { ENRICHMENT_TIMEOUT_MS } from '../../config/config';
-import { NormalizedEvent, VulcanEnrichment, VulcanEnrichmentSchema } from '../../domain/contracts';
+import { NormalizedEvent, TelemetryEnrichment, TelemetryEnrichmentSchema } from '../../domain/contracts';
 import { EnrichmentProvider } from './interface';
 
 type RazorpayPayment = Record<string, unknown>;
@@ -60,7 +60,7 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
     return Boolean(this.client);
   }
 
-  async enrich(event: NormalizedEvent): Promise<VulcanEnrichment> {
+  async enrich(event: NormalizedEvent): Promise<TelemetryEnrichment> {
     let payment: RazorpayPayment = {};
     let downtimes: RazorpayDowntimes = {};
     if (this.client && event.paymentId) {
@@ -94,7 +94,7 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
     ].filter((signal): signal is string => Boolean(signal));
     const retry = recommendedRetryMethod(failureAttribution, event.paymentMethod);
 
-    return VulcanEnrichmentSchema.parse({
+    return TelemetryEnrichmentSchema.parse({
       failureAttribution,
       gatewayHealthScore: activeDowntime ? 0.2 : failureAttribution === 'gateway_degraded' ? 0.4 : 1,
       gatewayInDowntime: activeDowntime,
@@ -110,7 +110,7 @@ export class HeuristicEnrichmentAdapter implements EnrichmentProvider {
   }
 }
 
-function attribution(errorSource: string | undefined, errorStep: string | undefined, errorReason: string | undefined, activeDowntime: boolean, isSubscription = false, hasAuthCode = false): VulcanEnrichment['failureAttribution'] {
+function attribution(errorSource: string | undefined, errorStep: string | undefined, errorReason: string | undefined, activeDowntime: boolean, isSubscription = false, hasAuthCode = false): TelemetryEnrichment['failureAttribution'] {
   if (isSubscription && (errorReason?.includes('mandate') || errorReason?.includes('lapse') || errorSource === 'customer')) return 'subscription_lapse';
   if (errorReason?.includes('fraud')) return 'fraud_block';
   if (errorReason?.includes('insufficient') || errorReason?.includes('balance')) return 'insufficient_funds';
@@ -122,7 +122,7 @@ function attribution(errorSource: string | undefined, errorStep: string | undefi
   return 'unknown';
 }
 
-function recommendedRetryMethod(failureAttribution: VulcanEnrichment['failureAttribution'], currentMethod: string | undefined): string | null {
+function recommendedRetryMethod(failureAttribution: TelemetryEnrichment['failureAttribution'], currentMethod: string | undefined): string | null {
   if (failureAttribution === 'gateway_degraded' || failureAttribution === 'routing_suboptimal') return currentMethod === 'upi' ? 'netbanking' : 'upi';
   if (failureAttribution === 'issuer_timeout' || failureAttribution === 'subscription_lapse') return currentMethod ?? null;
   return null;

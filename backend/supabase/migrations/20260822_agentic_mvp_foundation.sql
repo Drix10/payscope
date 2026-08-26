@@ -30,7 +30,7 @@ create table if not exists public.payscope_events (
   payload_hash text not null check (payload_hash ~ '^[a-f0-9]{64}$'),
   normalized jsonb not null check (jsonb_typeof(normalized) = 'object'),
   enrichment jsonb,
-  enrichment_source text check (enrichment_source in ('razorpay_fields_heuristic', 'fixture_signed', 'vulcan_direct', 'unavailable')),
+  enrichment_source text check (enrichment_source in ('razorpay_fields_heuristic', 'fixture_signed', 'unavailable')),
   processed_at timestamptz,
   created_at timestamptz not null default now(),
   unique (organization_id, razorpay_event_id),

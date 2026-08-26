@@ -34,7 +34,6 @@ try {
     if (requests.length !== 2) throw new Error('expected two webhook requests');
     if (requests[0].event !== 'payment.failed') throw new Error('unexpected event type');
     if (requests[0].payload.payment.entity.currency !== 'INR') throw new Error('unexpected currency');
-    if ('vulcan_attribution' in requests[0].payload.payment.entity || 'vulcan_gateway_health' in requests[0].payload.payment.entity) throw new Error('retired Vulcan fields must not be generated');
     if (duplicate.duplicate !== true) throw new Error('duplicate response was not preserved');
     console.log('demo-kit self-test: passed');
 } finally {

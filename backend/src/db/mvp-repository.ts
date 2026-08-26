@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ActionProposal, ActionProposalSchema, ActionType, ActionTypeSchema, AuditEntry, AuditEntrySchema, AutonomyPolicy, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, ExecutionActionSummary, ExecutionActionSummarySchema, ExecutionStateSchema, Incident, IncidentSchema, IncidentStatus, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, VulcanEnrichment, VulcanEnrichmentSchema } from '../domain/contracts';
+import { ActionProposal, ActionProposalSchema, ActionType, ActionTypeSchema, AuditEntry, AuditEntrySchema, AutonomyPolicy, DashboardMetrics, DashboardMetricsSchema, DashboardQueryResponse, DashboardQueryResponseSchema, EnrichmentSource, EnrichmentSourceSchema, ExecutionActionSummary, ExecutionActionSummarySchema, ExecutionStateSchema, Incident, IncidentSchema, IncidentStatus, Investigation, InvestigationPlan, InvestigationPlanSchema, InvestigationSchema, NormalizedEvent, NormalizedEventSchema, PolicyDecisionContract, PolicyDecisionSchema, QueueJobSchema, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisSchema, RiskTier, TelemetryEnrichment, TelemetryEnrichmentSchema } from '../domain/contracts';
 import { CustomerContactStats, ExecutionPolicy, MerchantPolicy, OrgDailyStats } from '../pipeline/policy-evaluator';
 import { canCorrelateWithTerminalIncident, CorrelationEvent, IncidentCandidate } from '../pipeline/intake';
 import { Reconciler } from '../providers/execution/reconciliation';
@@ -17,7 +17,6 @@ export type RevenueIntelligence = {
   recoveryRate: number;
   merchantInterventionCount: number;
   telemetrySignalCoverage: number;
-  vulcanSignalCoverage?: number;
   activeRescues: Array<{
     incidentId: string;
     amountPaise: number;
@@ -25,8 +24,6 @@ export type RevenueIntelligence = {
     strategyDisplayName: string;
     telemetryAttribution: string;
     telemetryDataSource: 'razorpay_fields_heuristic';
-    vulcanAttribution?: string;
-    vulcanDataSource?: 'razorpay_fields_heuristic';
     sagaStep: string;
     elapsedMs: number;
   }>;
@@ -178,7 +175,7 @@ export class MvpRepository {
     return eventFromRow(data as Record<string, unknown>);
   }
 
-  async completeEnrichmentAndEnqueueCorrelation(event: StoredEvent, enrichment: VulcanEnrichment | null): Promise<void> {
+  async completeEnrichmentAndEnqueueCorrelation(event: StoredEvent, enrichment: TelemetryEnrichment | null): Promise<void> {
     const jobId = randomUUID();
     const createdAt = new Date().toISOString();
     const payload = QueueJobSchema.parse({ jobId, organizationId: event.organizationId, type: 'correlate_event', attemptNumber: 1, createdAt, eventId: event.id });
@@ -739,8 +736,6 @@ export class MvpRepository {
       strategyDisplayName: '1-Click Razorpay Payment Link Email',
       telemetryAttribution: 'customer_drop',
       telemetryDataSource: 'razorpay_fields_heuristic' as const,
-      vulcanAttribution: 'customer_drop',
-      vulcanDataSource: 'razorpay_fields_heuristic' as const,
       sagaStep: 'Execution action active',
       elapsedMs: Math.max(0, Date.now() - Date.parse(inc.openedAt)),
     }));
@@ -753,7 +748,6 @@ export class MvpRepository {
       recoveryRate,
       merchantInterventionCount: 0,
       telemetrySignalCoverage: 0.95,
-      vulcanSignalCoverage: 0.95,
       activeRescues,
       autonomous: {
         investigated: incidents.length,
@@ -767,7 +761,7 @@ export class MvpRepository {
 
 function eventFromRow(row: Record<string, unknown>): StoredEvent {
   if (typeof row.id !== 'string' || typeof row.organization_id !== 'string') throw new Error('PayScope event row is invalid');
-  const enrichment = row.enrichment === null || row.enrichment === undefined ? null : VulcanEnrichmentSchema.parse(row.enrichment);
+  const enrichment = row.enrichment === null || row.enrichment === undefined ? null : TelemetryEnrichmentSchema.parse(row.enrichment);
   return { id: row.id, organizationId: row.organization_id, event: NormalizedEventSchema.parse(row.normalized), enrichment, enrichmentSource: row.enrichment_source === null || row.enrichment_source === undefined ? null : EnrichmentSourceSchema.parse(row.enrichment_source) };
 }
 

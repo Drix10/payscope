@@ -62,7 +62,7 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 |---|---|
 | **Screen State** | Split-Screen (Demo Studio on Left, Dashboard on Right). |
 | **Operator Action** | 1. Point out the **4 Hero KPI Cards** at the top (`Active Telemetry`, `Autonomous Outreach`, `Multi-Agent Engine`, `Safety Policy Lock`).<br />2. On Demo Studio (`http://127.0.0.1:3050`), click **`[ > DISPATCH EVENT ]`** under **01: FAILED PAYMENT**. |
-| **Visual Target** | Hover cursor over the newly ingested incident. Highlight the **5-Stage Pipeline Progression Bar** (`1. Webhook Ingested` → `2. Razorpay Fields Enriched` → `3. Evidence Investigation` → `4. Deterministic Strategy + Policy` → `5. Outbox Queued`). Do not present any legacy “Vulcan” label if it appears in an old screenshot or build. |
+| **Visual Target** | Hover cursor over the newly ingested incident. Highlight the **5-Stage Pipeline Progression Bar** (`1. Webhook Ingested` → `2. Razorpay Fields Enriched` → `3. Evidence Investigation` → `4. Deterministic Strategy + Policy` → `5. Outbox Queued`).  |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
 > "Welcome to the PayScope Autonomous Command Center. At the top, you can see our real-time operational posture: Active Telemetry, Autonomous Outreach status, Multi-Agent Engine health, and Deterministic Safety Policy Locks.

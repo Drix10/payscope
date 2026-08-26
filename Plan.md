@@ -76,19 +76,15 @@ execution
 
 I would keep this direction.
 
-2. The latest commit also correctly killed the fake Vulcan story
+2. The latest commit also correctly killed the fake enrichment-provider story
 
 This is a good change.
 
 Previously the repo claimed:
 
-Razorpay Vulcan AI Foundation
+Razorpay AI Foundation
 
-and had:
-
-vulcan_direct
-vulcan_score
-vulcan_gateway_health
+and had fake provider-scoped telemetry fields (direct/score/gateway-health).
 
 The latest commit removes those.
 
@@ -602,28 +598,13 @@ That's a meaningful improvement.
 
 18. But Revenue Intelligence is now lying in a different way
 
-It still has:
+It still carried legacy codenamed enrichment fields
+(attribution, data source, and signal coverage) left over
+from a removed product story.
 
-vulcanAttribution: 'customer_drop'
-vulcanDataSource: 'razorpay_fields_heuristic'
+The property itself was basically obsolete.
 
-and:
-
-vulcanSignalCoverage: 0
-
-The property itself is now basically obsolete.
-
-So you have:
-
-vulcanAttribution
-vulcanDataSource
-vulcanSignalCoverage
-
-after explicitly removing Vulcan from the product.
-
-That's dead terminology.
-
-Delete it.
+That's dead terminology. Delete it.
 
 19. The latest pipeline is actually pretty clean
 
@@ -820,7 +801,7 @@ Customer intelligence is weak and partly in-memory
 No true post-action strategy adaptation
 resolve_infrastructure isn't actually an infrastructure mutation
 saga state remains despite saga architecture being deleted
-Vulcan-named fields remain
+legacy codenamed fields remained
 evaluation/E2E coverage was removed
 no empirical proof that the strategy engine improves recovery
 the product still largely defaults to Payment Link email

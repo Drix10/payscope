@@ -59,8 +59,8 @@ export type ActiveRescue = {
   amountPaise: number;
   strategyName: string;
   strategyDisplayName: string;
-  vulcanAttribution: string;
-  vulcanDataSource: 'razorpay_fields_heuristic';
+  telemetryAttribution: string;
+  telemetryDataSource: 'razorpay_fields_heuristic';
   sagaStep: string;
   elapsedMs: number;
 }
@@ -72,7 +72,7 @@ export type RevenueIntelligence = {
   protectedPaise: number;
   recoveryRate: number;
   merchantInterventionCount: number;
-  vulcanSignalCoverage: number;
+  telemetrySignalCoverage: number;
   activeRescues: ActiveRescue[];
   autonomous: { investigated: number; sagasCreated: number; actionsExecuted: number; paymentsRecovered: number };
 }

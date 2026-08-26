@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { z } from 'zod';
 import { MvpRepository } from '../db/mvp-repository';
-import { Incident, InvestigationPlan, InvestigationPlanSchema, NormalizedEvent, PolicyDecisionSchema, QueueJob, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisModelOutputSchema, RiskAnalysisSchema, VulcanEnrichment } from '../domain/contracts';
+import { Incident, InvestigationPlan, InvestigationPlanSchema, NormalizedEvent, PolicyDecisionSchema, QueueJob, RecoveryPlan, RecoveryPlanSchema, RiskAnalysis, RiskAnalysisModelOutputSchema, RiskAnalysisSchema, TelemetryEnrichment } from '../domain/contracts';
 import { ModelProvider, ModelRequest, ModelResult } from '../providers/model/interface';
 import { evaluatePolicy } from './policy-evaluator';
 import { rankStrategies } from '../intelligence/recovery-engine';
@@ -21,7 +21,7 @@ const AGENT_PIPELINE_DEADLINE_MS = Number.isSafeInteger(Number(process.env.PAYSC
 
 export type SupervisorInput = {
   incident: Pick<Incident, 'id' | 'riskTier' | 'status' | 'totalFailedAmountPaise' | 'correlatedEventIds' | 'openedAt'>;
-  enrichment: VulcanEnrichment | null;
+  enrichment: TelemetryEnrichment | null;
   merchantPolicyCount: number;
   autoResolveBudgetRemaining: number;
 };
@@ -35,7 +35,7 @@ export type RiskAnalystTools = {
 
 export type RiskAnalystInput = {
   incident: Pick<Incident, 'id' | 'riskTier' | 'status' | 'totalFailedAmountPaise' | 'remainingAmountPaise'>;
-  enrichment: VulcanEnrichment | null;
+  enrichment: TelemetryEnrichment | null;
   customerHash?: string;
   gateway: string;
 };
