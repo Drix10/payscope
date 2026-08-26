@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
+const { createHmac } = require('crypto');
 const { runDurableInvestigation } = require('../dist/pipeline/investigator');
 const { evaluatePolicy } = require('../dist/pipeline/policy-evaluator');
 const { rankStrategies, adaptRecoveryStrategy, replanIncidentStrategy } = require('../dist/intelligence/recovery-engine');
+const { receiveWebhook } = require('../dist/pipeline/intake');
 
 class EchoModelAdapter {
   constructor(fn) { this.fn = fn; }
@@ -14,7 +16,12 @@ class EchoModelAdapter {
 
 const org = '00000000-0000-4000-8000-000000000001';
 const validUuid = '00000000-0000-4000-8000-000000000002';
+const webhookSecret = 'test_webhook_secret_12345678901234567890';
 let passed = 0; let failed = 0;
+
+function signWebhook(body, secret = webhookSecret) {
+  return createHmac('sha256', secret).update(body).digest('hex');
+}
 
 async function runScenario(name, scenarioFn) {
   try {
@@ -138,7 +145,8 @@ async function main() {
       incidentDetail: async () => ({
         incident: { id: 'inc_dup', organizationId: org, riskTier: 'HIGH', status: 'OPEN', totalFailedAmountPaise: 500000, recoveredAmountPaise: 0, remainingAmountPaise: 500000, correlatedEventIds: ['evt_dup'], openedAt: new Date().toISOString(), resolvedAt: null, updatedAt: new Date().toISOString() },
         events: [{ id: 'evt_dup', organizationId: org, event: { eventId: 'evt_dup', organizationId: org, eventType: 'payment.failed', paymentId: 'pay_dup', amountPaise: 500000, receivedAt: new Date().toISOString() }, enrichment: { failureAttribution: 'customer_drop' } }],
-        investigation: null, proposals: [], audit: [],
+        investigation: { riskAnalysis: { failureRootCause: 'customer_error', evidenceStrength: 'strong', confidence: 0.88, causalNarrative: 'Customer drop', evidenceConfidenceRationale: 'Verified', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 500000, missingEvidence: [], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'deliver_recovery_link_email', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } } },
+        proposals: [], audit: [],
         execution: [{ capability: 'deliver_recovery_link_email', command_key: `${org}:deliver_recovery_link_email:inc_dup` }]
       }),
       customerProfile: async () => null,
@@ -171,6 +179,58 @@ async function main() {
     const tried = ['deliver_recovery_link_email', 'resolve_infrastructure'];
     const adapted = adaptRecoveryStrategy(tried, incident, enrichment, risk, null, null);
     assert.equal(adapted, null);
+  });
+
+  // 10. E2E Webhook Intake & Adaptive Replan Path
+  await runScenario('E2E Production Intake: receiveWebhook ignores initial failure for replan, then replans on correlated payment_link.expired', async () => {
+    let replanCount = 0;
+    let createdActions = [];
+    let state = {
+      incident: { id: 'inc_e2e_intake', organizationId: org, riskTier: 'HIGH', status: 'OPEN', totalFailedAmountPaise: 1000000, recoveredAmountPaise: 0, remainingAmountPaise: 1000000, correlatedEventIds: ['evt_e2e_1'], openedAt: new Date().toISOString(), resolvedAt: null, updatedAt: new Date().toISOString() },
+      events: [{ id: 'evt_e2e_1', organizationId: org, event: { eventId: 'evt_e2e_1', eventType: 'payment.failed', customerHash: 'cust_hash_1', occurredAt: new Date().toISOString() }, enrichment: { failureAttribution: 'gateway_degraded' } }],
+      investigation: { riskAnalysis: { failureRootCause: 'gateway_degraded', evidenceStrength: 'strong', confidence: 0.90, causalNarrative: 'Gateway issue', evidenceConfidenceRationale: 'Verified', alternativeHypotheses: [], falsePositiveCostEstimatePaise: 1000000, missingEvidence: [], chargebackEvidenceReady: false, evidenceItems: ['payment.failed'], recommendedActionCategory: 'resolve_infrastructure', toolResults: { incidentTimelineEventCount: 1, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null } } },
+      execution: []
+    };
+
+    const mockRepo = {
+      recordWebhookIntake: async (orgId, rawBody, normalized) => {
+        if (normalized.eventType === 'payment.failed') {
+          return { eventId: normalized.eventId, duplicate: false, incidentId: 'inc_e2e_intake', createdNewIncident: true };
+        }
+        return { eventId: normalized.eventId, duplicate: false, incidentId: 'inc_e2e_intake', createdNewIncident: false };
+      },
+      incidentDetail: async () => state,
+      customerProfile: async () => null,
+      autonomyPolicy: async () => null,
+      createExecutionActionForSaga: async (orgId, incId, capability, rationale, amount) => {
+        replanCount++;
+        createdActions.push({ capability, command_key: `${orgId}:${capability}:${incId}` });
+        state.execution.push({ capability, command_key: `${orgId}:${capability}:${incId}` });
+        return `act_${replanCount}`;
+      }
+    };
+
+    // Step 1: Primary payment.failed webhook arrives -> creates incident
+    const payload1 = Buffer.from(JSON.stringify({ event: 'payment.failed', payload: { payment: { entity: { id: 'pay_1', amount: 1000000, created_at: Math.floor(Date.now() / 1000) } } } }));
+    const res1 = await receiveWebhook(payload1, signWebhook(payload1), 'evt_e2e_1', mockRepo, { webhookSecret, organizationId: org });
+    assert.equal(res1.duplicate, false);
+    assert.equal(replanCount, 0); // No replan triggered on initial incident creation
+
+    // Simulate primary investigation executing 1st action (deliver_recovery_link_email)
+    state.execution.push({ capability: 'deliver_recovery_link_email', command_key: `${org}:deliver_recovery_link_email:inc_e2e_intake` });
+
+    // Step 2: Correlated payment_link.expired webhook arrives for existing incident with prior execution
+    const payload2 = Buffer.from(JSON.stringify({ event: 'payment_link.expired', payload: { payment_link: { entity: { id: 'pl_1', amount: 1000000, created_at: Math.floor(Date.now() / 1000) } } } }));
+    const res2 = await receiveWebhook(payload2, signWebhook(payload2), 'evt_e2e_2', mockRepo, { webhookSecret, organizationId: org });
+    assert.equal(res2.duplicate, false);
+    assert.equal(replanCount, 1); // Adaptive replan triggered!
+    assert.equal(createdActions.length, 1);
+    assert.equal(createdActions[0].capability, 'resolve_infrastructure'); // Untried strategy selected
+
+    // Step 3: Duplicate payment_link.expired webhook arrives -> idempotency check prevents duplicate action
+    const res3 = await receiveWebhook(payload2, signWebhook(payload2), 'evt_e2e_2_dup', mockRepo, { webhookSecret, organizationId: org });
+    assert.equal(res3.duplicate, false);
+    assert.equal(replanCount, 1); // Action count remains unchanged!
   });
 
   console.log('\nFinal Integration Suite Summary: ' + passed + ' passed, ' + failed + ' failed');

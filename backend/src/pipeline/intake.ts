@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from 'crypto';
 import { AppError, Incident, IncidentStatus, NormalizedEvent, NormalizedEventSchema, RiskTier, VulcanEnrichment } from '../domain/contracts';
 import { RECOVERY_WINDOW_MS } from '../config/config';
 import { replanIncidentStrategy } from '../intelligence/recovery-engine';
+import { logger } from '../observability';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -252,9 +253,16 @@ export async function receiveWebhook(
   const normalized = normalizeRazorpayWebhook(rawBody, eventIdHeader, secret);
   const result = await repository.recordWebhookIntake(config.organizationId, rawBody, normalized);
   
-  if (result.incidentId && (normalized.eventType === 'payment.failed' || normalized.eventType === 'payment_link.expired' || normalized.eventType === 'recovery.failed')) {
+  if (result.incidentId && !result.createdNewIncident && (normalized.eventType === 'payment.failed' || normalized.eventType === 'payment_link.expired' || normalized.eventType === 'recovery.failed')) {
     const eventReason = normalized.eventType === 'payment_link.expired' ? 'payment_link_expired' : normalized.eventType === 'recovery.failed' ? 'recovery_failed' : 'linked_risk_event';
-    await handleIncidentAdaptiveLifecycle(repository, config.organizationId, result.incidentId, eventReason).catch(() => null);
+    try {
+      await handleIncidentAdaptiveLifecycle(repository, config.organizationId, result.incidentId, eventReason);
+    } catch (err) {
+      logger.error({ incidentId: result.incidentId, eventReason, error: err instanceof Error ? err.message : String(err) }, 'Adaptive incident lifecycle replan error');
+      if (typeof repository.recordAuditEntry === 'function') {
+        await repository.recordAuditEntry(config.organizationId, result.incidentId, 'adaptive_replan_error', { eventReason, error: err instanceof Error ? err.message : String(err) }).catch(() => null);
+      }
+    }
   }
 
   return { duplicate: result.duplicate, ignored: false, eventId: result.eventId };

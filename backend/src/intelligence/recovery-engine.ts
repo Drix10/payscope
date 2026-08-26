@@ -183,14 +183,26 @@ export function adaptRecoveryStrategy(
   return untried[0] ?? null;
 }
 
+export type ReplanRepository = {
+  incidentDetail(organizationId: string, incidentId: string): Promise<{
+    incident: Incident;
+    events: Array<{ id: string; event: { customerHash?: string; eventType: string }; enrichment?: VulcanEnrichment | null }>;
+    investigation: { riskAnalysis: RiskAnalysis } | null;
+    execution: Array<{ capability: ActionType; command_key?: string }>;
+  } | null>;
+  customerProfile(organizationId: string, customerHash: string): Promise<CustomerProfile | null>;
+  autonomyPolicy(organizationId: string): Promise<AutonomyPolicy | null>;
+  createExecutionActionForSaga(organizationId: string, incidentId: string, capability: ActionType, rationale: string, amountPaise: number): Promise<string>;
+};
+
 export async function replanIncidentStrategy(
-  repository: any,
+  repository: ReplanRepository,
   organizationId: string,
   incidentId: string,
   reason: string
 ): Promise<{ adaptedStrategy: RecoveryStrategy | null; actionId: string | null }> {
   const detail = await repository.incidentDetail(organizationId, incidentId).catch(() => null);
-  if (!detail || detail.incident.status === 'RESOLVED' || detail.incident.status === 'DISMISSED' || detail.incident.status === 'DISPUTE_OPENED') {
+  if (!detail || !detail.execution || detail.execution.length === 0 || detail.incident.status === 'RESOLVED' || detail.incident.status === 'DISMISSED' || detail.incident.status === 'DISPUTE_OPENED') {
     return { adaptedStrategy: null, actionId: null };
   }
   const latest = detail.events.at(-1);
@@ -198,6 +210,12 @@ export async function replanIncidentStrategy(
 
   // Enforce fraud hard stop on telemetry attribution
   if (enrichment?.failureAttribution === 'fraud_block') {
+    return { adaptedStrategy: null, actionId: null };
+  }
+
+  // Real risk analysis derived directly from existing durable investigation
+  const realRiskAnalysis = detail.investigation?.riskAnalysis;
+  if (!realRiskAnalysis) {
     return { adaptedStrategy: null, actionId: null };
   }
 
@@ -209,24 +227,6 @@ export async function replanIncidentStrategy(
     if (a.command_key) list.push(a.command_key);
     return list;
   });
-
-  // Real risk analysis derived from existing investigation if available or deterministic fallback
-  const existingRisk = detail.investigation?.riskAnalysis;
-  const failureRootCause = existingRisk?.failureRootCause ?? mapAttributionToRootCause(enrichment?.failureAttribution);
-  const realRiskAnalysis: RiskAnalysis = {
-    failureRootCause,
-    evidenceStrength: existingRisk?.evidenceStrength ?? 'moderate',
-    confidence: existingRisk?.confidence ?? 0.50,
-    causalNarrative: existingRisk?.causalNarrative ?? `Adaptive replan triggered by telemetry: ${reason}`,
-    evidenceConfidenceRationale: existingRisk?.evidenceConfidenceRationale ?? 'Deterministic telemetry attribution clearance',
-    alternativeHypotheses: existingRisk?.alternativeHypotheses ?? [],
-    falsePositiveCostEstimatePaise: detail.incident.remainingAmountPaise,
-    missingEvidence: existingRisk?.missingEvidence ?? [],
-    chargebackEvidenceReady: failureRootCause === 'fraud_confirmed' || failureRootCause === 'fraud_suspected',
-    evidenceItems: [latest?.event.eventType ?? 'payment.failed'],
-    recommendedActionCategory: failureRootCause === 'fraud_confirmed' || failureRootCause === 'fraud_suspected' ? 'no_action' : 'deliver_recovery_link_email',
-    toolResults: { incidentTimelineEventCount: detail.events.length, merchantFailureRate: null, networkFailureRate: null, customerIncidentCount: null },
-  };
 
   const adapted = adaptRecoveryStrategy(tried, detail.incident, enrichment, realRiskAnalysis, customerProfile, autonomyPolicy);
   if (!adapted) return { adaptedStrategy: null, actionId: null };
