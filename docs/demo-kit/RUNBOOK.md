@@ -1,6 +1,6 @@
 # PayScope — 5-Minute Video Recording & Operator Teleprompter Guide
 
-This document is your exact step-by-step teleprompter and screen action guide for recording the 5-minute PayScope submission video for the Razorpay AI Hackathon.
+This document is your exact step-by-step teleprompter, acting direction, and screen action guide for recording the 5-minute PayScope submission video for the Razorpay AI Hackathon.
 
 ---
 
@@ -33,140 +33,365 @@ The demo kit includes 5 automated scripts in `docs/demo-kit/scripts/`:
 
 ---
 
-## 🎬 Step-by-Step Recording Teleprompter Script
+## 🎬 Step-by-Step Recording Teleprompter & Performance Guide
 
 ---
 
-### ⏱️ 0:00 – 0:45 | Segment 1: Showcase & The ₹10,000 Cr Problem
+### ⏱️ 0:00 – 0:45 | Segment 1: The Problem
 
 | Field | Detail / Instruction |
 |---|---|
-| **Screen State** | Full-Screen Right Window (PayScope Showcase Slides). |
-| **Operator Action** | Scroll down smoothly using your mouse wheel from Slide 1 through Slide 4. Pause briefly on each slide card. |
-| **Visual Target** | Highlight the glass card layout, Electric Mint accent lines, animated telemetry flows, and architecture badges. |
+| **Screen State** | Full-Screen Right Window (PayScope Showcase Slides / Spatial Landing Canvas). |
+| **Operator Action** | 1. `[screen fades in]` Start on Slide 1.<br />2. `[pause]` Pause briefly.<br />3. `[shrugs]` Scroll smoothly to Slide 2.<br />4. `[shakes head]` Point at gateway error codes.<br />5. `[screen transitions]` Click `[ Open Dashboard ]` or scroll to architecture canvas.<br />6. `[leans in]` Point cursor at deterministic safety policy badge.<br />7. `[pause]` Pause for final boundary line. |
+| **Delivery Cues** | The `[...]` brackets below are acting and delivery directions (`[pause]`, `[shrugs]`, `[shakes head]`, `[leans in]`). Speak naturally and comfortably. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "In India, over ₹10,000 Crore is lost every year to payment failures and checkout drop-offs. When a payment fails, traditional gateways log a static error code and stop. The transaction is dead, and the customer is lost.
-> 
-> If merchants try to blindly spam customers with generic reminders, they risk payment disputes, SMTP spam bans, and chargeback penalties.
-> 
-> PayScope solves this. It is an autonomous payment operations platform built natively for Razorpay merchants. It ingests real-time payment telemetry, runs structured multi-agent root-cause investigation with 3x retry resilience, and executes policy-bounded recovery actions with verified Razorpay callback reconciliation."
-
-👉 **ON SLIDE 4:** Click the green **`[ Open Dashboard ]`** button.
+> [screen fades in]
+>
+> "Okay... so here's the problem.
+>
+> [pause]
+>
+> In India, over ten thousand crore rupees is lost every year to payment failures and checkout drop-offs. And when a payment fails, most systems basically go... [shrugs] 'payment failed.'
+>
+> That's it.
+>
+> [pause]
+>
+> The transaction is dead, and the customer is gone.
+>
+> But if you start blindly hammering customers with generic payment reminders... [shakes head] you're creating another problem — spam, disputes, chargebacks, compliance risk.
+>
+> So we built PayScope.
+>
+> [screen transitions]
+>
+> It's an autonomous payment-operations system for Razorpay merchants. It takes the actual payment telemetry, investigates *why* the payment failed, decides what — if anything — is safe to do, and then executes that recovery through a durable, policy-controlled pipeline.
+>
+> And importantly... [leans in] it doesn't let the AI decide what it's allowed to do.
+>
+> The AI investigates.
+> The deterministic policy decides.
+> [pause]
+> And the execution layer proves what actually happened."
 
 ---
 
-### ⏱️ 0:45 – 1:45 | Segment 2: Hero KPI Cards & Webhook Telemetry Ingestion
+### ⏱️ 0:45 – 1:45 | Segment 2: Live Failure
 
 | Field | Detail / Instruction |
 |---|---|
-| **Screen State** | Split-Screen (Demo Studio on Left, Dashboard on Right). |
-| **Operator Action** | 1. Point out the **4 Hero KPI Cards** at the top (`Active Telemetry`, `Autonomous Outreach`, `Multi-Agent Engine`, `Safety Policy Lock`).<br />2. On Demo Studio (`http://127.0.0.1:3050`), click **`[ > DISPATCH EVENT ]`** under **01: FAILED PAYMENT**. |
-| **Visual Target** | Hover cursor over the newly ingested incident. Highlight the **5-Stage Pipeline Progression Bar** (`1. Webhook Ingested` → `2. Razorpay Fields Enriched` → `3. Evidence Investigation` → `4. Deterministic Strategy + Policy` → `5. Outbox Queued`).  |
+| **Screen State** | Split-Screen (Demo Studio on Left `http://127.0.0.1:3050`, Dashboard on Right `http://localhost:5173`). |
+| **Operator Action** | 1. `[dashboard appears]` Present split-screen operational view.<br />2. `[moves cursor to Demo Studio]` Hover over **01: FAILED PAYMENT**.<br />3. `[clicks DISPATCH EVENT]` Click `[ > DISPATCH EVENT ]`.<br />4. `[brief pause]` Wait for event ingestion and field extraction.<br />5. `[points at pipeline]` Move cursor across the **5-Stage Pipeline Progression Bar** (`Ingested` → `Enriched` → `Investigation` → `Strategy + Policy` → `Outbox`).<br />6. `[points at incident]` Hover cursor over the incident card.<br />7. `[points at payment link]` Point to the 1-click Razorpay Payment Link action. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "Welcome to the PayScope Autonomous Command Center. At the top, you can see our real-time operational posture: Active Telemetry, Autonomous Outreach status, Multi-Agent Engine health, and Deterministic Safety Policy Locks.
-> 
-> Let's dispatch a live payment failure webhook from our operator terminal.
-> 
-> Instantly, PayScope verifies the HMAC signature and derives bounded enrichment from allowlisted Razorpay payment fields—such as error source, failure step, retry attempts, acquirer data, and downtime signals when available.
-> 
-> Look at the 5-stage pipeline progression: The event is ingested, enriched from Razorpay fields, investigated for evidence and risk, ranked by the deterministic Recovery Engine, cleared through 13 deterministic safety gates, and queued in the transactional execution outbox.
-> 
-> The evidence pipeline identified a likely customer drop-off during UPI authentication. The deterministic Recovery Engine selected the permitted strategy; only after policy clearance can the direct-execution worker create a 1-click Razorpay Payment Link."
+> [dashboard appears]
+>
+> "So let's actually break something.
+>
+> [moves cursor to Demo Studio]
+>
+> I'm going to send a payment failure webhook."
+>
+> [clicks DISPATCH EVENT]
+>
+> "And... there it is.
+>
+> [brief pause]
+>
+> The event comes in, the signature is verified, and we extract only the Razorpay fields we're actually allowed to use.
+>
+> [points at pipeline]
+>
+> Now watch this pipeline.
+>
+> Webhook ingestion...
+> [pause]
+> enrichment...
+> investigation...
+> deterministic strategy and policy...
+> and finally, the execution outbox.
+>
+> [points at incident]
+>
+> The investigation identifies the likely failure as a customer drop-off during UPI authentication.
+>
+> Now here's the important part.
+>
+> [pause]
+>
+> The model can say, 'hey, this looks like a customer problem.'
+>
+> But it cannot just say, 'send an email.'
+>
+> The Recovery Engine ranks the available action, the deterministic policy checks whether that action is permitted, and *only then* can the worker execute it.
+>
+> [points at payment link]
+>
+> In this case, the permitted action is a one-click Razorpay Payment Link."
 
 ---
 
-### ⏱️ 1:45 – 2:30 | Segment 3: Webhook Replay & Idempotent Deduplication
+### ⏱️ 1:45 – 2:30 | Segment 3: Duplicate Webhook
 
 | Field | Detail / Instruction |
 |---|---|
 | **Screen State** | Split-Screen. |
-| **Operator Action** | On Demo Studio, click **`[ > REPLAY DUPLICATE ]`** under **02: DUPLICATE REPLAY**. |
-| **Visual Target** | Point to the Demo Studio terminal showing `duplicate: true`, then highlight that the incident feed remains clean with **zero duplicate incidents or spam outreach**. |
+| **Operator Action** | 1. `[moves to duplicate scenario]` Focus on **02: DUPLICATE REPLAY** in Demo Studio.<br />2. `[clicks REPLAY DUPLICATE]` Click `[ > REPLAY DUPLICATE ]`.<br />3. `[pause]` Point to output log.<br />4. `[points]` Point cursor at incoming payload.<br />5. `[points at duplicate: true]` Point to terminal output showing `duplicate: true` and clean incident feed.<br />6. `[nods]` Nods to reinforce exactly-once effect. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "In production, webhooks frequently arrive multiple times due to network retries. Basic scripts often spam customers multiple times for the same failed payment.
-> 
-> Watch what happens when I trigger a duplicate replay of the exact same event. 
-> 
-> PayScope's correlation engine matches the order ID, customer hash, and sliding time window. The duplicate is suppressed immediately at the intake boundary with `duplicate: true`.
-> 
-> No duplicate incident is created, no duplicate replan is started, and no duplicate email command is issued. The durable command key and callback/event deduplication make the action idempotent."
+> [moves to duplicate scenario]
+>
+> "Now here's something that happens all the time in production.
+>
+> [clicks REPLAY DUPLICATE]
+>
+> The exact same webhook arrives again.
+>
+> [pause]
+>
+> And this is where a lot of automation systems get ugly.
+>
+> Same event...
+> same customer...
+> [points]
+> potentially another email.
+>
+> Not here.
+>
+> [points at `duplicate: true`]
+>
+> PayScope recognizes the duplicate at the intake boundary.
+>
+> [pause]
+>
+> No second incident.
+> No second recovery plan.
+> No second command.
+>
+> The event and command identities are durable, so even if the infrastructure retries the work, we're not accidentally sending the same recovery action twice.
+>
+> [nods]
+>
+> Exactly-once *effect*, even when the world underneath us is very much not exactly-once."
 
 ---
 
-### ⏱️ 2:30 – 3:15 | Segment 4: Razorpay Dispute Hard Stop Safety Lock
+### ⏱️ 2:30 – 3:15 | Segment 4: Dispute Hard Stop
 
 | Field | Detail / Instruction |
 |---|---|
 | **Screen State** | Split-Screen. |
-| **Operator Action** | On Demo Studio, click **`[ > DISPATCH DISPUTE ]`** under **03: DISPUTE EVENT**. |
-| **Visual Target** | 1. Click on the **Disputes** tab in the incident feed.<br />2. Highlight the operational badge: **`Dispute Active — Automated Outreach Blocked by Safety Policy`**.<br />3. Point to the Policy Gate status **`dispute: blocked`**. |
+| **Operator Action** | 1. `[moves to dispute scenario]` Focus on **03: DISPUTE EVENT** in Demo Studio.<br />2. `[clicks DISPATCH DISPUTE]` Click `[ > DISPATCH DISPUTE ]`.<br />3. `[pause]` Switch to **Disputes** tab on dashboard.<br />4. `[points at Dispute Safety Mode]` Point at **`Dispute Active — Automated Outreach Blocked by Safety Policy`** banner.<br />5. `[points at blocked status]` Hover over blocked policy gate badge (`dispute: blocked`).<br />6. `[nods]` Nods for final authorization boundary line. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "Autonomous execution requires strict safety guardrails. If a customer opens a formal dispute or chargeback with their bank, contacting them creates severe compliance violations and chargeback penalties.
-> 
-> Let's dispatch a Razorpay dispute event.
-> 
-> Notice how PayScope immediately locks into 'Dispute Safety Mode'. Our deterministic policy engine intercepts the dispute and engages a Hard Stop across 13 safety gates.
-> 
-> All automated recovery actions are blocked instantly. Models supply bounded evidence; the deterministic policy is the final authorization boundary."
+> [moves to dispute scenario]
+>
+> "Now let's try something much more dangerous.
+>
+> [clicks DISPATCH DISPUTE]
+>
+> A customer has opened a dispute.
+>
+> [pause]
+>
+> And this is where I *don't* want an autonomous system being clever.
+>
+> [points at Dispute Safety Mode]
+>
+> PayScope sees the dispute and immediately enters safety mode.
+>
+> [pause]
+>
+> Recovery actions are blocked.
+>
+> The policy gate says: no.
+>
+> [points at blocked status]
+>
+> And that's intentional.
+>
+> The AI doesn't get to override this because it thinks recovery would probably make money.
+>
+> [pause]
+>
+> Evidence can inform the decision.
+> Models can investigate.
+>
+> But authorization belongs to deterministic policy.
+>
+> [nods]
+>
+> That's the boundary."
 
 ---
 
-### ⏱️ 3:15 – 4:00 | Segment 5: Payment Link Dispatch & Signed Callback Reconciliation
+### ⏱️ 3:15 – 4:00 | Segment 5: Real Razorpay Recovery + Callback
 
 | Field | Detail / Instruction |
 |---|---|
 | **Screen State** | Split-Screen. |
-| **Operator Action** | 1. Confirm that the reference is from an actual PayScope-created Test-mode Payment Link and the payment ID is its captured payment.<br />2. On Demo Studio, click **`[ > DISPATCH RECON ]`** under **04: RECONCILIATION**.<br />3. Click on the **Resolved** tab in the PayScope Dashboard. |
-| **Visual Target** | Scroll to the **Autonomous Execution Ledger** and highlight the status changing to **`Payment Recovered & Reconciled`** with Razorpay reference `ps_...`. |
+| **Operator Action** | 1. `[moves to reconciliation]` Focus on **04: RECONCILIATION** in Demo Studio.<br />2. `[clicks DISPATCH RECON]` Click `[ > DISPATCH RECON ]`.<br />3. `[pause]` Highlight tracking reference `ps_...`.<br />4. `[points at ps_...]` Point to `ps_...` reference on action record.<br />5. `[pause]` Observe signed `payment_link.paid` webhook processing.<br />6. `[clicks Resolved]` Click **Resolved** tab on Dashboard.<br />7. `[points at resolved record]` Point at the resolved record with verified amount. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "Dispatching a recovery link is only half the battle—true revenue recovery requires closed-loop reconciliation. 
-> 
-> PayScope embeds a unique tracking reference starting with `ps_` into the Razorpay Payment Link.
-> 
-> When the customer completes the payment, Razorpay sends a signed `payment_link.paid` webhook. PayScope correlates the reference ID back to the original incident.
-> 
-> When the reference and payment match the durable action, the incident updates to RESOLVED and the recovered amount is recorded. We never claim money is recovered from SMTP acceptance or a synthetic event; it requires the verified Razorpay callback and causal correlation."
+> [moves to reconciliation]
+>
+> "Okay. So let's show the other side — an actual recovery.
+>
+> [clicks DISPATCH RECON]
+>
+> This isn't a fake success state.
+>
+> [pause]
+>
+> PayScope created the Razorpay Payment Link in test mode, and we've got the real reference attached to the action.
+>
+> [points at `ps_...`]
+>
+> That tracking reference lets us connect the payment back to the exact incident and execution action that caused it.
+>
+> Then Razorpay sends the signed `payment_link.paid` callback.
+>
+> [pause]
+>
+> We verify it.
+> We correlate it.
+> We reconcile it against the durable action.
+>
+> And only *then*..."
+>
+> [clicks Resolved]
+>
+> "...do we say the money was recovered.
+>
+> [pause]
+>
+> Not because an email was accepted.
+> Not because some internal timer fired.
+> Not because the AI said it worked.
+>
+> [points at resolved record]
+>
+> Because Razorpay gave us verified payment evidence that matches the action."
 
 ---
 
-### ⏱️ 4:00 – 4:40 | Segment 6: Recovery Policy Learning — Why PayScope Chose This Action
+### ⏱️ 4:00 – 4:40 | Segment 6: The Differentiator: Learning
 
 | Field | Detail / Instruction |
 |---|---|
-| **Screen State** | Full-Screen Right Window (Dashboard) — Recovery Intelligence panel. |
-| **Operator Action** | 1. Hover the **"Why this action?"** tooltip on the latest incident (shows historical rate, sample size, Wilson interval, and exploration flag).<br />2. Point to the **Strategy Performance** table (merchant × failure × segment).<br />3. Note the **"Estimated ₹42,500 (n=47, 34% [28%–41%])"** — never *Expected* — and the 5% exploration badge when present. |
-| **Visual Target** | Highlight that strategy ranking uses empirical posterior (Beta-Binomial with centralized 18% prior config) with Thompson-inspired deterministic exploration and unified cold-start estimation semantics. |
+| **Screen State** | Full-Screen Right Window (Dashboard) — Recovery Intelligence Panel. |
+| **Operator Action** | 1. `[switches to Recovery Intelligence]` Scroll down to Recovery Intelligence / Strategy Performance.<br />2. `[points at Strategy Performance]` Point to Strategy Performance matrix (merchant × failure × segment).<br />3. `[points at interval]` Point to Wilson score interval (e.g., 34% [28%–41%]).<br />4. `[pause]` Pause on empirical posterior explanation.<br />5. `[slight pause]` Hover over recovery estimate.<br />6. `[points at ledger]` Point cursor at `payscope_recovery_outcomes` ledger entry.<br />7. `[nods]` Nods for final learning loop statement. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "This is where PayScope learns. For this merchant, this failure category, and this customer segment, we've observed 47 prior attempts — 34% recovered, Wilson interval 28 to 41%. The engine's posterior, configured centrally from our runtime prior, drove the choice.
-> 
-> Every intervention is an experiment: send time, channel, expected recovery, and actual outcome are written to the durable `recovery_outcomes` ledger. Paid and expired events transactionally close the learning loop during reconciliation — so the next decision is measurably different. No LLM ever mutates policy; statistics do."
+> [switches to Recovery Intelligence]
+>
+> "And this... [pause] is the part I'm most excited about.
+>
+> PayScope doesn't just automate the same recovery decision forever.
+>
+> [points at Strategy Performance]
+>
+> It learns from what actually happened.
+>
+> For this merchant, this failure category, and this customer segment, we've got forty-seven previous attempts.
+>
+> Thirty-four percent recovered.
+>
+> [points at interval]
+>
+> And the system shows the uncertainty around that estimate instead of pretending thirty-four percent is some magical truth.
+>
+> [pause]
+>
+> That historical outcome feeds the deterministic recovery ranking.
+>
+> So we're not asking the LLM, 'what should we try?'
+>
+> We're asking:
+> [slight pause]
+> 'Given what we've actually observed for this merchant... what action has the best evidence behind it?'
+>
+> And every intervention becomes another observation.
+>
+> [points at ledger]
+>
+> Send.
+> Outcome.
+> Paid or expired.
+>
+> That closes the learning loop.
+>
+> And next time, the decision can actually be different because the evidence is different.
+>
+> [nods]
+>
+> The model investigates.
+> The statistics learn.
+> The policy still decides."
 
-### ⏱️ 4:40 – 5:00 | Segment 7: Cryptographic Audit Trail & Operational Intelligence Query
+---
+
+### ⏱️ 4:40 – 5:00 | Segment 7: Audit + Killer Ending
 
 | Field | Detail / Instruction |
 |---|---|
 | **Screen State** | Full-Screen Right Window (Dashboard). |
-| **Operator Action** | 1. Scroll down to the **Audit Trail** section and highlight the green **`Audit Chain Intact`** badge.<br />2. In the **Operational Insights** search box, type `"show open high-risk incidents"` and click **Ask**. |
-| **Visual Target** | Highlight the unbroken cryptographic audit sequence and the instant structured query answer. |
+| **Operator Action** | 1. `[scrolls to Audit Trail]` Scroll down to Cryptographic Audit Trail.<br />2. `[pause]` Hover over green **`Audit Chain Intact`** badge.<br />3. `[points at Audit Chain Intact]` Point to SHA-256 hash sequence.<br />4. `[moves to Operational Insights]` Move to natural language query box.<br />5. `[types]` Type `"show open high-risk incidents"`.<br />6. `[clicks Ask]` Click **Ask** button.<br />7. `[pause for result]` Wait for structured query result.<br />8. `[looks at camera]` Look directly at camera for final pitch.<br />9. `[small pause]` Brief pause before closing line.<br />10. `[smiles]` Smile and end recording. |
 
 🗣️ **SPOKEN TELEPROMPTER SCRIPT:**
-> "Every action remains 100% auditable — decisions, receipts, and callbacks are hash-chained with DB-serialized sequencing, and any audit write failure retries the job instead of silently disappearing.
-> 
-> Merchants can also query in natural language. I'll ask: 'show open high-risk incidents' — instant, structured answer.
-> 
-> That is PayScope: evidence-backed, policy-bounded, and now *merchant-learning* revenue recovery. Thank you!"
+> [scrolls to Audit Trail]
+>
+> "And finally... [pause] none of this should be a black box.
+>
+> Every decision, execution receipt, and callback is part of the audit trail.
+>
+> [points at Audit Chain Intact]
+>
+> The chain is serialized and durable, so if an audit write fails, we don't just shrug and move on. The job can retry.
+>
+> [moves to Operational Insights]
+>
+> And because this is an operations system, I can just ask it what I need.
+>
+> [types]
+>
+> 'show open high-risk incidents.'
+>
+> [clicks Ask]
+>
+> [pause for result]
+>
+> And there it is.
+>
+> So that's PayScope.
+>
+> [looks at camera]
+>
+> It doesn't just detect failed payments.
+>
+> It investigates them.
+> It acts within hard safety boundaries.
+> It proves whether the action worked.
+> And it learns from the outcome.
+>
+> [small pause]
+>
+> Evidence-backed.
+> Policy-bounded.
+> Merchant-learning revenue recovery.
+>
+> [smiles]
+>
+> That's PayScope."
 
 ---
 
-## 🎯 Pro Recording Guidelines
+## 🎯 Pro Delivery & Acting Guidelines
 
-1. **Cursor Discipline:** Move the cursor deliberately to the UI cards you are speaking about. Avoid rapid or erratic mouse movement.
-2. **Narration Flow:** Speak with confidence and clear pacing (~130 words per minute).
-3. **Tab Demonstrations:** Click through `All active`, `Open`, `Monitoring`, `Disputes`, and `Resolved` to demonstrate that every single view is populated and responsive.
-4. **Resolution:** Record in 1080p or 1440p 60fps for high visual clarity.
+1. **`[...]` Cues Are Delivery Directives:** Use bracket cues strictly as physical actions and timing indicators (`[pause]`, `[clicks]`, `[points]`). Do not speak them out loud.
+2. **Timing & Pauses:** Respect `[pause]` (0.5s – 1s) and `[brief pause]` to let UI animations, progress bars, and terminal responses render cleanly on camera.
+3. **Cursor Precision:** Move the cursor smoothly to point at specific elements (`[points at pipeline]`, `[points at duplicate: true]`, `[points at Dispute Safety Mode]`).
+4. **Natural Delivery:** Speak as a founder demonstrating a platform they genuinely built and believe in, maintaining conversational flow (~130 WPM).
+5. **Tab Demonstrations:** Click through `All active`, `Open`, `Monitoring`, `Disputes`, and `Resolved` to demonstrate that every single view is populated and responsive.
+6. **Resolution:** Record in 1080p or 1440p 60fps for high visual clarity.
