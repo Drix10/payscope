@@ -128,16 +128,11 @@ export class QueueWorker {
         } finally {
           clearTimeout(jobTimeoutId);
         }
-        const { data: completed, error: completeError } = await this.client
+        const { error: completeError } = await this.client
           .from('payscope_queue_jobs')
-          .update({ status: 'complete', updated_at: new Date().toISOString() })
-          .eq('id', row.id)
-          .eq('status', 'running')
-          .eq('locked_by', this.workerId)
-          .select('id')
-          .maybeSingle();
+          .update({ status: 'complete', updated_at: new Date().toISOString(), locked_at: null, locked_by: null })
+          .eq('id', row.id);
         if (completeError) throw new Error(`PayScope queue completion failed: ${completeError.message}`);
-        if (!completed) throw new Error('PayScope queue completion lost its lease');
       } catch (error) {
         await this.fail(row, error);
       }

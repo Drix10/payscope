@@ -61,9 +61,19 @@ export class MeshModelAdapter implements ModelProvider {
     const payload = await response.json().catch(() => ({})) as MeshResponse;
     if (!response.ok) throw new Error(`Mesh model request failed (${response.status})`);
     const content = payload.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') throw new Error('Mesh model response did not include structured content');
     let parsed: unknown;
-    try { parsed = JSON.parse(stripSingleJsonFence(content)); } catch { throw new Error('Mesh model response was not valid JSON'); }
+    if (content && typeof content === 'object') {
+      parsed = content;
+    } else if (typeof content === 'string') {
+      const extracted = stripSingleJsonFence(content);
+      try {
+        parsed = JSON.parse(extracted);
+      } catch {
+        throw new Error('Mesh model response was not valid JSON');
+      }
+    } else {
+      throw new Error('Mesh model response did not include structured content');
+    }
     return {
       content: request.responseSchema.parse(parsed),
       usage: { inputTokens: safeNumber(payload.usage?.prompt_tokens), outputTokens: safeNumber(payload.usage?.completion_tokens) },
@@ -82,6 +92,13 @@ function safeNumber(value: unknown): number {
 }
 
 function stripSingleJsonFence(content: string): string {
-  const match = content.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match ? match[1] : content;
+  const trimmed = content.trim();
+  const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (match && match[1].trim()) return match[1].trim();
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+  return trimmed;
 }

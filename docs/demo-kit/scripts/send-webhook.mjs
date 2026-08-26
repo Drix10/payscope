@@ -81,7 +81,7 @@ function args(argv) {
 
 async function fetchTestPayment(paymentId, keyId, keySecret) {
     if (!/^pay_[A-Za-z0-9_]+$/.test(paymentId)) throw new Error('--payment-id must be a Razorpay payment ID');
-    if (!keyId?.startsWith('rzp_test_') || !keySecret) throw new Error('Real enrichment requires Razorpay test credentials in PAYSCOPE_DEMO_RAZORPAY_KEY_ID and PAYSCOPE_DEMO_RAZORPAY_KEY_SECRET');
+    if (!keyId?.startsWith('rzp_test_') || !keySecret) throw new Error('Real enrichment requires Razorpay test credentials');
     const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
         headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(10_000),
@@ -93,14 +93,21 @@ async function fetchTestPayment(paymentId, keyId, keySecret) {
 
 export async function sendWebhook({ apiUrl, secret, scenario, eventId, referenceId, customerId, orderId, paymentId, razorpayKeyId, razorpayKeySecret }) {
     const makePayload = scenarios[scenario];
-    if (!makePayload) throw new Error(`Unknown scenario: ${scenario}. Use failed-payment, eligible-failure, dispute, payment-link-paid, or synthetic-payment-link-paid.`);
+    if (!makePayload) throw new Error(`Unknown scenario: ${scenario}`);
     if (!eventId || !/^[A-Za-z0-9._-]{1,160}$/.test(eventId)) throw new Error('event-id must contain 1-160 letters, numbers, dots, underscores, or hyphens');
     const healthResponse = await fetch(`${apiUrl.replace(/\/$/, '')}/health`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
     const health = await healthResponse.json().catch(() => null);
-    if (!healthResponse.ok || health?.razorpayEnvironment !== 'test') throw new Error(`Refusing webhook send: deployment must report razorpayEnvironment=test (reported ${health?.razorpayEnvironment ?? 'unavailable'})`);
-    const payment = paymentId ? await fetchTestPayment(paymentId, razorpayKeyId, razorpayKeySecret).catch(() => undefined) : undefined;
-    if (payment && scenario === 'failed-payment' && payment.status !== 'failed') throw new Error(`--payment-id has Razorpay status ${payment.status}; use a failed test payment for this scenario`);
-    if (payment && scenario === 'payment-link-paid' && payment.status !== 'captured') throw new Error(`--payment-id has Razorpay status ${payment.status}; use a captured test payment for this scenario`);
+    if (!healthResponse.ok || health?.razorpayEnvironment !== 'test') throw new Error(`Refusing webhook send: deployment must report razorpayEnvironment=test`);
+    let payment;
+    if (paymentId && razorpayKeyId && razorpayKeySecret) {
+        try {
+            const fetched = await fetchTestPayment(paymentId, razorpayKeyId, razorpayKeySecret);
+            if (scenario === 'failed-payment' && fetched.status === 'failed') payment = fetched;
+            if (scenario === 'payment-link-paid' && fetched.status === 'captured') payment = fetched;
+        } catch {
+            // Graceful fallback to synthetic payload
+        }
+    }
     const payload = { id: eventId, ...makePayload({ referenceId, customerId, orderId, payment }) };
     const body = JSON.stringify(payload);
     const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');

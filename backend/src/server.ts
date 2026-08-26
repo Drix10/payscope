@@ -162,4 +162,11 @@ function portFrom(value: string | undefined): number { const parsed = Number(val
 
 const defaultRuntime = createPayScopeApp();
 export default defaultRuntime.app;
-if (require.main === module) void defaultRuntime.start().catch(error => { logger.error({ errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope could not start'); process.exitCode = 1; });
+
+const isMainEntryPoint = process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js') || process.argv[1].endsWith('server'));
+if (isMainEntryPoint || process.env.NODE_ENV !== 'test') {
+  void defaultRuntime.start().catch(error => {
+    logger.error({ errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope could not start');
+    process.exitCode = 1;
+  });
+}

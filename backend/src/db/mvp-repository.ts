@@ -253,6 +253,7 @@ export class MvpRepository {
     const merchantOptedIn = parsed.policy.merchantOptedIn || parsed.contact.merchantOptedIn;
     return {
       ...parsed,
+      stats: { autoResolveFraction: 0.0 },
       policy: {
         ...parsed.policy,
         merchantOptedIn,
