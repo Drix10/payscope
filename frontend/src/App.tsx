@@ -21,6 +21,14 @@ import {
   IncidentDetailSkeleton,
   MetricsCardSkeleton,
 } from "./components/SkeletonLoader";
+import { QuickStats } from "./components/QuickStats";
+import { AdvancedFilters, applyFilters, FilterState } from "./components/AdvancedFilters";
+import { ExportData } from "./components/ExportData";
+import { Pagination } from "./components/Pagination";
+import { SmartSearch } from "./components/SmartSearch";
+import { SortControls, sortIncidents, SortConfig } from "./components/SortControls";
+import { ToastContainer, useToasts } from "./components/Toast";
+import { usePagination } from "./hooks/usePagination";
 import type {
   AuditEntry,
   AuditIntegrity,
@@ -109,7 +117,7 @@ const queueViews: Array<{ value: Incident["status"] | "ALL"; title: string }> =
 
 export default function App() {
   const [viewMode, setViewMode] = useState<"showcase" | "dashboard">(
-    "showcase",
+    "dashboard",
   );
   const [health, setHealth] = useState<MvpHealth | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -117,6 +125,17 @@ export default function App() {
   const [loadedFilter, setLoadedFilter] = useState<Incident["status"] | "ALL">(
     "ALL",
   );
+  const [advancedFilters, setAdvancedFilters] = useState<FilterState>({
+    riskTiers: new Set(),
+    statuses: new Set(),
+    amountRange: null,
+    dateRange: null,
+  });
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    field: "updatedAt",
+    direction: "desc",
+  });
+  const { toasts, dismissToast, success: toastSuccess } = useToasts();
   const [selected, setSelected] = useState<IncidentDetail | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
@@ -471,6 +490,7 @@ export default function App() {
               <span className="h-2 w-2 rounded-full bg-[#00ff87] animate-pulse" />
               Live Syncing
             </span>
+            <ExportData incidents={ordered} />
             <button
               type="button"
               onClick={() => void refresh(false)}
@@ -484,6 +504,7 @@ export default function App() {
             </button>
           </div>
         </div>
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </header>
 
       <div className="mx-auto grid max-w-[1600px] lg:grid-cols-[292px_minmax(0,1fr)]">
@@ -597,6 +618,10 @@ export default function App() {
                 </p>
               </div>
             </section>
+
+            <div className="mb-6">
+              <QuickStats incidents={ordered} allIncidents={incidents} />
+            </div>
 
             <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl border border-white/[.08] bg-[#090a0f]/90 p-4 backdrop-blur-xl">
