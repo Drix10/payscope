@@ -42,9 +42,9 @@ export class MeshModelAdapter implements ModelProvider {
       body: JSON.stringify({
         model: this.modelId,
         temperature: 0,
-        max_tokens: request.maxTokens,
+        max_tokens: Math.max(request.maxTokens ?? 8192, 8192),
         messages: [
-          { role: 'system', content: request.systemPrompt },
+          { role: 'system', content: `${request.systemPrompt}\nBe extremely concise. Output JSON immediately.` },
           { role: 'user', content: request.userContent },
         ],
         response_format: {
@@ -65,9 +65,9 @@ export class MeshModelAdapter implements ModelProvider {
     if (content && typeof content === 'object') {
       parsed = content;
     } else if (typeof content === 'string') {
-      const extracted = stripSingleJsonFence(content);
+      const repaired = repairJsonString(content);
       try {
-        parsed = JSON.parse(extracted);
+        parsed = JSON.parse(repaired);
       } catch {
         throw new Error('Mesh model response was not valid JSON');
       }
@@ -89,6 +89,68 @@ export function assertInputWithinBudget(content: string, maxInputTokens: number)
 
 function safeNumber(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function repairJsonString(input: string): string {
+  let str = stripSingleJsonFence(input);
+  try {
+    JSON.parse(str);
+    return str;
+  } catch {
+    // Continue to repair truncated or malformed JSON
+  }
+
+  // Handle unclosed trailing quote
+  const quoteMatches = str.match(/(?<!\\)"/g);
+  if (quoteMatches && quoteMatches.length % 2 !== 0) {
+    str += '"';
+  }
+
+  // Remove trailing commas before closing braces/brackets or end of string
+  str = str.replace(/,\s*([}\]])/g, '$1').replace(/,\s*$/g, '');
+
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{') openBraces++;
+      else if (char === '}') openBraces = Math.max(0, openBraces - 1);
+      else if (char === '[') openBrackets++;
+      else if (char === ']') openBrackets = Math.max(0, openBrackets - 1);
+    }
+  }
+
+  while (openBrackets > 0) {
+    str += ']';
+    openBrackets--;
+  }
+  while (openBraces > 0) {
+    str += '}';
+    openBraces--;
+  }
+
+  try {
+    JSON.parse(str);
+    return str;
+  } catch {
+    return stripSingleJsonFence(input);
+  }
 }
 
 function stripSingleJsonFence(content: string): string {
