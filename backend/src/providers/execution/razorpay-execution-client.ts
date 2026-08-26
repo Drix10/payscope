@@ -11,11 +11,12 @@ export class RazorpayExecutionClient {
 
   async createPaymentLink(input: { referenceId: string; amountPaise: number; currency: string; description: string }): Promise<RazorpayPaymentLink> {
     if (!/^ps_[a-f0-9]{32}$/.test(input.referenceId)) throw new Error('Invalid PayScope Payment Link reference');
-    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100) throw new Error('Payment Link amount must be at least 100 paise');
+    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > 50_000_000_00) throw new Error('Payment Link amount must be between 100 paise and 50 crore (Razorpay limit)');
     if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('Payment Link currency is invalid');
+    if (!input.description || input.description.trim().length === 0) throw new Error('Payment Link description is required');
     const result = await this.request('/v1/payment_links', {
       method: 'POST',
-      body: JSON.stringify({ amount: input.amountPaise, currency: input.currency, reference_id: input.referenceId, description: input.description.slice(0, 2048), notify: { sms: false, email: false }, reminder_enable: false }),
+      body: JSON.stringify({ amount: input.amountPaise, currency: input.currency, reference_id: input.referenceId, description: input.description.trim().slice(0, 2048), notify: { sms: false, email: false }, reminder_enable: false }),
     });
     return parsePaymentLink(result, input);
   }
@@ -49,12 +50,13 @@ export class RazorpayExecutionClient {
 
   async capturePayment(input: { paymentId: string; amountPaise: number; currency: string }): Promise<RazorpayPayment> {
     if (!/^pay_[A-Za-z0-9]+$/.test(input.paymentId)) throw new Error('Invalid canonical payment id');
-    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100) throw new Error('Capture amount must be at least 100 paise');
+    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > 50_000_000_00) throw new Error('Capture amount must be between 100 paise and 50 crore');
     if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('Capture currency is invalid');
     // read-before-write: fetch canonical state first (caller must also verify authorized)
     const canonical = await this.fetchPayment(input.paymentId);
     if (canonical.status !== 'authorized') throw new Error(`Capture requires authorized payment, found ${canonical.status}`);
-    if (canonical.amount !== input.amountPaise || canonical.currency !== input.currency) throw new Error('Capture amount/currency must match canonical payment exactly');
+    if (canonical.amount !== input.amountPaise) throw new Error(`Capture amount ${input.amountPaise} must match canonical payment amount ${canonical.amount} exactly`);
+    if (canonical.currency !== input.currency) throw new Error(`Capture currency ${input.currency} must match canonical payment currency ${canonical.currency}`);
     try {
       const result = await this.request(`/v1/payments/${encodeURIComponent(input.paymentId)}/capture`, {
         method: 'POST',
@@ -74,13 +76,14 @@ export class RazorpayExecutionClient {
 
   async createRefund(input: { paymentId: string; amountPaise: number; currency: string; receipt: string; idempotencyKey: string }): Promise<RazorpayRefund> {
     if (!/^pay_[A-Za-z0-9]+$/.test(input.paymentId)) throw new Error('Invalid payment id for refund');
-    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100) throw new Error('Refund amount invalid');
+    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise < 100 || input.amountPaise > 50_000_000_00) throw new Error('Refund amount must be between 100 paise and 50 crore');
     if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('Refund currency invalid');
-    if (!input.receipt || input.receipt.length > 160) throw new Error('Refund receipt invalid');
-    if (!/^[A-Za-z0-9_-]{10,240}$/.test(input.idempotencyKey)) throw new Error('Refund idempotency key invalid');
+    if (!input.receipt || input.receipt.length > 160 || !/^[A-Za-z0-9_-]+$/.test(input.receipt)) throw new Error('Refund receipt must be alphanumeric (with _ or -) and max 160 chars');
+    if (!/^[A-Za-z0-9_-]{16,240}$/.test(input.idempotencyKey)) throw new Error('Refund idempotency key must be 16-240 alphanumeric chars (with _ or -)');
     const canonical = await this.fetchPayment(input.paymentId);
     if (canonical.status !== 'captured') throw new Error('Refund requires captured payment');
     if (canonical.currency !== input.currency) throw new Error('Refund currency must match canonical payment');
+    if (input.amountPaise > canonical.amount) throw new Error(`Refund amount ${input.amountPaise} cannot exceed captured amount ${canonical.amount}`);
     const body = JSON.stringify({ amount: input.amountPaise, currency: input.currency, receipt: input.receipt.slice(0, 80) });
     const result = await this.request(`/v1/payments/${encodeURIComponent(input.paymentId)}/refund`, {
       method: 'POST',
@@ -91,8 +94,12 @@ export class RazorpayExecutionClient {
   }
 
   async uploadDisputeDocument(input: { fileName: string; contentBase64: string }): Promise<{ documentId: string }> {
-    if (!input.fileName || input.fileName.length > 160) throw new Error('Document fileName invalid');
-    if (!input.contentBase64) throw new Error('Document content required');
+    if (!input.fileName || input.fileName.length > 160 || !/^[A-Za-z0-9_.-]+$/.test(input.fileName)) throw new Error('Document fileName must be alphanumeric with . _ - and max 160 chars');
+    const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
+    if (!allowedExtensions.some(ext => input.fileName.toLowerCase().endsWith(ext))) throw new Error('Document must be PDF, JPG, PNG, DOC, or DOCX');
+    if (!input.contentBase64 || !/^[A-Za-z0-9+/]+=*$/.test(input.contentBase64)) throw new Error('Document content must be valid base64');
+    const sizeBytes = (input.contentBase64.length * 3) / 4 - (input.contentBase64.match(/=/g) || []).length;
+    if (sizeBytes > 5 * 1024 * 1024) throw new Error('Document size cannot exceed 5MB');
     const form = new FormData();
     form.append('purpose', 'dispute_evidence');
     form.append('file', new Blob([Buffer.from(input.contentBase64, 'base64')]), input.fileName);
@@ -106,9 +113,11 @@ export class RazorpayExecutionClient {
   }
 
   async submitDisputeEvidence(input: { disputeId: string; documentIds: string[]; text: string }): Promise<RazorpayDispute> {
-    if (!input.disputeId) throw new Error('Dispute id required');
-    if (input.documentIds.length === 0) throw new Error('At least one document required');
-    const body = JSON.stringify({ action: 'submit', documents: input.documentIds, comment: input.text.slice(0, 2000) });
+    if (!input.disputeId || !/^disp_[A-Za-z0-9]+$/.test(input.disputeId)) throw new Error('Dispute id must be in format disp_xxx');
+    if (input.documentIds.length === 0 || input.documentIds.length > 10) throw new Error('Dispute evidence requires 1-10 documents');
+    if (!input.documentIds.every(id => typeof id === 'string' && /^doc_[A-Za-z0-9]+$/.test(id))) throw new Error('All document IDs must be in format doc_xxx');
+    if (!input.text || input.text.trim().length === 0 || input.text.length > 2000) throw new Error('Dispute evidence text must be 1-2000 characters');
+    const body = JSON.stringify({ action: 'submit', documents: input.documentIds, comment: input.text.trim().slice(0, 2000) });
     const result = await this.request(`/v1/disputes/${encodeURIComponent(input.disputeId)}/contest`, {
       method: 'POST',
       body,

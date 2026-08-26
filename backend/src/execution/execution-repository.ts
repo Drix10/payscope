@@ -124,8 +124,9 @@ export class ExecutionRepository {
 
   async failOutbox(outbox: ExecutionOutbox, workerId: string, retry: boolean): Promise<void> {
     const nextAttempt = outbox.attemptNumber + 1;
+    const delayIndex = Math.max(0, Math.min(outbox.attemptNumber - 1, 2));
     const update = retry && nextAttempt <= 4
-      ? { status: 'pending', attempt_number: nextAttempt, next_attempt_at: new Date(Date.now() + [1_000, 5_000, 30_000][Math.min(outbox.attemptNumber - 1, 2)]).toISOString(), locked_at: null, locked_by: null, updated_at: new Date().toISOString() }
+      ? { status: 'pending', attempt_number: nextAttempt, next_attempt_at: new Date(Date.now() + [1_000, 5_000, 30_000][delayIndex]).toISOString(), locked_at: null, locked_by: null, updated_at: new Date().toISOString() }
       : { status: 'dead', locked_at: null, locked_by: null, updated_at: new Date().toISOString() };
     const { data, error } = await this.client.from('payscope_execution_outbox').update(update).eq('id', outbox.id).eq('status', 'running').eq('locked_by', workerId).select('id').maybeSingle();
     if (error || !data) throw new Error(`PayScope execution outbox failure update failed: ${error?.message ?? 'lease lost'}`);

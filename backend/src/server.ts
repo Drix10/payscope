@@ -102,7 +102,7 @@ export function createPayScopeApp(env: NodeJS.ProcessEnv = process.env, override
       const enrichment = new HeuristicEnrichmentAdapter(keyId && keySecret ? new RazorpayHttpEnrichmentClient(keyId, keySecret, pipeline.config.enrichmentTimeoutMs) : undefined);
       const fallbackProvider = { async complete<T>(): Promise<never> { throw new Error('MESH_API_KEY is not configured on server'); } };
       const readClient = keyId && keySecret ? new RazorpayReadClient(keyId, keySecret) : null;
-      void readClient;      const processor = new PipelineJobProcessor(
+      void readClient; const processor = new PipelineJobProcessor(
         pipeline.repository,
         enrichment,
         async job => {
@@ -134,12 +134,18 @@ export function createPayScopeApp(env: NodeJS.ProcessEnv = process.env, override
       shuttingDown = true;
       clearInterval(cleanupBuckets);
       watchdog?.stop();
-      await Promise.all([worker?.stopAndDrain(), executionWorker?.stopAndDrain()]).catch(() => {});
+      await Promise.all([worker?.stopAndDrain(), executionWorker?.stopAndDrain()]).catch(() => { });
       await new Promise<void>(resolve => server.close(() => resolve()));
     };
-    const shutdown = () => { void stop().finally(() => process.exit(0)); };
+    const shutdown = () => {
+      // The force-exit guard only starts once shutdown begins, so it can never
+      // fire during normal operation. It is unref'd so it does not by itself
+      // keep the loop alive once graceful teardown has drained everything.
+      const forceExit = setTimeout(() => { logger.error('Graceful shutdown timeout exceeded'); process.exit(1); }, 20_000);
+      forceExit.unref();
+      void stop().finally(() => { clearTimeout(forceExit); process.exit(0); });
+    };
     process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
-    const forceExit = setTimeout(() => process.exit(1), 20_000); forceExit.unref();
     return { server, stop };
   }
 

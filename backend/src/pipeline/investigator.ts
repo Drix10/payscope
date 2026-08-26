@@ -7,8 +7,13 @@ import { evaluatePolicy } from './policy-evaluator';
 import { rankStrategies } from '../intelligence/recovery-engine';
 import { llmFailureEvents, logger } from '../observability';
 
-export function paymentLinkReferenceForProposalDirect(actionType: string): string {
-  const hash = createHash('sha256').update(actionType).digest('hex').slice(0, 32);
+// Display/audit reference on the proposal record. Deterministic per
+// organization+incident+action so an investigation retry reproduces the same
+// value; the executable Payment Link reference is generated independently and
+// uniquely per action in the execution repository.
+export function paymentLinkReferenceForProposalDirect(organizationId: string, incidentId: string, actionType: string): string {
+  const seed = `${organizationId}:${incidentId}:${actionType}`;
+  const hash = createHash('sha256').update(seed).digest('hex').slice(0, 32);
   return `ps_${hash}`;
 }
 
@@ -72,7 +77,8 @@ export async function runInvestigationSupervisor(provider: ModelProvider, input:
       await new Promise(resolve => setTimeout(resolve, attempt * 500));
     }
   }
-  throw new Error('Supervisor failed');
+  // Unreachable: if all retries fail, error is already thrown above
+  throw new Error('Supervisor retry exhausted without throwing - this should never happen');
 }
 
 export async function runRiskAnalyst(provider: ModelProvider, tools: RiskAnalystTools, input: RiskAnalystInput, tenantId: string): Promise<{ analysis: RiskAnalysis; modelId: string; tokensUsed: number }> {
@@ -104,7 +110,8 @@ export async function runRiskAnalyst(provider: ModelProvider, tools: RiskAnalyst
       await new Promise(resolve => setTimeout(resolve, attempt * 500));
     }
   }
-  throw new Error('Risk Analyst failed');
+  // Unreachable: if all retries fail, error is already thrown above
+  throw new Error('Risk Analyst retry exhausted without throwing - this should never happen');
 }
 
 export async function runRecoveryPlanner(provider: ModelProvider, input: RecoveryPlannerInput, tenantId: string): Promise<{ plan: RecoveryPlan; modelId: string; tokensUsed: number }> {
@@ -124,14 +131,16 @@ export async function runRecoveryPlanner(provider: ModelProvider, input: Recover
       await new Promise(resolve => setTimeout(resolve, attempt * 500));
     }
   }
-  throw new Error('Recovery Planner failed');
+  // Unreachable: if all retries fail, error is already thrown above
+  throw new Error('Recovery Planner retry exhausted without throwing - this should never happen');
 }
 
 export async function runDurableInvestigation(repository: MvpRepository, provider: ModelProvider, job: QueueJob, options: { directExecution?: boolean } = {}): Promise<void> {
   if (!job.incidentId) throw new Error('Investigation job is missing incidentId');
   if (!job.triggerEventId) throw new Error('Investigation job is missing triggerEventId');
+  const incidentId = job.incidentId;
   const started = Date.now();
-  const detail = await repository.incidentDetail(job.organizationId, job.incidentId);
+  const detail = await repository.incidentDetail(job.organizationId, incidentId);
   const latest = detail.events.at(-1);
   const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
   let policyContextResult: Awaited<ReturnType<typeof repository.policyContext>> | null = null;
@@ -328,14 +337,20 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     // database must never be evaluated as "merchant opted out of nothing"
     // or "customer without history". The disabled policy blocks every gate.
     const durableStateUnavailable = repositoryReadFailure !== null || policyContextResult === null;
-    const safeFallbackPolicy = durableStateUnavailable ? evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [{ id: 'payscope-fallback-policy', enabled: false, minimumConfidence: 1, rootCauses: [] as never[], allowedActions: [] as never[], merchantOptedIn: false }], { autoResolveFraction: 0 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false, customerReferenceAvailable: false }) : evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [policyContextResult!.policy], policyContextResult!.stats, policyContextResult!.contact, {
-      executionPolicy: executionContextResult?.policy ?? undefined,
-      existingCommandKeys: new Set((detail.execution || []).map(action => `${job.organizationId}:${action.capability}:${job.incidentId}`)),
-      commandKeyForAction: actionType => `${job.organizationId}:${actionType}:${job.incidentId}`,
-      currentRetryCount: (detail.execution || []).filter(action => action.capability === 'deliver_recovery_link_email').length,
-      amountPaise: detail.incident.remainingAmountPaise,
-      currency: latest?.event.currency ?? 'INR',
-    });
+    const safeFallbackPolicy = durableStateUnavailable
+      ? evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [{ id: 'payscope-fallback-policy', enabled: false, minimumConfidence: 1, rootCauses: [] as never[], allowedActions: [] as never[], merchantOptedIn: false }], { autoResolveFraction: 0 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false, customerReferenceAvailable: false })
+      : (() => {
+        // Type guard: policyContextResult is guaranteed non-null here
+        if (!policyContextResult) throw new Error('Policy context unexpectedly null');
+        return evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [policyContextResult.policy], policyContextResult.stats, policyContextResult.contact, {
+          executionPolicy: executionContextResult?.policy ?? undefined,
+          existingCommandKeys: new Set((detail.execution || []).map(action => `${job.organizationId}:${action.capability}:${job.incidentId}`)),
+          commandKeyForAction: actionType => `${job.organizationId}:${actionType}:${job.incidentId}`,
+          currentRetryCount: (detail.execution || []).filter(action => action.capability === 'deliver_recovery_link_email').length,
+          amountPaise: detail.incident.remainingAmountPaise,
+          currency: latest?.event.currency ?? 'INR',
+        });
+      })();
 
     output = { plan: fallbackSupervisor, risk: fallbackRisk, recovery: fallbackRecovery, policy: safeFallbackPolicy };
     const repositoryReadFailureMessage = (repositoryReadFailure as Error | null)?.message ?? null;
@@ -343,7 +358,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
   }
 
   const proposals = output.policy.permittedActions.map(action => {
-    const ref = paymentLinkReferenceForProposalDirect(action.actionType);
+    const ref = paymentLinkReferenceForProposalDirect(job.organizationId, incidentId, action.actionType);
     return {
       id: randomUUID(),
       organizationId: job.organizationId,

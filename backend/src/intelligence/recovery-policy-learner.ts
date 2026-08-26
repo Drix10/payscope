@@ -54,8 +54,8 @@ export function scoreStrategy(input: StrategyScoreInput, explorationSeed: string
   const safeConfidence = Number.isFinite(input.confidence) ? Math.max(0, Math.min(1, input.confidence)) : 0.5;
   const safeAdj = Number.isFinite(input.customerAdjustment) ? Math.max(-30, Math.min(30, input.customerAdjustment)) : 0;
   const historical = input.historical;
-  const attempts = Number.isSafeInteger(historical?.attempts) && (historical?.attempts ?? 0) >= 0 ? historical!.attempts : 0;
-  const paidRaw = Number.isSafeInteger(historical?.paid) && (historical?.paid ?? 0) >= 0 ? historical!.paid : 0;
+  const attempts = Number.isSafeInteger(historical?.attempts) && (historical?.attempts ?? 0) >= 0 ? (historical?.attempts ?? 0) : 0;
+  const paidRaw = Number.isSafeInteger(historical?.paid) && (historical?.paid ?? 0) >= 0 ? (historical?.paid ?? 0) : 0;
   const paid = Math.min(paidRaw, attempts);
   const alpha = priorAlpha(priorRate) + paid;
   const beta = priorBeta(priorRate) + (attempts - paid);

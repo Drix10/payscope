@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { stableHash } from '../../execution/execution-repository';
-import { strategyPerformanceEvents } from '../../observability';
+import { logger, strategyPerformanceEvents } from '../../observability';
 
 /**
  * Monotonic reconciliation: duplicate/late callbacks enrich but never regress terminal states.
@@ -39,7 +39,7 @@ export class Reconciler {
       p_organization_id: organizationId, p_action_id: actionId, p_outcome: 'paid', p_actual_recovery_paise: actualRecovery,
     }).then(
       () => {},
-      (e) => { try { const { logger } = require('../../observability'); logger.warn({ organizationId, actionId, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (paid)'); } catch {} }
+      (e) => { logger.warn({ organizationId, actionId, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (paid)'); }
     );
     return typeof row.incident_id === 'string' ? row.incident_id : null;
   }
@@ -64,7 +64,7 @@ export class Reconciler {
       p_organization_id: organizationId, p_action_id: row.id, p_outcome: 'expired', p_actual_recovery_paise: 0,
     }).then(
       () => {},
-      (e) => { try { const { logger } = require('../../observability'); logger.warn({ organizationId, actionId: row.id, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (expired)'); } catch {} }
+      (e) => { logger.warn({ organizationId, actionId: row.id, error: e instanceof Error ? e.message : String(e) }, 'Recovery outcome ledger close failed (expired)'); }
     );
     return typeof row.incident_id === 'string' ? row.incident_id : null;
   }

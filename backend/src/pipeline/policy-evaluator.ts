@@ -139,10 +139,12 @@ export function evaluatePolicy(
 
     // idempotency: duplicate command_key already dispatched
     if (directOptions.existingCommandKeys && directOptions.commandKeyForAction) {
-      const dup = permittedActions.filter(a => directOptions.existingCommandKeys!.has(directOptions.commandKeyForAction!(a.actionType)));
+      const existingKeys = directOptions.existingCommandKeys;
+      const commandKeyFn = directOptions.commandKeyForAction;
+      const dup = permittedActions.filter(a => existingKeys.has(commandKeyFn(a.actionType)));
       if (dup.length) {
         gates.push({ name: 'idempotency', result: 'blocked', rationale: `Duplicate command key for ${dup.map(d => d.actionType).join(',')}` });
-        permittedActions = permittedActions.filter(a => !directOptions.existingCommandKeys!.has(directOptions.commandKeyForAction!(a.actionType)));
+        permittedActions = permittedActions.filter(a => !existingKeys.has(commandKeyFn(a.actionType)));
       } else gates.push({ name: 'idempotency', result: 'passed', rationale: 'No duplicate command key.' });
     } else gates.push({ name: 'idempotency', result: 'passed', rationale: 'No duplicate command key.' });
 

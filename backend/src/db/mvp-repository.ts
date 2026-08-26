@@ -791,7 +791,10 @@ export class MvpRepository {
         activeActionsCount = data.filter(d => ['queued', 'dispatching', 'accepted', 'retry_scheduled'].includes(d.state)).length;
         completedActionsCount = data.filter(d => d.state === 'confirmed').length;
       }
-    } catch {}
+    } catch (error) {
+      // Revenue intelligence action counts are informational only; log but don't fail the request
+      logger.warn({ organizationId, error: error instanceof Error ? error.message : String(error) }, 'Failed to fetch execution action counts for revenue intelligence');
+    }
 
     const resolvedIncidentsCount = incidents.filter(i => i.status === 'RESOLVED' || i.status === 'HUMAN_RESOLVED').length;
     const totalEndedIncidents = incidents.filter(i => i.status === 'RESOLVED' || i.status === 'HUMAN_RESOLVED' || i.status === 'DISMISSED').length;
@@ -821,7 +824,10 @@ export class MvpRepository {
           const incidentsWithEnrichment = incidents.filter(inc => inc.correlatedEventIds.some(id => (covRows ?? []).some(r => (r as Record<string, unknown>).id === id))).length;
           telemetrySignalCoverage = incidents.length ? incidentsWithEnrichment / incidents.length : 0;
         }
-      } catch {}
+      } catch (error) {
+        // Telemetry coverage is informational only; log but don't fail the request
+        logger.warn({ organizationId, error: error instanceof Error ? error.message : String(error) }, 'Failed to compute telemetry signal coverage');
+      }
     }
 
     // Real active rescues: derive attribution from latest enriched event per incident
@@ -837,7 +843,10 @@ export class MvpRepository {
             const enr = row.enrichment as Record<string, unknown> | null;
             if (eid && enr && typeof enr.failureAttribution === 'string') enrichmentByEventId.set(eid, { failureAttribution: enr.failureAttribution as string, source: row.enrichment_source as string });
           }
-        } catch {}
+        } catch (error) {
+          // Enrichment data is informational only; log but don't fail the request
+          logger.warn({ organizationId, error: error instanceof Error ? error.message : String(error) }, 'Failed to fetch enrichment data for active rescues');
+        }
       }
     }
     const activeRescues = activeIncidents.map(inc => {
