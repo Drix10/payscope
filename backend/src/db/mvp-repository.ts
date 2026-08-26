@@ -156,14 +156,14 @@ export class MvpRepository {
     await reconciler.verifyAndStoreCallback({ ...callback, actionMatch, organizationId, rawBodyEncrypted, source, provider: 'razorpay' });
   }
 
-  /** Reconciles a verified Payment Link completion to the immutable email action. */
-  async reconcileDirectPaymentLinkEvent(organizationId: string, event: NormalizedEvent): Promise<void> {
-    if (event.eventType !== 'payment_link.paid' && event.eventType !== 'payment_link.expired') return;
+  /** Reconciles a verified Payment Link completion to the immutable email action. Returns the owning incidentId when a matching action exists. */
+  async reconcileDirectPaymentLinkEvent(organizationId: string, event: NormalizedEvent): Promise<{ incidentId: string | null }> {
+    if (event.eventType !== 'payment_link.paid' && event.eventType !== 'payment_link.expired') return { incidentId: null };
     const referenceId = typeof event.providerData.payment_link_reference_id === 'string' ? event.providerData.payment_link_reference_id : undefined;
-    if (!referenceId || !/^ps_[a-f0-9]{32}$/.test(referenceId)) return;
+    if (!referenceId || !/^ps_[a-f0-9]{32}$/.test(referenceId)) return { incidentId: null };
     const reconciler = new Reconciler(this.client);
-    if (event.eventType === 'payment_link.paid') await reconciler.reconcilePaymentLinkPaid(organizationId, referenceId, event.eventId, event.paymentId ?? null);
-    else await reconciler.reconcilePaymentLinkExpired(organizationId, referenceId, event.eventId);
+    if (event.eventType === 'payment_link.paid') return { incidentId: await reconciler.reconcilePaymentLinkPaid(organizationId, referenceId, event.eventId, event.paymentId ?? null) };
+    return { incidentId: await reconciler.reconcilePaymentLinkExpired(organizationId, referenceId, event.eventId) };
   }
 
   async eventById(organizationId: string, eventId: string): Promise<StoredEvent> {

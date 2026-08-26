@@ -10,7 +10,7 @@ export interface DurablePipelineRepository {
   completeEnrichmentAndEnqueueCorrelation(event: StoredEvent, enrichment: VulcanEnrichment | null): Promise<void>;
   correlationCandidates(organizationId: string, incoming: StoredEvent): Promise<IncidentCandidate[]>;
   persistCorrelation(event: StoredEvent, incident: Incident | undefined, enqueueInvestigation: boolean): Promise<void>;
-  reconcileDirectPaymentLinkEvent?(organizationId: string, event: StoredEvent['event']): Promise<void>;
+  reconcileDirectPaymentLinkEvent?(organizationId: string, event: StoredEvent['event']): Promise<{ incidentId: string | null }>;
   incidentDetail: ReplanRepository['incidentDetail'];
   customerProfile: ReplanRepository['customerProfile'];
   autonomyPolicy: ReplanRepository['autonomyPolicy'];
@@ -68,11 +68,16 @@ export class PipelineJobProcessor {
     // Reconciliation is downstream of durable event/correlation persistence.
     // A repeated worker delivery is safe because receipt/compensation writes
     // are idempotent and execution transitions are monotonic.
+    let reconciledIncidentId: string | null = null;
     if (event.event.eventType === 'payment_link.paid' || event.event.eventType === 'payment_link.expired') {
-      await this.repository.reconcileDirectPaymentLinkEvent?.(job.organizationId, event.event);
+      // The referenceId-scoped reconciler finds the owning action even when
+      // event correlation cannot (recovery links resolve hours after the
+      // original failure, outside the correlation window).
+      reconciledIncidentId = (await this.repository.reconcileDirectPaymentLinkEvent?.(job.organizationId, event.event))?.incidentId ?? null;
     }
-    if (!result?.created && result?.incident && ['payment_link.expired', 'recovery.failed'].includes(event.event.eventType)) {
-      await replanIncidentStrategy(this.repository, job.organizationId, result.incident.id, event.event.eventType.replace('.', '_'));
+    const replanIncidentId = !result?.created && result?.incident ? result.incident.id : reconciledIncidentId;
+    if (replanIncidentId && ['payment_link.expired', 'recovery.failed'].includes(event.event.eventType)) {
+      await replanIncidentStrategy(this.repository, job.organizationId, replanIncidentId, event.event.eventType.replace('.', '_'));
     }
   }
 }

@@ -33,7 +33,8 @@ export type RuntimeConfig = {
   executionPollIntervalMs: number;
   emailEncryptionKey?: string;
   callbackEncryptionKey?: string;
-  dashboardApiKey?: string;
+  /** dashboardApiKeys[0] is the active key; any further entries are previous keys still accepted during rotation. */
+  dashboardApiKeys: string[];
   smtp?: {
     host: string;
     port: number;
@@ -95,9 +96,18 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   const directSmtp = smtpConfig(env);
   const emailEncryptionKey = optional(env.PAYSCOPE_EMAIL_ENCRYPTION_KEY);
   const callbackEncryptionKey = optional(env.PAYSCOPE_CALLBACK_ENCRYPTION_KEY);
-  const dashboardApiKey = optional(env.PAYSCOPE_DASHBOARD_API_KEY);
   if (callbackEncryptionKey && Buffer.from(callbackEncryptionKey, 'base64').length !== 32) throw new Error('PAYSCOPE_CALLBACK_ENCRYPTION_KEY must be a base64-encoded 32-byte key');
-  if (declaredEnvironment === 'production' && !dashboardApiKey) throw new Error('Production PayScope API requires PAYSCOPE_DASHBOARD_API_KEY');
+  const dashboardApiKey = optional(env.PAYSCOPE_DASHBOARD_API_KEY);
+  const previousDashboardApiKey = optional(env.PAYSCOPE_DASHBOARD_API_KEY_PREVIOUS);
+  if (declaredEnvironment === 'production' && (!dashboardApiKey || dashboardApiKey.length < 24)) throw new Error('Production PayScope API requires PAYSCOPE_DASHBOARD_API_KEY of at least 24 characters');
+  if (previousDashboardApiKey && previousDashboardApiKey.length < 24) throw new Error('PAYSCOPE_DASHBOARD_API_KEY_PREVIOUS must be at least 24 characters');
+  if (previousDashboardApiKey && !dashboardApiKey) throw new Error('PAYSCOPE_DASHBOARD_API_KEY_PREVIOUS requires PAYSCOPE_DASHBOARD_API_KEY');
+  // Rotation: the active key is accepted alongside one bounded previous key
+  // so merchants can replace a credential without an availability gap.
+  // The key binds to exactly the organization configured for this process;
+  // multi-tenant deployments must issue per-tenant keys behind separate
+  // processes until a merchant-authenticated control plane exists.
+  const dashboardApiKeys = [dashboardApiKey, previousDashboardApiKey].filter((key): key is string => Boolean(key));
   if (directExecutionEnabled) {
     if (!razorpayKeyId || !optional(env.RAZORPAY_KEY_SECRET)) throw new Error('Direct execution requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET');
     if (!directSmtp) throw new Error('Direct execution requires SMTP configuration');
@@ -126,7 +136,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     executionPollIntervalMs: positiveInteger(env.PAYSCOPE_EXECUTION_POLL_INTERVAL_MS, 2_000, 'PAYSCOPE_EXECUTION_POLL_INTERVAL_MS'),
     emailEncryptionKey,
     callbackEncryptionKey,
-    dashboardApiKey,
+    dashboardApiKeys,
     smtp: directSmtp,
   };
 }

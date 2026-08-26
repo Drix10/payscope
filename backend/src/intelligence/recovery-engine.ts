@@ -267,8 +267,11 @@ export async function replanIncidentStrategy(
     return { adaptedStrategy: null, actionId: null };
   }
 
-  const customerProfile = latest?.event.customerHash ? await repository.customerProfile(organizationId, latest.event.customerHash).catch(() => null) : null;
-  const autonomyPolicy = await repository.autonomyPolicy(organizationId).catch(() => null);
+  // Durable reads fail closed here: a database outage aborts adaptive
+  // replanning entirely (the queue job retries) rather than degrading to a
+  // synthetic "customer without history" profile that could unlock action.
+  const customerProfile = latest?.event.customerHash ? await repository.customerProfile(organizationId, latest.event.customerHash) : null;
+  const autonomyPolicy = await repository.autonomyPolicy(organizationId);
 
   const tried = (detail.execution || []).flatMap((a: { capability: ActionType; command_key?: string }) => {
     const list: string[] = [a.capability];

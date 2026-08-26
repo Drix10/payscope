@@ -1,19 +1,35 @@
 import { Router } from 'express';
+import { timingSafeEqual } from 'crypto';
 import { ZodError } from 'zod';
 import { MvpRepository } from '../db/mvp-repository';
 import { IncidentStatus } from '../domain/contracts';
 
-export type MvpRouterOptions = { enrichmentAdapter: 'razorpay_fields_heuristic'; razorpayEnvironment: 'test' | 'live'; directExecutionEnabled: boolean; directExecutionReady: () => boolean; dashboardApiKey?: string };
+export type MvpRouterOptions = { enrichmentAdapter: 'razorpay_fields_heuristic'; razorpayEnvironment: 'test' | 'live'; directExecutionEnabled: boolean; directExecutionReady: () => boolean; dashboardApiKeys?: string[] };
+
+/** Constant-time credential match against the active key plus bounded previous keys (rotation). */
+export function dashboardKeyMatches(provided: string, keys: string[]): boolean {
+  if (!provided) return false;
+  const providedBytes = Buffer.from(provided, 'utf8');
+  return keys.some(key => {
+    const keyBytes = Buffer.from(key, 'utf8');
+    return keyBytes.length === providedBytes.length && timingSafeEqual(keyBytes, providedBytes);
+  });
+}
 
 /** Read-only tenant dashboard API. Provider execution remains server-side. */
 export function createMvpRouter(repository: MvpRepository, organizationId: string, options: MvpRouterOptions): Router {
   const router = Router();
+  const dashboardKeys = options.dashboardApiKeys ?? [];
   router.use((req, res, next) => {
-    if (!options.dashboardApiKey) return next();
-    const bearer = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-    const apiKey = req.header('x-payscope-api-key')?.trim();
-    if (bearer === options.dashboardApiKey || apiKey === options.dashboardApiKey) return next();
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'A valid PayScope dashboard API key is required.' } });
+    if (dashboardKeys.length === 0) return next();
+    const bearer = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? '';
+    const headerKey = req.header('x-payscope-api-key')?.trim() ?? '';
+    // Exactly one presented credential is evaluated; a request carrying both
+    // headers is rejected so an attacker cannot mix-and-match credentials.
+    if (bearer && headerKey) return rejectUnauthorized(res);
+    const credential = bearer || headerKey;
+    if (dashboardKeyMatches(credential, dashboardKeys)) return next();
+    return rejectUnauthorized(res);
   });
   router.get('/health', async (_req, res, next) => {
     try {
@@ -113,6 +129,7 @@ function parseDashboardLimit(value: unknown, res: { status(code: number): { json
 }
 
 function isUuid(value: string): boolean { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
+function rejectUnauthorized(res: { status(code: number): { json(value: unknown): void } }): void { res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'A valid PayScope dashboard API key is required.' } }); }
 function invalidRequest(res: { status(code: number): { json(value: unknown): void } }, message: string): undefined { res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message } }); return undefined; }
 
 function projectAuditEntry(entry: Awaited<ReturnType<MvpRepository['auditEntries']>>[number]) {

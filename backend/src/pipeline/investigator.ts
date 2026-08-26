@@ -131,6 +131,18 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
   const enrichment = [...detail.events].reverse().find(event => event.enrichment)?.enrichment ?? null;
   let policyContextResult: Awaited<ReturnType<typeof repository.policyContext>> | null = null;
   let executionContextResult: Awaited<ReturnType<typeof repository.executionPolicyContext>> | null = null;
+  // A durable-state read failure must never be misread as "customer has no
+  // history". The flag forces every downstream path, including the
+  // deterministic fallback, into a no-action decision.
+  let repositoryReadFailure: Error | null = null;
+  const guardDurableRead = async <T>(operation: () => Promise<T>): Promise<T | null> => {
+    try {
+      return await operation();
+    } catch (error) {
+      repositoryReadFailure ??= error instanceof Error ? error : new Error(String(error));
+      return null;
+    }
+  };
   let output: { plan: Awaited<ReturnType<typeof runInvestigationSupervisor>>; risk: Awaited<ReturnType<typeof runRiskAnalyst>>; recovery: Awaited<ReturnType<typeof runRecoveryPlanner>>; policy: ReturnType<typeof PolicyDecisionSchema.parse> };
   try {
     const [policyContext, metrics, memory, executionContext] = await Promise.all([
@@ -170,8 +182,11 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     }, job.organizationId);
 
     // Dynamic Recovery Engine Selection: The Recovery Engine ranks optimal economic strategies based on telemetry & risk
-    const customerProfile = latest?.event.customerHash ? await repository.customerProfile(job.organizationId, latest.event.customerHash).catch(() => null) : null;
-    const autonomyPolicy = await repository.autonomyPolicy(job.organizationId).catch(() => null);
+    // Durable reads fail closed: a database outage yields repositoryReadFailure,
+    // never a synthetic "new customer" profile or "policy unknown" verdict.
+    const customerHash = latest?.event.customerHash;
+    const customerProfile = customerHash ? await guardDurableRead(() => repository.customerProfile(job.organizationId, customerHash)) : null;
+    const autonomyPolicy = await guardDurableRead(() => repository.autonomyPolicy(job.organizationId));
     const rankedStrategies = rankStrategies(detail.incident, enrichment, risk.analysis, customerProfile, autonomyPolicy);
     const topStrategy = rankedStrategies[0];
 
@@ -214,7 +229,10 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       amountPaise: detail.incident.remainingAmountPaise,
       currency: latest?.event.currency ?? 'INR',
     });
-    output = { plan: supervisor, risk, recovery: { plan: enginePlan, modelId: recovery.modelId, tokensUsed: recovery.tokensUsed }, policy: decision };
+    // A durable read that failed during the happy path still blocks autonomous
+    // action: unknown customer/contact state must never be treated as clean.
+    const finalDecision = repositoryReadFailure ? { ...decision, outcome: 'auto_no_action' as const, permittedActions: [], noActionReason: 'DURABLE_STATE_READ_FAILED' } : decision;
+    output = { plan: supervisor, risk, recovery: { plan: enginePlan, modelId: recovery.modelId, tokensUsed: recovery.tokensUsed }, policy: finalDecision };
   } catch (error) {
     llmFailureEvents.inc({ stage: 'investigation_pipeline' });
     const attr = enrichment?.failureAttribution ?? 'customer_drop';
@@ -278,17 +296,22 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       modelId: 'telemetry-deterministic-fallback',
       tokensUsed: 0,
     };
-    const safeFallbackPolicy = policyContextResult ? evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [policyContextResult.policy], policyContextResult.stats, policyContextResult.contact, {
+    // Fail closed when durable state could not be read: an unavailable
+    // database must never be evaluated as "merchant opted out of nothing"
+    // or "customer without history". The disabled policy blocks every gate.
+    const durableStateUnavailable = repositoryReadFailure !== null || policyContextResult === null;
+    const safeFallbackPolicy = durableStateUnavailable ? evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [{ id: 'payscope-fallback-policy', enabled: false, minimumConfidence: 1, rootCauses: [] as never[], allowedActions: [] as never[], merchantOptedIn: false }], { autoResolveFraction: 0 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false, customerReferenceAvailable: false }) : evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [policyContextResult!.policy], policyContextResult!.stats, policyContextResult!.contact, {
       executionPolicy: executionContextResult?.policy ?? undefined,
       existingCommandKeys: new Set((detail.execution || []).map(action => `${job.organizationId}:${action.capability}:${job.incidentId}`)),
       commandKeyForAction: actionType => `${job.organizationId}:${actionType}:${job.incidentId}`,
       currentRetryCount: (detail.execution || []).filter(action => action.capability === 'deliver_recovery_link_email').length,
       amountPaise: detail.incident.remainingAmountPaise,
       currency: latest?.event.currency ?? 'INR',
-    }) : evaluatePolicy(detail.incident, fallbackRisk.analysis, fallbackRecovery.plan, [{ id: 'payscope-fallback-policy', enabled: false, minimumConfidence: 1, rootCauses: [] as never[], allowedActions: [] as never[], merchantOptedIn: false }], { autoResolveFraction: 0 }, { incidentAttempts: 0, attemptsLast24Hours: 0, attemptsLast7Days: 0, merchantOptedIn: false, customerReferenceAvailable: false });
+    });
 
     output = { plan: fallbackSupervisor, risk: fallbackRisk, recovery: fallbackRecovery, policy: safeFallbackPolicy };
-    logger.warn({ incidentId: job.incidentId, errorMsg: error instanceof Error ? error.message : String(error) }, 'Multi-agent LLM investigation fell back to Razorpay telemetry evaluation');
+    const repositoryReadFailureMessage = (repositoryReadFailure as Error | null)?.message ?? null;
+    logger.warn({ incidentId: job.incidentId, repositoryReadFailure: repositoryReadFailureMessage, errorMsg: error instanceof Error ? error.message : String(error) }, 'Multi-agent LLM investigation fell back to Razorpay telemetry evaluation');
   }
 
   const proposals = output.policy.permittedActions.map(action => {

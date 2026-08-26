@@ -9,14 +9,14 @@ import { strategyPerformanceEvents } from '../../observability';
 export class Reconciler {
   constructor(private readonly client: SupabaseClient) { }
 
-  async reconcilePaymentLinkPaid(organizationId: string, referenceId: string, eventId: string, paymentId: string | null): Promise<void> {
-    if (!/^ps_[a-f0-9]{32}$/i.test(referenceId)) return;
-    if (!organizationId || !eventId || eventId.length > 320) return;
+  async reconcilePaymentLinkPaid(organizationId: string, referenceId: string, eventId: string, paymentId: string | null): Promise<string | null> {
+    if (!/^ps_[a-f0-9]{32}$/i.test(referenceId)) return null;
+    if (!organizationId || !eventId || eventId.length > 320) return null;
     // Organization-scoped lookup: prevents cross-tenant creation of a second action.
-    const { data, error } = await this.client.from('payscope_execution_actions').select('id, state, updated_at').eq('organization_id', organizationId).eq('capability', 'deliver_recovery_link_email').eq('command_payload->>referenceId', referenceId).limit(1).maybeSingle();
+    const { data, error } = await this.client.from('payscope_execution_actions').select('id, state, incident_id, updated_at').eq('organization_id', organizationId).eq('capability', 'deliver_recovery_link_email').eq('command_payload->>referenceId', referenceId).limit(1).maybeSingle();
     if (error) throw new Error(`Reconciliation lookup failed: ${error.message}`);
     const row = data as Record<string, unknown> | null;
-    if (!row || typeof row.id !== 'string') return; // unknown callback -> no second action (do NOT create one)
+    if (!row || typeof row.id !== 'string') return null; // unknown callback -> no second action (do NOT create one)
     const actionId = row.id as string;
     const payload = { referenceId, razorpayEventId: eventId, paymentId: paymentId ?? null };
     const receiptHash = stableHash(payload);
@@ -33,15 +33,16 @@ export class Reconciler {
     // If monotonic skipped, error is null and function logs skipped; we swallow
     if (reconcileError && !/monotonic|skipped/i.test(reconcileError.message)) throw new Error(`Reconciliation transition failed: ${reconcileError.message}`);
     strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'confirmed' });
+    return typeof row.incident_id === 'string' ? row.incident_id : null;
   }
 
-  async reconcilePaymentLinkExpired(organizationId: string, referenceId: string, eventId: string): Promise<void> {
-    if (!/^ps_[a-f0-9]{32}$/i.test(referenceId)) return;
-    if (!organizationId || !eventId || eventId.length > 320) return;
-    const { data, error } = await this.client.from('payscope_execution_actions').select('id, state').eq('organization_id', organizationId).eq('capability', 'deliver_recovery_link_email').eq('command_payload->>referenceId', referenceId).limit(1).maybeSingle();
+  async reconcilePaymentLinkExpired(organizationId: string, referenceId: string, eventId: string): Promise<string | null> {
+    if (!/^ps_[a-f0-9]{32}$/i.test(referenceId)) return null;
+    if (!organizationId || !eventId || eventId.length > 320) return null;
+    const { data, error } = await this.client.from('payscope_execution_actions').select('id, state, incident_id').eq('organization_id', organizationId).eq('capability', 'deliver_recovery_link_email').eq('command_payload->>referenceId', referenceId).limit(1).maybeSingle();
     if (error) throw new Error(`Expired-link reconciliation lookup failed: ${error.message}`);
     const row = data as Record<string, unknown> | null;
-    if (!row || typeof row.id !== 'string') return;
+    if (!row || typeof row.id !== 'string') return null;
     const { error: compensationError } = await this.client.rpc('payscope_record_compensation', {
       p_organization_id: organizationId,
       p_action_id: row.id,
@@ -51,6 +52,7 @@ export class Reconciler {
     });
     if (compensationError) throw new Error(`Expired-link compensation failed: ${compensationError.message}`);
     strategyPerformanceEvents.inc({ strategy: 'deliver_recovery_link_email', outcome: 'cancelled' });
+    return typeof row.incident_id === 'string' ? row.incident_id : null;
   }
 
   async verifyAndStoreCallback(input: { organizationId: string; provider: 'razorpay'; providerEventId: string; dedupeKey: string; rawBodyEncrypted: Record<string, unknown>; verifiedSecretVersion: 1 | 2; source: string; normalized: Record<string, unknown>; actionMatch: Record<string, unknown> | null }): Promise<void> {

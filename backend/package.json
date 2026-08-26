@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "test": "npm run build && node scripts/agent-ete-comprehensive-test.js",
+    "test": "npm run build && node scripts/agent-ete-comprehensive-test.js && node scripts/runtime-http-test.js",
     "start": "node dist/server.js"
   },
   "dependencies": {
