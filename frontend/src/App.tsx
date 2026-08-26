@@ -260,33 +260,19 @@ export default function App() {
           if (selectedIdRef.current !== targetId) {
             setSelectedId(targetId);
           }
-          silentDetailController.current?.abort();
-          const silentController = new AbortController();
-          silentDetailController.current = silentController;
-          detailSequence.current += 1;
-          const seq = detailSequence.current;
 
           void (async () => {
             try {
               const [detail, entries] = await Promise.all([
-                mvpApi.incident(targetId, silentController.signal),
-                mvpApi.audit(targetId, silentController.signal),
+                mvpApi.incident(targetId),
+                mvpApi.audit(targetId),
               ]);
-              if (
-                mounted.current &&
-                selectedIdRef.current === targetId &&
-                detailSequence.current === seq &&
-                !silentController.signal.aborted
-              ) {
+              if (mounted.current && selectedIdRef.current === targetId) {
                 setSelected(detail);
                 setAudit(entries);
               }
             } catch {
               // Ignore background detail update errors silently
-            } finally {
-              if (silentDetailController.current === silentController) {
-                silentDetailController.current = null;
-              }
             }
           })();
         }
