@@ -182,7 +182,7 @@ async function main() {
   });
 
   // 10. E2E Webhook Intake & Adaptive Replan Path
-  await runScenario('E2E Production Intake: receiveWebhook ignores initial failure for replan, then replans on correlated payment_link.expired', async () => {
+  await runScenario('E2E Production Intake: receiveWebhook ignores initial failure for replan, replans on correlated payment_link.expired, terminates cleanly on exhaustion/resolution', async () => {
     let replanCount = 0;
     let createdActions = [];
     let state = {
@@ -231,6 +231,18 @@ async function main() {
     const res3 = await receiveWebhook(payload2, signWebhook(payload2), 'evt_e2e_2_dup', mockRepo, { webhookSecret, organizationId: org });
     assert.equal(res3.duplicate, false);
     assert.equal(replanCount, 1); // Action count remains unchanged!
+
+    // Step 4: Subsequent failure callback after all strategies tried -> replan returns null (terminal no-action state)
+    const payload3 = Buffer.from(JSON.stringify({ event: 'recovery.failed', payload: { payment: { entity: { id: 'pay_3', amount: 1000000, created_at: Math.floor(Date.now() / 1000) } } } }));
+    const res4 = await receiveWebhook(payload3, signWebhook(payload3), 'evt_e2e_3', mockRepo, { webhookSecret, organizationId: org });
+    assert.equal(res4.duplicate, false);
+    assert.equal(replanCount, 1); // No new action created because all strategies are exhausted!
+
+    // Step 5: Terminal resolution: RESOLVED incident declines further replan
+    state.incident.status = 'RESOLVED';
+    state.incident.remainingAmountPaise = 0;
+    const res5 = await replanIncidentStrategy(mockRepo, org, 'inc_e2e_intake', 'payment_link_paid');
+    assert.equal(res5.adaptedStrategy, null);
   });
 
   console.log('\nFinal Integration Suite Summary: ' + passed + ' passed, ' + failed + ' failed');
