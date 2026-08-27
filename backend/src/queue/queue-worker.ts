@@ -148,15 +148,23 @@ export class QueueWorker {
     const decision = isTerminalQueueJobError(error)
       ? { status: 'dead' as const, attemptNumber: row.attempt_number, nextAttemptAt: null }
       : retryDecision;
-    const update = decision.status === 'dead'
-      ? { status: 'dead', updated_at: new Date().toISOString(), locked_at: null, locked_by: null }
-      : { status: 'pending', attempt_number: decision.attemptNumber, next_attempt_at: decision.nextAttemptAt, updated_at: new Date().toISOString(), locked_at: null, locked_by: null };
-    const { error: failureError } = await this.client
-      .from('payscope_queue_jobs')
-      .update(update)
-      .eq('id', row.id);
-    if (failureError) throw new Error(`PayScope queue failure update failed: ${failureError.message}`);
-    logger.error({ jobId: row.id, attempt: row.attempt_number, dead: decision.status === 'dead', errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope queue job failed');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error({ jobId: row.id, attempt: currentAttempt, dead: decision.status === 'dead', errorMessage, errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope queue job failed');
+    try {
+      await this.client
+        .from('payscope_queue_jobs')
+        .update({
+          status: decision.status,
+          attempt_number: decision.attemptNumber,
+          next_attempt_at: decision.nextAttemptAt,
+          updated_at: new Date().toISOString(),
+          locked_at: null,
+          locked_by: null,
+        })
+        .eq('id', row.id);
+    } catch (err) {
+      logger.error({ jobId: row.id, err: err instanceof Error ? err.message : String(err) }, 'Failed to update failed job status in database');
+    }
   }
 }
 

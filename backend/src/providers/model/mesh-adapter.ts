@@ -81,8 +81,21 @@ export class MeshModelAdapter implements ModelProvider {
     } else {
       throw new Error('Mesh model response did not include structured content');
     }
+    let targetObj = parsed;
+    let validated = request.responseSchema.safeParse(targetObj);
+    if (!validated.success && targetObj && typeof targetObj === 'object' && !Array.isArray(targetObj)) {
+      const rec = targetObj as Record<string, unknown>;
+      const innerKey = ['data', 'plan', 'analysis', 'output', 'result', 'riskAnalysis', 'response', 'structuredOutput'].find(k => rec[k] && typeof rec[k] === 'object');
+      if (innerKey) {
+        targetObj = rec[innerKey];
+        validated = request.responseSchema.safeParse(targetObj);
+      }
+    }
+    if (!validated.success) {
+      throw validated.error;
+    }
     return {
-      content: request.responseSchema.parse(parsed),
+      content: validated.data,
       usage: { inputTokens: safeNumber(payload.usage?.prompt_tokens), outputTokens: safeNumber(payload.usage?.completion_tokens) },
       modelId: typeof payload.model === 'string' ? payload.model : this.modelId,
     };

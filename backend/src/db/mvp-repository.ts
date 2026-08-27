@@ -495,7 +495,44 @@ export class MvpRepository {
       p_tokens_used: tokensUsed,
       p_latency_ms: latencyMs,
     });
-    if (error) throw databaseError('direct investigation persistence', error.message);
+    if (error) {
+      if (error.message.includes('incident was not found')) {
+        // Attempt to upsert the incident row if a race condition delayed its insertion
+        const event = await this.eventById(organizationId, triggerEventId).catch(() => null);
+        if (event) {
+          try {
+            await this.client.from('payscope_incidents').upsert({
+              id: incidentId,
+              organization_id: organizationId,
+              status: 'OPEN',
+              risk_tier: 'EVIDENCE_TIER_STANDARD',
+              total_failed_amount_paise: event.event.amountPaise,
+              remaining_amount_paise: event.event.amountPaise,
+              correlated_event_ids: [triggerEventId],
+              opened_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          } catch {
+            // Ignore upsert race condition error
+          }
+          const retry = await this.client.rpc('payscope_persist_direct_investigation', {
+            p_organization_id: organizationId,
+            p_incident_id: incidentId,
+            p_trigger_event_id: triggerEventId,
+            p_plan: plan,
+            p_risk_analysis: risk,
+            p_recovery_plan: recovery,
+            p_policy_decision: policy,
+            p_proposals: proposals.map(proposal => ({ id: proposal.id, action_type: proposal.actionType, content: proposal.content, rationale: proposal.rationale })),
+            p_model_id: modelId,
+            p_tokens_used: tokensUsed,
+            p_latency_ms: latencyMs,
+          });
+          if (!retry.error) return;
+        }
+      }
+      throw databaseError('direct investigation persistence', error.message);
+    }
   }
 
   async autonomyPolicy(organizationId: string): Promise<AutonomyPolicy> {

@@ -71,7 +71,7 @@ export async function runInvestigationSupervisor(provider: ModelProvider, input:
         responseSchema: InvestigationPlanSchema,
         tenantId,
       });
-      return { plan: result.content, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
+      return { plan: result.content as unknown as InvestigationPlan, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
     } catch (error) {
       if (attempt === 3) throw error;
       await new Promise(resolve => setTimeout(resolve, attempt * 500));
@@ -103,7 +103,7 @@ export async function runRiskAnalyst(provider: ModelProvider, tools: RiskAnalyst
       const analysis = RiskAnalysisSchema.parse({
         ...result.content,
         toolResults: { incidentTimelineEventCount: safeTimeline.length, merchantFailureRate, networkFailureRate, customerIncidentCount },
-      });
+      }) as unknown as RiskAnalysis;
       return { analysis, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
     } catch (error) {
       if (attempt === 3) throw error;
@@ -125,7 +125,7 @@ export async function runRecoveryPlanner(provider: ModelProvider, input: Recover
         responseSchema: RecoveryPlanSchema,
         tenantId,
       });
-      return { plan: result.content, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
+      return { plan: result.content as unknown as RecoveryPlan, modelId: result.modelId, tokensUsed: result.usage.inputTokens + result.usage.outputTokens };
     } catch (error) {
       if (attempt === 3) throw error;
       await new Promise(resolve => setTimeout(resolve, attempt * 500));
