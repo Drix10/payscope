@@ -562,7 +562,7 @@ export default function App() {
                 }`}
               />
               {realtimeStatus === "connected"
-                ? "REALTIME CONNECTED (<50ms)"
+                ? "REALTIME CONNECTED"
                 : realtimeStatus === "reconnecting"
                   ? "RECONNECTING STREAM"
                   : "POLLING FALLBACK"}

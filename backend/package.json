@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc && node -e \"const fs = require('fs'); const path = require('path'); const src = [path.resolve('../frontend/dist'), path.resolve('../../frontend/dist'), path.resolve('./public')].find(p => fs.existsSync(p)); const dest = path.resolve('dist/public'); if (src) { fs.cpSync(src, dest, { recursive: true }); console.log('Copied frontend dist to dist/public'); }\"",
+    "build": "tsc && node -e \"const fs = require('fs'); const path = require('path'); const src = [path.resolve('../frontend/dist'), path.resolve('../../frontend/dist'), path.resolve('./public')].find(p => fs.existsSync(p)); const dest = path.resolve('dist/public'); if (src) { fs.rmSync(dest, { recursive: true, force: true }); fs.cpSync(src, dest, { recursive: true }); console.log('Cleaned and copied frontend dist to dist/public'); }\"",
     "test": "npm run build && node scripts/agent-ete-comprehensive-test.js && node scripts/runtime-http-test.js",
     "start": "node dist/server.js"
   },
