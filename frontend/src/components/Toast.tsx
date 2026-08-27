@@ -74,11 +74,11 @@ export function ToastNotification({ toast, onDismiss }: ToastProps) {
 export function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
   return (
     <div
-      className="pointer-events-none fixed right-4 top-4 z-50 flex max-w-md flex-col gap-3"
+      className="pointer-events-none fixed bottom-6 right-6 z-50 flex max-w-md flex-col-reverse gap-3"
       aria-live="polite"
       aria-atomic="false"
     >
-      {toasts.map(toast => (
+      {toasts.slice(-3).map(toast => (
         <div key={toast.id} className="pointer-events-auto">
           <ToastNotification toast={toast} onDismiss={onDismiss} />
         </div>
