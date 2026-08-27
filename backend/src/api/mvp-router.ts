@@ -25,9 +25,9 @@ export function createMvpRouter(repository: MvpRepository, organizationId: strin
   router.use((req, res, next) => {
     const bearer = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? '';
     const headerKey = req.header('x-payscope-api-key')?.trim() ?? '';
-    if (bearer && headerKey) return rejectUnauthorized(res);
-    const credential = bearer || headerKey;
-    if (dashboardKeyMatches(credential, dashboardKeys)) return next();
+    const queryKey = typeof req.query.token === 'string' ? req.query.token.trim() : typeof req.query.api_key === 'string' ? req.query.api_key.trim() : '';
+    const credential = bearer || headerKey || queryKey;
+    if (credential && dashboardKeyMatches(credential, dashboardKeys)) return next();
     return rejectUnauthorized(res);
   });
   router.get('/health', async (_req, res, next) => {

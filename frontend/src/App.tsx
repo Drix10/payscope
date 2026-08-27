@@ -432,7 +432,8 @@ export default function App() {
 
     let eventSource: EventSource | null = null;
     try {
-      const streamUrl = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/mvp/events/stream`;
+      const key = (import.meta.env as unknown as Record<string, string>).VITE_PAYSCOPE_API_KEY ?? "pscope_dash_ff75d8b1d7204643beb77739bab986f8ee10d79";
+      const streamUrl = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/mvp/events/stream?api_key=${encodeURIComponent(key)}`;
       eventSource = new EventSource(streamUrl);
 
       eventSource.onopen = () => {
