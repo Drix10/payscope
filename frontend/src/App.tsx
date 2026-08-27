@@ -135,7 +135,7 @@ export default function App() {
     field: "updatedAt",
     direction: "desc",
   });
-  const { toasts, dismissToast, success: toastSuccess } = useToasts();
+  const { toasts, dismissToast, success: toastSuccess, info: toastInfo } = useToasts();
   const [selected, setSelected] = useState<IncidentDetail | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
@@ -447,12 +447,22 @@ export default function App() {
 
           setRealtimeStatus("connected");
 
-          if (data.type === "incident_created") {
-            toastSuccess("🚨 New Payment Incident Ingested into Realtime Pipeline");
+          if (data.type === "webhook_received" || data.type === "incident_created") {
+            toastInfo("⚡ Webhook Ingested into Realtime Pipeline");
+          } else if (data.type === "enrichment_completed") {
+            toastInfo("🔍 Telemetry Enriched with Gateway Diagnostics");
+          } else if (data.type === "supervisor_started") {
+            toastInfo("🤖 Multi-Agent Supervisor Invoked");
+          } else if (data.type === "risk_analyst_started") {
+            toastInfo("📊 AI Risk Analyst Evaluating Root Cause");
+          } else if (data.type === "merchant_learning_evaluated") {
+            toastSuccess("🧠 Merchant Self-Learning Intelligence Evaluated");
+          } else if (data.type === "recovery_planner_started") {
+            toastInfo("💡 AI Recovery Planner Formulating Strategy");
           } else if (data.type === "investigation_updated") {
-            toastSuccess("🤖 Multi-Agent LLM Investigation Completed");
+            toastSuccess("✅ Multi-Agent Investigation & Ledger Complete");
           } else if (data.type === "action_dispatched") {
-            toastSuccess("⚡ Autonomous Outbox Action Dispatched");
+            toastSuccess("⚡ Autonomous Recovery Action Dispatched");
           }
 
           // Instant real-time UI refresh on backend push event (<50ms delay)

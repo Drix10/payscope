@@ -4,6 +4,7 @@ async function testLivePipeline() {
   console.log('--- PayScope Live E2E Pipeline Verification ---');
   
   const webhookSecret = '8b11ead0f18786af13d291393871480f8a2c0e6a9b6916ad5aef9fff74862577';
+  const apiKey = 'pscope_dash_ff75d8b1d7204643beb77739bab986f8ee10d79';
   const baseUrl = process.env.PAYSCOPE_API_URL?.replace(/\/$/, '') || 'http://localhost:25655';
   const eventId = 'evt_live_' + Date.now();
 

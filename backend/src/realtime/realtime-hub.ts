@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { EventEmitter } from 'events';
 
 export type RealTimeEvent = {
-  type: 'incident_created' | 'enrichment_completed' | 'incident_updated' | 'investigation_updated' | 'action_dispatched' | 'audit_created' | 'ping';
+  type: 'incident_created' | 'webhook_received' | 'enrichment_started' | 'enrichment_completed' | 'supervisor_started' | 'risk_analyst_started' | 'recovery_planner_started' | 'merchant_learning_evaluated' | 'incident_updated' | 'investigation_updated' | 'action_dispatched' | 'audit_created' | 'ping';
   organizationId: string;
   incidentId?: string;
   payload?: Record<string, unknown>;

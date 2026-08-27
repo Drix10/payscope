@@ -40,6 +40,7 @@ export class PipelineJobProcessor {
 
   private async enrich(job: QueueJob): Promise<void> {
     if (!job.eventId) throw new Error('Enrichment job is missing eventId');
+    realtimeHub.broadcast('enrichment_started', job.organizationId, { eventId: job.eventId });
     const event = await this.repository.eventById(job.organizationId, job.eventId);
     let enrichment: TelemetryEnrichment | null = null;
     try {

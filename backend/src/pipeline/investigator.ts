@@ -170,6 +170,8 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
     policyContextResult = policyContext;
     executionContextResult = executionContext;
     const deadlineProvider = providerWithDeadline(provider, started + agentDeadlineMs);
+
+    realtimeHub.broadcast('supervisor_started', job.organizationId, { incidentId: job.incidentId }, job.incidentId);
     const supervisor = await runInvestigationSupervisor(deadlineProvider, {
       incident: detail.incident,
       enrichment,
@@ -177,6 +179,7 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       autoResolveBudgetRemaining: Math.max(0, 1 - policyContext.stats.autoResolveFraction)
     }, job.organizationId);
 
+    realtimeHub.broadcast('risk_analyst_started', job.organizationId, { incidentId: job.incidentId }, job.incidentId);
     const risk = await runRiskAnalyst(deadlineProvider, {
       getIncidentTimeline: async () => detail.events.map(event => event.event),
       getMerchantFailureRate: async _windowHours => metrics?.merchantFailureRate ?? null,
@@ -189,6 +192,8 @@ export async function runDurableInvestigation(repository: MvpRepository, provide
       gateway: latest?.event.paymentMethod ?? 'unknown',
     }, job.organizationId);
 
+    realtimeHub.broadcast('merchant_learning_evaluated', job.organizationId, { incidentId: job.incidentId }, job.incidentId);
+    realtimeHub.broadcast('recovery_planner_started', job.organizationId, { incidentId: job.incidentId }, job.incidentId);
     const recovery = await runRecoveryPlanner(deadlineProvider, {
       incident: detail.incident,
       riskAnalysis: risk.analysis,
