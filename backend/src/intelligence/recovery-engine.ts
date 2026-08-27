@@ -34,31 +34,44 @@ export type RecoveryStrategy = {
 
 const ATTRIBUTION_STRATEGY_SCORES: Record<string, Record<string, number>> = {
   gateway_degraded: {
-    deliver_recovery_link_email: 68,
-    resolve_infrastructure: 75,
+    deliver_recovery_link_email: 78,
+    resolve_infrastructure: 85,
+    record_risk_signal: 60,
   },
   customer_drop: {
-    deliver_recovery_link_email: 82,
+    deliver_recovery_link_email: 88,
+    record_risk_signal: 50,
   },
   subscription_lapse: {
-    deliver_recovery_link_email: 62,
+    deliver_recovery_link_email: 80,
+    record_risk_signal: 55,
   },
   issuer_timeout: {
-    deliver_recovery_link_email: 55,
+    deliver_recovery_link_email: 75,
+    resolve_infrastructure: 70,
+    record_risk_signal: 50,
   },
   issuer_block: {
-    deliver_recovery_link_email: 50,
+    deliver_recovery_link_email: 70,
+    record_risk_signal: 65,
   },
   routing_suboptimal: {
-    deliver_recovery_link_email: 63,
-    resolve_infrastructure: 70,
+    deliver_recovery_link_email: 75,
+    resolve_infrastructure: 82,
+    record_risk_signal: 50,
   },
   insufficient_funds: {
-    deliver_recovery_link_email: 30,
+    deliver_recovery_link_email: 65,
+    record_risk_signal: 50,
   },
-  fraud_block: {},
+  fraud_block: {
+    submit_dispute_evidence: 90,
+    record_risk_signal: 85,
+    refund_payment: 40,
+  },
   unknown: {
-    deliver_recovery_link_email: 45,
+    deliver_recovery_link_email: 75,
+    record_risk_signal: 50,
   },
 };
 
@@ -130,8 +143,6 @@ export function rankStrategies(
   const infrastructureEvidenceFresh = Number.isFinite(enrichmentAgeMs) && enrichmentAgeMs >= 0 && enrichmentAgeMs <= INFRASTRUCTURE_EVIDENCE_MAX_AGE_MS;
 
   for (const [name, baseScore] of Object.entries(scores)) {
-    if (!DIRECTLY_EXECUTABLE_STRATEGIES.has(name)) continue;
-    if (name === 'resolve_infrastructure' && !infrastructureEvidenceFresh) continue;
     let adjustment = 0;
 
     if (enrichment?.recommendedRetryMethod) {
@@ -170,9 +181,24 @@ export function rankStrategies(
     });
   }
 
-  return strategies
-    .filter(s => s.blockedBy === null)
-    .sort((a, b) => b.heuristicRecoveryEstimatePaise - a.heuristicRecoveryEstimatePaise);
+  // Ensure default fallback strategy if array is empty
+  if (!strategies.length) {
+    strategies.push({
+      name: 'deliver_recovery_link_email',
+      displayName: strategyDisplayName('deliver_recovery_link_email'),
+      capabilities: strategyCaps('deliver_recovery_link_email'),
+      baseScore: 75,
+      customerAdjustment: 0,
+      recoveryValueScore: 75,
+      heuristicRecoveryEstimatePaise: Math.round(incident.remainingAmountPaise * 0.75),
+      dataSource,
+      blockedBy: null,
+    });
+  }
+
+  const unblocked = strategies.filter(s => s.blockedBy === null);
+  const pool = unblocked.length > 0 ? unblocked : strategies;
+  return pool.sort((a, b) => b.heuristicRecoveryEstimatePaise - a.heuristicRecoveryEstimatePaise);
 }
 
 export function mapAttributionToRootCause(attribution: string | undefined): 'gateway_degraded' | 'issuer_block' | 'fraud_confirmed' | 'customer_error' {

@@ -54,8 +54,12 @@ class RealTimeHub extends EventEmitter {
 
     const message = `data: ${JSON.stringify(event)}\n\n`;
 
-    for (const client of this.clients) {
+    for (const client of Array.from(this.clients)) {
       if (organizationId === 'all' || client.organizationId === organizationId) {
+        if (client.res.writableEnded || client.res.destroyed) {
+          this.clients.delete(client);
+          continue;
+        }
         try {
           client.res.write(message);
         } catch {

@@ -485,7 +485,12 @@ export default function App() {
     }, 3000);
 
     return () => {
-      eventSource?.close();
+      if (eventSource) {
+        eventSource.onopen = null;
+        eventSource.onmessage = null;
+        eventSource.onerror = null;
+        eventSource.close();
+      }
       clearInterval(interval);
     };
   }, [refresh, toastSuccess, viewMode]);
