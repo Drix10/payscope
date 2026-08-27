@@ -226,6 +226,14 @@
           </div>
 
           <div class="field-group">
+            <label>TARGET ENVIRONMENT</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+              <button type="button" id="btn-env-local" onclick="setTargetEnv('local')" style="padding: 5px 2px; font-size: 10px;">[ LOCAL ]</button>
+              <button type="button" id="btn-env-prod" onclick="setTargetEnv('prod')" style="padding: 5px 2px; font-size: 10px;">[ PROD ]</button>
+            </div>
+          </div>
+
+          <div class="field-group">
             <label>API URL</label>
             <input type="text" id="cfg-api-url" placeholder="https://temp.coslynx.com" />
           </div>
@@ -365,6 +373,25 @@
     let lastScenario = null;
     let lineCount = 0;
 
+    function updateEnvButtonHighlight(url) {
+      const btnLocal = document.getElementById('btn-env-local');
+      const btnProd = document.getElementById('btn-env-prod');
+      if (!btnLocal || !btnProd) return;
+      const isLocal = /localhost|127\.0\.0\.1/i.test(url);
+      btnLocal.style.backgroundColor = isLocal ? '#ffffff' : '#000000';
+      btnLocal.style.color = isLocal ? '#000000' : '#ffffff';
+      btnProd.style.backgroundColor = !isLocal ? '#ffffff' : '#000000';
+      btnProd.style.color = !isLocal ? '#000000' : '#ffffff';
+    }
+
+    async function setTargetEnv(mode) {
+      const targetUrl = mode === 'local' ? 'http://127.0.0.1:25655' : 'https://temp.coslynx.com';
+      document.getElementById('cfg-api-url').value = targetUrl;
+      document.getElementById('link-dash').href = targetUrl;
+      updateEnvButtonHighlight(targetUrl);
+      await saveConfig();
+    }
+
     async function loadConfig() {
       try {
         const res = await fetch('/api/config');
@@ -376,6 +403,8 @@
         document.getElementById('cfg-link-ref').value = data.paymentLinkReference || '';
         document.getElementById('cfg-key-id').value = data.keyId || '';
         
+        updateEnvButtonHighlight(data.apiUrl || '');
+
         if (data.apiUrl) {
           document.getElementById('link-dash').href = data.apiUrl.replace(/\/$/, '');
         }
@@ -405,6 +434,8 @@
         const result = await res.json();
         if (result.ok) {
           log('[OK] CONFIG_SAVED_TO_ENV', 'ok');
+          updateEnvButtonHighlight(body.apiUrl);
+          if (body.apiUrl) document.getElementById('link-dash').href = body.apiUrl.replace(/\/$/, '');
           checkPreflight();
         } else {
           log('CONFIG_SAVE_ERR: ' + result.error, 'err');
