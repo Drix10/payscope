@@ -36,28 +36,35 @@ export class MeshModelAdapter implements ModelProvider {
     if (request.timeoutMs !== undefined && (!Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1)) throw new Error('Model request timeout must be a positive integer');
     assertInputWithinBudget(`${request.systemPrompt}\n\n${request.userContent}`, request.maxInputTokens);
     const timeoutMs = request.timeoutMs !== undefined ? request.timeoutMs : this.timeoutMs;
-    const response = await this.fetcher(this.endpoint, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${this.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: this.modelId,
-        temperature: 0,
-        max_tokens: Math.max(request.maxTokens ?? 8192, 8192),
-        messages: [
-          { role: 'system', content: `${request.systemPrompt}\nBe extremely concise. Output JSON immediately.` },
-          { role: 'user', content: request.userContent },
-        ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'payscope_structured_response',
-            strict: true,
-            schema: toJsonSchema(request.responseSchema, { $refStrategy: 'none' }),
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response;
+    try {
+      response = await this.fetcher(this.endpoint, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${this.apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: this.modelId,
+          temperature: 0,
+          max_tokens: Math.max(request.maxTokens ?? 8192, 8192),
+          messages: [
+            { role: 'system', content: `${request.systemPrompt}\nBe extremely concise. Output JSON immediately.` },
+            { role: 'user', content: request.userContent },
+          ],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'payscope_structured_response',
+              strict: true,
+              schema: toJsonSchema(request.responseSchema, { $refStrategy: 'none' }),
+            },
           },
-        },
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const payload = await response.json().catch(() => ({})) as MeshResponse;
     if (!response.ok) throw new Error(`Mesh model request failed (${response.status})`);
     const content = payload.choices?.[0]?.message?.content;

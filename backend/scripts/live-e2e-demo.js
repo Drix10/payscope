@@ -52,20 +52,22 @@ async function testLivePipeline() {
   const webhookResult = await resWebhook.json();
   console.log('   Webhook Ingest Status:', resWebhook.status, JSON.stringify(webhookResult));
 
-  console.log('\n3. Waiting 12 seconds for full Multi-Agent execution...');
-  await new Promise(resolve => setTimeout(resolve, 12000));
+  console.log('\n3. Waiting 16 seconds for complete Multi-Agent execution & DB persistence...');
+  await new Promise(resolve => setTimeout(resolve, 16000));
 
   console.log('\n4. Fetching Dashboard Incident List (GET /api/mvp/incidents)...');
   const resIncidents = await fetch(`${baseUrl}/api/mvp/incidents`, {
     headers: { 'x-payscope-api-key': apiKey }
   });
   const incidentsList = await resIncidents.json();
-  console.log('   Incident Count:', incidentsList.data?.length ?? 0);
+  console.log('   Total Incident Count:', incidentsList.data?.length ?? 0);
 
-  if (incidentsList.data && incidentsList.data.length > 0) {
-    const targetIncident = incidentsList.data[0];
-    console.log(`\n5. Fetching Incident Detail for ID ${targetIncident.id} (GET /api/mvp/incidents/${targetIncident.id})...`);
-    const resDetail = await fetch(`${baseUrl}/api/mvp/incidents/${targetIncident.id}`, {
+  // Find latest updated incident that has investigation or correlated events
+  const latestIncident = incidentsList.data?.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+
+  if (latestIncident) {
+    console.log(`\n5. Fetching Incident Detail for Latest ID ${latestIncident.id}...`);
+    const resDetail = await fetch(`${baseUrl}/api/mvp/incidents/${latestIncident.id}`, {
       headers: { 'x-payscope-api-key': apiKey }
     });
     const detail = await resDetail.json();

@@ -50,6 +50,7 @@ export class PipelineJobProcessor {
       logger.warn({ eventId: event.id, errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope enrichment unavailable');
     }
     await this.repository.completeEnrichmentAndEnqueueCorrelation(event, enrichment);
+    realtimeHub.broadcast('enrichment_completed', job.organizationId, { eventId: event.id, enrichment: enrichment as Record<string, unknown> });
   }
 
   private async correlate(job: QueueJob): Promise<void> {

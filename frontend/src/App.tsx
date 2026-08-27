@@ -424,6 +424,8 @@ export default function App() {
     if (viewMode === "dashboard") void refresh();
   }, [refresh, viewMode]);
 
+  const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "reconnecting" | "error">("connected");
+
   // Real-time Event Engine (Instant SSE Push Stream)
   useEffect(() => {
     if (viewMode !== "dashboard") return;
@@ -433,10 +435,24 @@ export default function App() {
       const streamUrl = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/mvp/events/stream`;
       eventSource = new EventSource(streamUrl);
 
+      eventSource.onopen = () => {
+        setRealtimeStatus("connected");
+      };
+
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "ping") return;
+
+          setRealtimeStatus("connected");
+
+          if (data.type === "incident_created") {
+            toastSuccess("🚨 New Payment Incident Ingested into Realtime Pipeline");
+          } else if (data.type === "investigation_updated") {
+            toastSuccess("🤖 Multi-Agent LLM Investigation Completed");
+          } else if (data.type === "action_dispatched") {
+            toastSuccess("⚡ Autonomous Outbox Action Dispatched");
+          }
 
           // Instant real-time UI refresh on backend push event (<50ms delay)
           void refresh(true);
@@ -444,8 +460,12 @@ export default function App() {
           // Ignore parsing errors
         }
       };
+
+      eventSource.onerror = () => {
+        setRealtimeStatus("reconnecting");
+      };
     } catch {
-      // EventSource fallback
+      setRealtimeStatus("error");
     }
 
     // Safety Polling Engine (every 3s fallback)
@@ -457,7 +477,7 @@ export default function App() {
       eventSource?.close();
       clearInterval(interval);
     };
-  }, [refresh, viewMode]);
+  }, [refresh, toastSuccess, viewMode]);
 
   // Auto-Select First Matching Incident if none selected or if selection left current filter
   useEffect(() => {
@@ -522,9 +542,29 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00ff87]/30 bg-[#00ff87]/10 px-2.5 py-1 text-[11px] font-semibold text-[#00ff87]">
-              <span className="h-2 w-2 rounded-full bg-[#00ff87] animate-pulse" />
-              Live Syncing
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                realtimeStatus === "connected"
+                  ? "border-[#00ff87]/30 bg-[#00ff87]/10 text-[#00ff87]"
+                  : realtimeStatus === "reconnecting"
+                    ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                    : "border-rose-400/30 bg-rose-400/10 text-rose-300"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  realtimeStatus === "connected"
+                    ? "bg-[#00ff87] animate-pulse"
+                    : realtimeStatus === "reconnecting"
+                      ? "bg-amber-400 animate-pulse"
+                      : "bg-rose-400"
+                }`}
+              />
+              {realtimeStatus === "connected"
+                ? "REALTIME CONNECTED (<50ms)"
+                : realtimeStatus === "reconnecting"
+                  ? "RECONNECTING STREAM"
+                  : "POLLING FALLBACK"}
             </span>
             <ExportData incidents={ordered} />
             <button

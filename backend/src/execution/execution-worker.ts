@@ -5,6 +5,7 @@ import { RecoveryEmailAdapter } from '../providers/execution/email-adapter';
 import { RazorpayExecutionClient } from '../providers/execution/razorpay-execution-client';
 import { ExecutionOutbox, ExecutionPreconditionError, ExecutionRepository } from './execution-repository';
 import { CircuitBreaker, BoundedConcurrency } from '../providers/execution/circuit-breaker';
+import { realtimeHub } from '../realtime/realtime-hub';
 
 /** Sequential outbox worker: one email can never be sent concurrently twice. Bounded concurrency + circuit breaker per provider. */
 export class ExecutionWorker {
@@ -143,6 +144,7 @@ export class ExecutionWorker {
         if (result.kind === 'accepted') {
           await this.repository.recordReceipt({ organizationId: action.organizationId, actionId: action.id, provider: 'smtp', kind: 'smtp_accepted', payload: { messageId: result.messageId, acceptedCount: result.acceptedCount, rejectedCount: result.rejectedCount, response: result.response }, state: 'accepted' });
           await this.repository.appendMemory(action.organizationId, action.incidentId, 'customer_message', action.id, { actionId: action.id, channel: 'email', status: 'smtp_accepted', referenceId }, 70);
+          realtimeHub.broadcast('action_dispatched', action.organizationId, { actionId: action.id, capability: action.capability }, action.incidentId);
           executionAttempts.inc({ capability: action.capability, outcome: 'accepted' });
           strategyPerformanceEvents.inc({ strategy: action.capability, outcome: 'accepted' });
         } else {
