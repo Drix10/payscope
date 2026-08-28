@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { logger, executionAttempts, executionTracer, strategyPerformanceEvents } from '../observability';
+import { logger, executionAttempts, executionTracer, strategyPerformanceEvents, isTransientNetworkError } from '../observability';
 import { decryptEmail } from '../security/encryption';
 import { RecoveryEmailAdapter } from '../providers/execution/email-adapter';
 import { RazorpayExecutionClient } from '../providers/execution/razorpay-execution-client';
@@ -56,7 +56,11 @@ export class ExecutionWorker {
         } finally { span.end(); }
       });
     } catch (error) {
-      logger.error({ errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope execution worker error');
+      if (isTransientNetworkError(error)) {
+        logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope execution worker transient network warning');
+      } else {
+        logger.error({ errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope execution worker error');
+      }
       return false;
     } finally { this.processing = false; }
   }

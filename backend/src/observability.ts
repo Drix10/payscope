@@ -35,3 +35,10 @@ export const timeToRecoveryMs = new Histogram({ name: 'payscope_time_to_recovery
 export const recoveryRateGauge = new Gauge({ name: 'payscope_recovery_rate', help: 'Latest observed tenant recovery rate from dashboard metrics.', registers: [metrics] });
 /** No exporter is required for local/VPS operation; hosts can attach one later. */
 export const executionTracer = trace.getTracer('payscope.execution');
+
+export function isTransientNetworkError(error: unknown): boolean {
+  if (!error) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  const name = error instanceof Error ? error.name : '';
+  return /fetch failed|Gateway Timeout|504|ETIMEDOUT|ECONNRESET|ENOTFOUND|socket hang up|network timeout/i.test(`${name} ${message}`);
+}

@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { logger } from '../../observability';
+import { logger, isTransientNetworkError } from '../../observability';
 
 export class ExecutionWatchdog {
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -22,7 +22,11 @@ export class ExecutionWatchdog {
     if (this.running) return; // bounded concurrency: skip if previous still running, never overlap
     this.running = true;
     try { await this.tick(); } catch (error) {
-      logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown', message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240) }, 'PayScope watchdog tick failed');
+      if (isTransientNetworkError(error)) {
+        logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown', message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240) }, 'PayScope watchdog tick transient network warning');
+      } else {
+        logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown', message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240) }, 'PayScope watchdog tick failed');
+      }
     } finally { this.running = false; }
   }
   async tick(): Promise<void> {

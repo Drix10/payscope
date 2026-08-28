@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { QUEUE_LOCK_TIMEOUT_MS, QUEUE_RETRY_DELAYS_MS } from '../config/config';
 import { QueueJob, QueueJobSchema } from '../domain/contracts';
-import { logger } from '../observability';
+import { logger, isTransientNetworkError } from '../observability';
 
 type ClaimedQueueRow = {
   id: string;
@@ -93,7 +93,11 @@ export class QueueWorker {
     } catch (error) {
       // A later interval retries a transient claim failure. `processOne` has
       // already released its in-flight/processing state in its finally block.
-      logger.error({ errorClass: error instanceof Error ? error.name : 'unknown' }, 'PayScope queue worker error');
+      if (isTransientNetworkError(error)) {
+        logger.warn({ errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope queue worker transient network warning');
+      } else {
+        logger.error({ errorClass: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : String(error) }, 'PayScope queue worker error');
+      }
     }
   }
 
